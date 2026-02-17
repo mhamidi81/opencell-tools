@@ -1,0 +1,17 @@
+{
+  "name": "opencell-tools",
+  "owner": {
+    "name": "Opencell",
+    "email": "mohamed.hamidi@opencellsoft.com"
+  },
+  "metadata": {
+    "description": "OpenCell developer tools for Claude Code"
+  },
+  "plugins": [
+    {
+      "name": "review-code",
+      "source": "./plugins/review-code",
+      "description": "Review React and Node.js code for bugs, security, performance, and best practices"
+    }
+  ]
+}
