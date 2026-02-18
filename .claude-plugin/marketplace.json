@@ -9,7 +9,7 @@
   },
   "plugins": [
     {
-      "name": "oc-review-code",
+      "name": "oc-review-front-code",
       "source": "./plugins/oc-review-front-code",
       "description": "Review React and Node.js code for bugs, security, performance, and best practices"
     },
