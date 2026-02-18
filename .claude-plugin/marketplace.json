@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "oc-review-code",
-      "source": "./plugins/review-code",
+      "source": "./plugins/oc-review-front-code",
       "description": "Review React and Node.js code for bugs, security, performance, and best practices"
     },
     {
@@ -44,8 +44,8 @@
       "description": "Commit changes using JIRA ticket ID and summary from cache with automatic code review"
     },
     {
-      "name": "oc-pr",
-      "source": "./plugins/oc-pr",
+      "name": "oc-pull-request",
+      "source": "./plugins/oc-pull-request",
       "description": "Push changes and create a pull request for a JIRA ticket with automatic squash and PR creation"
     },
     {
