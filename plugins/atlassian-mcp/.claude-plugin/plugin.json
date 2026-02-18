@@ -1,0 +1,11 @@
+{
+  "name": "atlassian-mcp",
+  "description": "Connect to Atlassian MCP server to access Jira tickets, Confluence pages, and Compass services",
+  "version": "1.0.0",
+  "mcpServers": {
+    "atlassian": {
+      "transport": "http",
+      "url": "https://mcp.atlassian.com/v1/mcp"
+    }
+  }
+}

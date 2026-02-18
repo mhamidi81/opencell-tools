@@ -12,6 +12,26 @@
       "name": "review-code",
       "source": "./plugins/review-code",
       "description": "Review React and Node.js code for bugs, security, performance, and best practices"
+    },
+    {
+      "name": "figma-mcp",
+      "source": "./plugins/figma-mcp",
+      "description": "Connect to Figma MCP server to extract design context, generate code from designs, and retrieve design tokens"
+    },
+    {
+      "name": "atlassian-mcp",
+      "source": "./plugins/atlassian-mcp",
+      "description": "Connect to Atlassian MCP server to access Jira tickets, Confluence pages, and Compass services"
+    },
+    {
+      "name": "bitbucket-mcp",
+      "source": "./plugins/bitbucket-mcp",
+      "description": "Connect to Bitbucket MCP server to create pull requests, manage repositories, and review code"
+    },
+    {
+      "name": "playwright-mcp",
+      "source": "./plugins/playwright-mcp",
+      "description": "Connect to Playwright MCP server to automate browser interactions, take screenshots, and test web applications"
     }
   ]
 }

@@ -1,0 +1,11 @@
+{
+  "name": "figma-mcp",
+  "description": "Connect to Figma MCP server to extract design context, generate code from designs, and retrieve design tokens",
+  "version": "1.0.0",
+  "mcpServers": {
+    "figma": {
+      "transport": "http",
+      "url": "https://mcp.figma.com/mcp"
+    }
+  }
+}
