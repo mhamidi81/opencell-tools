@@ -1,5 +1,5 @@
 ---
-name: oc-pr
+name: oc-pull-request
 description: Push changes and create a pull request for the JIRA ticket
 argument-hint: JIRA Ticket ID (e.g., INTRD-36922)
 ---
@@ -101,7 +101,6 @@ Before pushing, squash all commits on the current branch into a single commit:
 - Run `git remote get-url origin` to get the remote URL
 - Determine [REMOTE-TYPE]:
   - If URL contains `bitbucket.org` -> [REMOTE-TYPE] = `bitbucket`
-  - If URL contains `github.com` -> [REMOTE-TYPE] = `github`
   - Otherwise -> [REMOTE-TYPE] = `unknown`
 - Extract [REPO-OWNER] and [REPO-NAME] from the remote URL
 
