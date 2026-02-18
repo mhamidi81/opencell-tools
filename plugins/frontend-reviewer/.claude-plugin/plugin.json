@@ -1,0 +1,5 @@
+{
+  "name": "frontend-reviewer",
+  "description": "Frontend code reviewer sub-agent for validating React/TypeScript code against project standards",
+  "version": "1.0.0"
+}

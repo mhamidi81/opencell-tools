@@ -1,0 +1,5 @@
+{
+  "name": "oc-commit",
+  "description": "Commit changes using JIRA ticket ID and summary from cache with automatic code review",
+  "version": "1.0.0"
+}

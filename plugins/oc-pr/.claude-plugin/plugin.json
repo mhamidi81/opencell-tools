@@ -1,0 +1,5 @@
+{
+  "name": "oc-pr",
+  "description": "Push changes and create a pull request for a JIRA ticket with automatic squash and PR creation",
+  "version": "1.0.0"
+}

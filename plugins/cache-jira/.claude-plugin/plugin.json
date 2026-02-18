@@ -1,0 +1,5 @@
+{
+  "name": "cache-jira",
+  "description": "Fetch and cache JIRA ticket data locally for use by other OpenCell commands",
+  "version": "1.0.0"
+}
