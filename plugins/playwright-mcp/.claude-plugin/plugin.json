@@ -1,5 +1,5 @@
 {
-  "name": "playwright-mcp",
+  "name": "oc-playwright-mcp",
   "description": "Connect to Playwright MCP server to automate browser interactions, take screenshots, and test web applications",
   "version": "1.0.0",
   "mcpServers": {

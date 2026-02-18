@@ -9,32 +9,32 @@
   },
   "plugins": [
     {
-      "name": "review-code",
+      "name": "oc-review-code",
       "source": "./plugins/review-code",
       "description": "Review React and Node.js code for bugs, security, performance, and best practices"
     },
     {
-      "name": "figma-mcp",
+      "name": "oc-figma-mcp",
       "source": "./plugins/figma-mcp",
       "description": "Connect to Figma MCP server to extract design context, generate code from designs, and retrieve design tokens"
     },
     {
-      "name": "atlassian-mcp",
+      "name": "oc-atlassian-mcp",
       "source": "./plugins/atlassian-mcp",
       "description": "Connect to Atlassian MCP server to access Jira tickets, Confluence pages, and Compass services"
     },
     {
-      "name": "bitbucket-mcp",
+      "name": "oc-bitbucket-mcp",
       "source": "./plugins/bitbucket-mcp",
       "description": "Connect to Bitbucket MCP server to create pull requests, manage repositories, and review code"
     },
     {
-      "name": "playwright-mcp",
+      "name": "oc-playwright-mcp",
       "source": "./plugins/playwright-mcp",
       "description": "Connect to Playwright MCP server to automate browser interactions, take screenshots, and test web applications"
     },
     {
-      "name": "cache-jira",
+      "name": "oc-cache-jira",
       "source": "./plugins/cache-jira",
       "description": "Fetch and cache JIRA ticket data locally for use by other OpenCell commands"
     },
@@ -49,17 +49,17 @@
       "description": "Push changes and create a pull request for a JIRA ticket with automatic squash and PR creation"
     },
     {
-      "name": "oc-ui-creation",
+      "name": "oc-create-ui",
       "source": "./plugins/oc-ui-creation",
       "description": "Create UI page from JIRA ticket ID using the frontend-engineer sub-agent"
     },
     {
-      "name": "frontend-engineer",
+      "name": "oc-frontend-engineer",
       "source": "./plugins/frontend-engineer",
       "description": "Expert React/TypeScript UI engineer sub-agent for building, refactoring, and architecting frontend components"
     },
     {
-      "name": "frontend-reviewer",
+      "name": "oc-frontend-reviewer",
       "source": "./plugins/frontend-reviewer",
       "description": "Frontend code reviewer sub-agent for validating React/TypeScript code against project standards"
     }

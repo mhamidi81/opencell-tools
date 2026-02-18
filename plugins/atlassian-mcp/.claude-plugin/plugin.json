@@ -1,5 +1,5 @@
 {
-  "name": "atlassian-mcp",
+  "name": "oc-atlassian-mcp",
   "description": "Connect to Atlassian MCP server to access Jira tickets, Confluence pages, and Compass services",
   "version": "1.0.0",
   "mcpServers": {

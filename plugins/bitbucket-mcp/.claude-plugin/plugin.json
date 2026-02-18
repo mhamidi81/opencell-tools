@@ -1,5 +1,5 @@
 {
-  "name": "bitbucket-mcp",
+  "name": "oc-bitbucket-mcp",
   "description": "Connect to Bitbucket MCP server to create pull requests, manage repositories, and review code",
   "version": "1.0.0",
   "mcpServers": {
