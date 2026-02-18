@@ -50,7 +50,7 @@
     },
     {
       "name": "oc-create-ui",
-      "source": "./plugins/oc-ui-creation",
+      "source": "./plugins/oc-create-ui",
       "description": "Create UI page from JIRA ticket ID using the frontend-engineer sub-agent"
     },
     {

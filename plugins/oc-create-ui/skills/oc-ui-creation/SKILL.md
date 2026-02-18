@@ -1,5 +1,5 @@
 ---
-name: oc-ui-creation
+name: oc-create-ui
 description: Create UI page from JIRA ticket ID
 argument-hint: <TICKET-ID> <BASE-BRANCH> (e.g., INTRD-36922 dev)
 ---
@@ -128,11 +128,11 @@ $ARGUMENTS = "INTRD-36922 dev"
 
 ```bash
 # Create UI page for ticket INTRD-36922, branching from dev
-/oc-ui-creation INTRD-36922 dev
+/oc-create-ui INTRD-36922 dev
 
 # Create UI page for ticket INTRD-36896, branching from master
-/oc-ui-creation INTRD-36896 master
+/oc-create-ui INTRD-36896 master
 
 # Create UI page for ticket INTRD-37000, branching from a release branch
-/oc-ui-creation INTRD-37000 release/18.0
+/oc-create-ui INTRD-37000 release/18.0
 ```
