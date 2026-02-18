@@ -1,5 +1,5 @@
 ---
-name: review-code
+name: oc-review-front-code
 description: Review React and Node.js code for bugs, security, performance, and best practices
 disable-model-invocation: true
 allowed-tools: Read, Grep, Glob
