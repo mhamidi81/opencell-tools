@@ -33,5 +33,6 @@ A collection of Claude Code plugins that streamline the OpenCell developer workf
 ## Installation
 
 ```bash
-claude install-plugin opencell/opencell-tools
+claude
+/plugin marketplace add https://bitbucket.org/opencellsoft/ccode-marketplace.git
 ```
