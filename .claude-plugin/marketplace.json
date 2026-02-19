@@ -5,7 +5,7 @@
     "email": "mohamed.hamidi@opencellsoft.com"
   },
   "metadata": {
-    "description": "OpenCell developer tools for Claude Code"
+    "description": "A collection of Claude Code plugins that streamline the OpenCell developer workflow — from Jira ticket management and UI scaffolding to automated commits, pull requests, and code review, with built-in integrations for Atlassian, Bitbucket, Figma, and Playwright."
   },
   "plugins": [
     {
