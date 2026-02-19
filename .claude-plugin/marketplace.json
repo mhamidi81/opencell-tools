@@ -62,6 +62,11 @@
       "name": "oc-frontend-reviewer",
       "source": "./plugins/frontend-reviewer",
       "description": "Frontend code reviewer sub-agent for validating React/TypeScript code against project standards"
+    },
+    {
+      "name": "oc-frontend-designer",
+      "source": "./plugins/frontend-designer",
+      "description": "Frontend designer sub-agent for translating Figma designs into implementation-ready React/MUI components with design tokens and styling"
     }
   ]
 }
