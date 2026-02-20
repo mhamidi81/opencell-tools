@@ -1,0 +1,5 @@
+{
+  "name": "oc-cypress-expert",
+  "description": "Cypress testing expert sub-agent for end-to-end testing, test automation, and flaky test resolution",
+  "version": "1.0.0"
+}

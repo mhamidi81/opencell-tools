@@ -30,6 +30,7 @@ A collection of Claude Code plugins that streamline the OpenCell developer workf
 | **oc-frontend-engineer** | Expert React/TypeScript sub-agent for building, refactoring, and architecting frontend components |
 | **oc-frontend-designer** | Frontend designer sub-agent for translating Figma designs into implementation-ready React/MUI components with design tokens and styling |
 | **oc-frontend-reviewer** | Frontend code reviewer sub-agent that validates React/TypeScript code against project standards |
+| **oc-cypress-expert** | Cypress testing expert sub-agent for end-to-end testing, test automation, and flaky test resolution |
 
 ## Installation
 
