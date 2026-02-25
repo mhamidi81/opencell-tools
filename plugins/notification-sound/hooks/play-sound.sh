@@ -3,7 +3,8 @@
 # Uses aplay for WAV or paplay/ogg123 for OGG files.
 # Falls back to terminal bell if no sound utility is found.
 
-SOUND_FILE="${NOTIFICATION_SOUND:-/usr/share/sounds/gnome/default/alerts/string.ogg}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOUND_FILE="${NOTIFICATION_SOUND:-${SCRIPT_DIR}/string.ogg}"
 
 if [ -f "$SOUND_FILE" ]; then
   case "$SOUND_FILE" in
@@ -19,6 +20,8 @@ if [ -f "$SOUND_FILE" ]; then
         ogg123 -q "$SOUND_FILE" &>/dev/null &
       elif command -v ffplay &>/dev/null; then
         ffplay -nodisp -autoexit -loglevel quiet "$SOUND_FILE" &>/dev/null &
+      elif command -v vlc &>/dev/null; then
+        vlc --intf dummy --play-and-exit --no-video "$SOUND_FILE" &>/dev/null &
       fi
       ;;
   esac
