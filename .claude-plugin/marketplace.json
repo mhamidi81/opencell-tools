@@ -72,6 +72,11 @@
       "name": "oc-cypress-expert",
       "source": "./plugins/cypress-expert",
       "description": "Cypress testing expert sub-agent for end-to-end testing, test automation, and flaky test resolution"
+    },
+    {
+      "name": "oc-notification-sound",
+      "source": "./plugins/notification-sound",
+      "description": "Plays a notification sound when Claude asks for user permission to execute an action"
     }
   ]
 }
