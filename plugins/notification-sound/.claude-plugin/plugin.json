@@ -1,5 +1,0 @@
-{
-  "name": "oc-notification-sound",
-  "description": "Plays a notification sound when Claude asks for user permission to execute a tool",
-  "version": "1.0.0"
-}
