@@ -47,7 +47,7 @@ $ARGUMENTS = "INTRD-36922 dev"
 
 - Read `.claude/cache/jira-tickets.json` if it exists
 - Check if [TICKET-NUMBER] exists in the `tickets` object
-- If found and `cachedAt` is less than 1 hour old:
+- If found and `cachedAt` is less than 1 day old:
   - Use cached data directly
   - Display: "Using cached data for [TICKET-NUMBER]"
   - Extract [TICKET-TYPE], [TICKET-SUMMARY], and [USERNAME] from cache
@@ -87,6 +87,10 @@ $ARGUMENTS = "INTRD-36922 dev"
   - Follow naming convention in [CODE_QUALITY.md](../../CODE_QUALITY.md/#branch-naming)
   - Only create if branch does not already exist
   - If branch already exists, checkout the existing branch
+  - Ask the user which branch should checkout for his development and you can propose:
+      - ( ) The branch you will create based on the naming conventions
+      - ( ) Propose the Epic branch if the ticket is a story
+      - ( ) free input from the user, you can ask him, put the branch please:
   - If branch creation fails, report error and stop execution
   - No PR needed at this stage (will be created after development)
 
