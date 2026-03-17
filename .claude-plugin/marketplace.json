@@ -72,6 +72,11 @@
       "name": "oc-cypress-expert",
       "source": "./plugins/cypress-expert",
       "description": "Cypress testing expert sub-agent for end-to-end testing, test automation, and flaky test resolution"
+    },
+    {
+      "name": "oc-fix-bug",
+      "source": "./plugins/oc-fix-bug",
+      "description": "Fix a bug from a JIRA ticket: update status, create fix branch, and start fixing"
     }
   ]
 }
