@@ -77,6 +77,11 @@
       "name": "oc-fix-bug",
       "source": "./plugins/oc-fix-bug",
       "description": "Fix a bug from a JIRA ticket: update status, create fix branch, and start fixing"
+    },
+    {
+      "name": "oc-review-pr",
+      "source": "./plugins/oc-review-pr",
+      "description": "Review a pull request linked to a JIRA ticket using the frontend-reviewer agent with a detailed report and suggested fixes"
     }
   ]
 }

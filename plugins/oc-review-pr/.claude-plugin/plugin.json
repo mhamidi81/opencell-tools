@@ -1,0 +1,5 @@
+{
+  "name": "oc-review-pr",
+  "description": "Review a pull request linked to a JIRA ticket using the frontend-reviewer agent and generate a detailed report with suggested fixes",
+  "version": "1.0.0"
+}
