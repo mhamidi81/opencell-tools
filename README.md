@@ -11,8 +11,9 @@ A collection of Claude Code plugins that streamline the OpenCell developer workf
 | **oc-cache-jira** | `/cache-jira` | Fetch and cache Jira ticket data locally for use by other commands |
 | **oc-commit** | `/oc-commit` | Commit changes using the cached Jira ticket ID and summary with automatic code review |
 | **oc-pull-request** | `/oc-pr` | Push changes and create a pull request for the current Jira ticket |
-| **oc-create-ui** | `/oc-ui-creation` | Scaffold a UI page from a Jira ticket using the frontend-engineer sub-agent |
-| **oc-review-front-code** | `/review-code` | Review React/Node.js code for bugs, security, performance, and best practices |
+| **oc-create-ui** | `/oc-create-ui` | Scaffold a UI page from a Jira ticket using the frontend-engineer sub-agent |
+| **oc-fix-bug** | `/oc-fix-bug` | Fix a bug from a Jira ticket — update status to In Progress, create fix branch, and start fixing |
+| **oc-review-pr** | `/oc-review-pr` | Review a pull request linked to a Jira ticket — fetch PR from Bitbucket, run frontend review, and generate a detailed report |
 
 ### MCP Integrations
 

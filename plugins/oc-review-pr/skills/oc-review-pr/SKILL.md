@@ -22,9 +22,9 @@ Parse the $ARGUMENTS to get:
 - Look for [TICKET-NUMBER] in the `tickets` object
 - If found, extract `summary` field and store as [TICKET-SUMMARY]
 - If NOT found in cache:
-  - Inform user: "Ticket [TICKET-NUMBER] not found in cache"
-  - Suggest: "Run `/cache-jira [TICKET-NUMBER]` first to cache the ticket data"
-  - Stop execution
+  - Automatically run `/cache-jira [TICKET-NUMBER]` to fetch and cache the ticket data (do NOT ask the user for confirmation — proceed directly)
+  - After caching completes, re-read `.claude/cache/jira-tickets.json` and extract the `summary` field as [TICKET-SUMMARY]
+  - If caching fails or ticket is still not found after caching, inform the user and stop execution
 
 ### 2. Detect Repository Info
 
