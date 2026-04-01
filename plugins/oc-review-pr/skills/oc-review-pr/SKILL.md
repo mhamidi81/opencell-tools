@@ -348,6 +348,12 @@ After displaying the report, offer the user actionable next steps:
     endpoint: /repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/comments
     body: { "content": { "raw": "[REVIEW-SUMMARY-MARKDOWN]" } }
     ```
+  - After posting the review comment, change the PR status to DRAFT using `mcp__plugin_oc-bitbucket-mcp_bitbucket__bb_put`:
+    ```
+    endpoint: /repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]
+    body: { "draft": true }
+    ```
+  - Inform the user: "PR #[PR-ID] has been marked as Draft so the author can address the review feedback."
 
 ## Examples
 
