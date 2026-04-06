@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PR Review Report — INTRD-27746</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-2: #1c2129;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --red: #f85149;
+    --orange: #d29922;
+    --green: #3fb950;
+    --purple: #bc8cff;
+    --cyan: #39d2c0;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+
+  .header {
+    background: linear-gradient(135deg, #1a1e2e 0%, #162030 100%);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    text-align: center;
+  }
+
+  .header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 0.25rem;
+  }
+
+  .header .subtitle {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem 2rem;
+    margin-top: 1.5rem;
+    text-align: left;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .meta-grid .label {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .meta-grid .value {
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .meta-grid .value a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .meta-grid .value a:hover { text-decoration: underline; }
+
+  .score-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    text-align: center;
+  }
+
+  .score-circle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    border: 4px solid var(--orange);
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--orange);
+    margin-bottom: 0.75rem;
+  }
+
+  .score-label {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--orange);
+  }
+
+  .score-desc {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-top: 0.25rem;
+  }
+
+  .summary-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    font-size: 0.92rem;
+    color: var(--text-muted);
+    line-height: 1.7;
+  }
+
+  .summary-box strong { color: var(--text); }
+
+  .section {
+    margin-bottom: 2rem;
+  }
+
+  .section-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .section-title .icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+
+  .icon-critical { background: rgba(248,81,73,0.15); color: var(--red); }
+  .icon-warning  { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .icon-suggestion { background: rgba(188,140,255,0.15); color: var(--purple); }
+  .icon-positive { background: rgba(63,185,80,0.15); color: var(--green); }
+
+  .section-hint {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-weight: 400;
+    margin-bottom: 1rem;
+    font-style: italic;
+  }
+
+  .issue-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    border-left: 3px solid var(--border);
+  }
+
+  .issue-card.critical { border-left-color: var(--red); }
+  .issue-card.warning  { border-left-color: var(--orange); }
+  .issue-card.suggestion { border-left-color: var(--purple); }
+
+  .issue-title {
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .issue-file {
+    display: inline-block;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.15rem 0.5rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.78rem;
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+  }
+
+  .issue-detail {
+    font-size: 0.88rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+    line-height: 1.6;
+  }
+
+  .issue-detail strong { color: var(--text); }
+
+  pre {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+    overflow-x: auto;
+    font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    margin-top: 0.5rem;
+  }
+
+  .diff-remove {
+    color: var(--red);
+  }
+
+  .diff-add {
+    color: var(--green);
+  }
+
+  .diff-comment {
+    color: var(--text-muted);
+  }
+
+  .positive-list {
+    list-style: none;
+    padding: 0;
+  }
+
+  .positive-list li {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--green);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.88rem;
+    color: var(--text-muted);
+  }
+
+  .breakdown-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+
+  .breakdown-table th {
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 2px solid var(--border);
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .breakdown-table td {
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 0.15rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .badge-pass { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-warn { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .badge-fail { background: rgba(248,81,73,0.15); color: var(--red); }
+  .badge-na   { background: rgba(139,148,158,0.1); color: var(--text-muted); }
+
+  .action-box {
+    background: linear-gradient(135deg, rgba(248,81,73,0.08) 0%, rgba(210,153,34,0.08) 100%);
+    border: 1px solid rgba(248,81,73,0.3);
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+
+  .action-box h3 {
+    color: var(--red);
+    margin-bottom: 0.5rem;
+  }
+
+  .action-box p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
+
+  .footer {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    margin-top: 2rem;
+  }
+
+  .footer a { color: var(--accent); text-decoration: none; }
+  .footer a:hover { text-decoration: underline; }
+
+  .suggestion-list {
+    list-style: none;
+    padding: 0;
+  }
+
+  .suggestion-list li {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--purple);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.88rem;
+    color: var(--text-muted);
+  }
+
+  .suggestion-list li strong { color: var(--text); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>PR Review Report</h1>
+  <p class="subtitle">Automated Code Review</p>
+  <div class="meta-grid">
+    <div>
+      <div class="label">Ticket</div>
+      <div class="value">INTRD-27746 &mdash; [VAT recognition - 432 : Paid to date] 1. Configuration</div>
+    </div>
+    <div>
+      <div class="label">Pull Request</div>
+      <div class="value"><a href="https://bitbucket.org/opencellsoft/opencell-core/pull-requests/14831">#14831</a> &mdash; Feature/INTRD-27746 VAT recognition configuration</div>
+    </div>
+    <div>
+      <div class="label">Author</div>
+      <div class="value">Zakaria BARIKI</div>
+    </div>
+    <div>
+      <div class="label">Branch</div>
+      <div class="value"><code>feature/INTRD-27746_VAT_recognition_configuration</code> &rarr; <code>dev</code></div>
+    </div>
+    <div>
+      <div class="label">Review Date</div>
+      <div class="value">2026-03-30</div>
+    </div>
+    <div>
+      <div class="label">Reviewer</div>
+      <div class="value">oc-core-reviewer (backend)</div>
+    </div>
+    <div>
+      <div class="label">State</div>
+      <div class="value">OPEN</div>
+    </div>
+    <div>
+      <div class="label">Files Changed</div>
+      <div class="value">13 files</div>
+    </div>
+  </div>
+</div>
+
+<div class="score-section">
+  <div class="score-circle">5</div>
+  <div class="score-label">Needs Work</div>
+  <div class="score-desc">Several issues to address before merge</div>
+</div>
+
+<div class="summary-box">
+  The PR adds <strong>VAT recognition configuration</strong> fields to the Tax entity, with proper Liquibase migrations, error handling, and test coverage. The structural additions are mostly correct. However, there is a <strong>runtime type mismatch bug</strong> in the update method, an <strong>asymmetric create/update validation logic gap</strong>, and a <strong>Liquibase precondition flaw</strong> that could leave databases inconsistent. These must be resolved before merge.
+</div>
+
+<!-- Critical Issues -->
+<div class="section">
+  <div class="section-title">
+    <span class="icon icon-critical">!</span> Critical Issues (Must Fix Before Merge)
+  </div>
+  <p class="section-hint">These issues must be resolved before the PR can be approved.</p>
+
+  <div class="issue-card critical">
+    <div class="issue-title">1. Type mismatch bug in TaxApi.update() &mdash; isNotBlank called with Object instead of String</div>
+    <div class="issue-file">opencell-api/src/main/java/org/meveo/api/TaxApi.java</div>
+    <div class="issue-detail">
+      <strong>Problem:</strong> <code>isNotBlank(input.getCollectedVatOnReceiptAccountingCode())</code> passes an <code>AccountingCodeResponse</code> object to <code>isNotBlank()</code> which expects a <code>String</code>. This will either always evaluate to true (making the guard ineffective) or throw a <code>ClassCastException</code> at runtime.
+    </div>
+    <div class="issue-detail">
+      <strong>Impact:</strong> Runtime bug &mdash; update validation will not work correctly.
+    </div>
+    <pre><span class="diff-comment">// Before (current code)</span>
+<span class="diff-remove">if (isNotBlank(input.getCollectedVatOnReceiptAccountingCode())
+        || isNotBlank(input.getPendingVatAccountingCode())) {</span>
+
+<span class="diff-comment">// After (suggested fix)</span>
+<span class="diff-add">if (input.getPendingVatAccountingCode() != null
+        || input.getCollectedVatOnReceiptAccountingCode() != null) {
+    addVatInfoIfRequired(tax, input.getPendingVatAccountingCode(),
+            input.getCollectedVatOnReceiptAccountingCode());
+}</span></pre>
+  </div>
+
+  <div class="issue-card critical">
+    <div class="issue-title">2. Asymmetric create/update behavior for VAT info validation</div>
+    <div class="issue-file">opencell-api/src/main/java/org/meveo/api/TaxApi.java</div>
+    <div class="issue-detail">
+      <strong>Problem:</strong> In <code>create()</code>, <code>addVatInfoIfRequired()</code> is called <strong>unconditionally</strong>, but in <code>update()</code> it is guarded by the broken <code>isNotBlank</code> check. A user could update a Tax entity and silently skip VAT accounting code validation even when PAID_TO_DATE mode is active.
+    </div>
+    <div class="issue-detail">
+      <strong>Impact:</strong> Data integrity &mdash; Tax entities could lose required VAT accounting codes on update.
+    </div>
+    <pre><span class="diff-comment">// Fix: Call addVatInfoIfRequired() unconditionally in update(),
+// same as in create(), or explicitly handle preserving
+// existing codes when not provided in the update payload.</span></pre>
+  </div>
+
+  <div class="issue-card critical">
+    <div class="issue-title">3. Liquibase precondition checks both codes in single query &mdash; partial insert risk</div>
+    <div class="issue-file">opencell-model/src/main/resources/db_resources/changelog/current/structure.xml</div>
+    <div class="issue-detail">
+      <strong>Problem:</strong> The precondition <code>SELECT count(*) FROM billing_accounting_code WHERE code IN ('44574', '44580')</code> checks both codes at once. If one exists but not the other, <code>expectedResult="0"</code> fails and both inserts are skipped via <code>MARK_RAN</code>.
+    </div>
+    <div class="issue-detail">
+      <strong>Impact:</strong> Database could be left with only one of the two required accounting codes.
+    </div>
+    <pre><span class="diff-comment">// Fix: Split into two separate changesets, each with its own precondition</span>
+<span class="diff-add">&lt;changeSet id="INTRD-27746_20260324_insert_44574" author="ZBariki"&gt;
+    &lt;preConditions onFail="MARK_RAN"&gt;
+        &lt;sqlCheck expectedResult="0"&gt;
+            SELECT count(*) FROM billing_accounting_code WHERE code = '44574'
+        &lt;/sqlCheck&gt;
+    &lt;/preConditions&gt;
+    &lt;insert tableName="billing_accounting_code"&gt;...&lt;/insert&gt;
+&lt;/changeSet&gt;
+
+&lt;changeSet id="INTRD-27746_20260324_insert_44580" author="ZBariki"&gt;
+    &lt;preConditions onFail="MARK_RAN"&gt;
+        &lt;sqlCheck expectedResult="0"&gt;
+            SELECT count(*) FROM billing_accounting_code WHERE code = '44580'
+        &lt;/sqlCheck&gt;
+    &lt;/preConditions&gt;
+    &lt;insert tableName="billing_accounting_code"&gt;...&lt;/insert&gt;
+&lt;/changeSet&gt;</span></pre>
+  </div>
+</div>
+
+<!-- Warnings -->
+<div class="section">
+  <div class="section-title">
+    <span class="icon icon-warning">~</span> Warnings (Should Fix)
+  </div>
+  <p class="section-hint">These won't block the merge but should be addressed for code quality.</p>
+
+  <div class="issue-card warning">
+    <div class="issue-title">1. Liquibase changeset IDs use # prefix &mdash; inconsistent</div>
+    <div class="issue-file">opencell-model/src/main/resources/db_resources/changelog/current/structure.xml</div>
+    <div class="issue-detail">
+      <strong>Issue:</strong> IDs <code>#INTRD-27746_20260324</code> use a <code>#</code> prefix not seen in other changesets (e.g., <code>INTRD-41376-2026_03_16</code>).
+    </div>
+    <pre><span class="diff-comment">// Fix: Remove # prefix</span>
+<span class="diff-remove">&lt;changeSet id="#INTRD-27746_20260324" ...&gt;</span>
+<span class="diff-add">&lt;changeSet id="INTRD-27746_20260324" ...&gt;</span></pre>
+  </div>
+
+  <div class="issue-card warning">
+    <div class="issue-title">2. Unused import in TaxDto.java</div>
+    <div class="issue-file">opencell-api-dto/src/main/java/org/meveo/api/dto/TaxDto.java</div>
+    <div class="issue-detail">
+      <strong>Issue:</strong> <code>AccountingCodeDto</code> is imported but never used. Only <code>AccountingCodeResponse</code> is used.
+    </div>
+  </div>
+
+  <div class="issue-card warning">
+    <div class="issue-title">3. Error message typo in MeveoApiErrorCodeEnum</div>
+    <div class="issue-file">opencell-api-dto/src/main/java/org/meveo/api/MeveoApiErrorCodeEnum.java</div>
+    <div class="issue-detail">
+      <strong>Issue:</strong> <code>ACCOUNTING_CODE_NOT_FOUND</code> Javadoc reads <em>"AccountingCode with does not exist"</em> &mdash; missing the code placeholder.
+    </div>
+  </div>
+
+  <div class="issue-card warning">
+    <div class="issue-title">4. AccountingCodeResponse class may be redundant</div>
+    <div class="issue-file">opencell-api-dto/src/main/java/org/meveo/api/dto/billing/AccountingCodeResponse.java</div>
+    <div class="issue-detail">
+      <strong>Issue:</strong> This class extends <code>BusinessEntityDto</code> and only adds a two-arg constructor. <code>AccountingCodeDto</code> already got a similar constructor in this PR. Consider reusing <code>AccountingCodeDto</code> or adding class-level Javadoc explaining the read/write model distinction.
+    </div>
+  </div>
+
+  <div class="issue-card warning">
+    <div class="issue-title">5. addVatInfoIfRequired queries database on every create/update</div>
+    <div class="issue-file">opencell-api/src/main/java/org/meveo/api/TaxApi.java</div>
+    <div class="issue-detail">
+      <strong>Issue:</strong> Every Tax create/update calls <code>einvoiceSettingService.findEinvoiceSetting()</code> even when PAID_TO_DATE mode is not active. This is an unnecessary DB hit for most deployments.
+    </div>
+  </div>
+
+  <div class="issue-card warning">
+    <div class="issue-title">6. Error code Javadoc inconsistency</div>
+    <div class="issue-file">opencell-api-dto/src/main/java/org/meveo/api/MeveoApiErrorCodeEnum.java</div>
+    <div class="issue-detail">
+      <strong>Issue:</strong> <code>COLLECTED_VAT_ON_RECEIPT_ACCOUNTING_CODE_MISSING</code> Javadoc says <em>"code (44580)"</em> but 44580 is the pending VAT code. The collected code is <strong>44574</strong>.
+    </div>
+  </div>
+</div>
+
+<!-- Suggestions -->
+<div class="section">
+  <div class="section-title">
+    <span class="icon icon-suggestion">+</span> Suggestions (Nice to Have)
+  </div>
+  <p class="section-hint">Optional improvements that would enhance the code.</p>
+  <ul class="suggestion-list">
+    <li><strong>Tax.java:</strong> Consider <code>@BatchSize</code> on the new LAZY ManyToOne fields to avoid N+1 queries if Tax entities are loaded in bulk.</li>
+    <li><strong>TaxApi.java:</strong> The <code>postData</code> &rarr; <code>input</code> rename in <code>update()</code> is fine but inconsistent with <code>create()</code> and the rest of the codebase.</li>
+    <li><strong>TaxApiTest.java:</strong> Missing test for <code>update()</code> when PAID_TO_DATE is active. Also no test for the type mismatch scenario.</li>
+    <li><strong>Postman collection:</strong> 2857-line Postman JSON may be better managed in a shared workspace rather than source control.</li>
+  </ul>
+</div>
+
+<!-- What's Done Well -->
+<div class="section">
+  <div class="section-title">
+    <span class="icon icon-positive">&#10003;</span> What's Done Well
+  </div>
+  <ul class="positive-list">
+    <li>LAZY fetch strategy on new ManyToOne relationships &mdash; correct default for optional associations</li>
+    <li>Proper JoinColumn annotations with explicit column names and FK constraint names</li>
+    <li>Clean <code>addVatInfoIfRequired</code> method encapsulating VAT validation logic</li>
+    <li>Liquibase updated in both <code>current/</code> and <code>rebuild/</code> paths</li>
+    <li>4 new well-structured test methods covering key VAT scenarios</li>
+    <li>Proper error code additions mapped in ExceptionProcessorRs</li>
+    <li>Defensive <code>instanceof MeveoApiException</code> check in TaxRsImpl prevents double-wrapping</li>
+    <li>Static import cleanup improves readability across the codebase</li>
+  </ul>
+</div>
+
+<!-- Review Breakdown -->
+<div class="section">
+  <div class="section-title">Review Breakdown</div>
+  <table class="breakdown-table">
+    <thead>
+      <tr>
+        <th>Category</th>
+        <th>Status</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Jakarta EE Compliance</td>
+        <td><span class="badge badge-pass">Pass</span></td>
+        <td>No javax.* usage, proper Jakarta imports</td>
+      </tr>
+      <tr>
+        <td>Entity Layer</td>
+        <td><span class="badge badge-pass">Pass</span></td>
+        <td>Correct ManyToOne LAZY, proper JoinColumns</td>
+      </tr>
+      <tr>
+        <td>Service Layer</td>
+        <td><span class="badge badge-fail">Fail</span></td>
+        <td>Type mismatch bug in update(), asymmetric validation</td>
+      </tr>
+      <tr>
+        <td>API Layer</td>
+        <td><span class="badge badge-warn">Warn</span></td>
+        <td>addVatInfoIfRequired queries DB unconditionally</td>
+      </tr>
+      <tr>
+        <td>DTO Layer</td>
+        <td><span class="badge badge-warn">Warn</span></td>
+        <td>Redundant AccountingCodeResponse, unused import</td>
+      </tr>
+      <tr>
+        <td>Mapper Methods</td>
+        <td><span class="badge badge-pass">Pass</span></td>
+        <td>Null-safe entity-to-DTO mapping in TaxDto</td>
+      </tr>
+      <tr>
+        <td>REST Endpoints</td>
+        <td><span class="badge badge-pass">Pass</span></td>
+        <td>Proper MeveoApiException handling in TaxRsImpl</td>
+      </tr>
+      <tr>
+        <td>Liquibase</td>
+        <td><span class="badge badge-fail">Fail</span></td>
+        <td># prefix inconsistency, precondition flaw</td>
+      </tr>
+      <tr>
+        <td>Unit Tests</td>
+        <td><span class="badge badge-warn">Warn</span></td>
+        <td>Good coverage for create, missing update tests</td>
+      </tr>
+      <tr>
+        <td>Code Quality</td>
+        <td><span class="badge badge-warn">Warn</span></td>
+        <td>Typo in enum Javadoc, unused import</td>
+      </tr>
+      <tr>
+        <td>Performance</td>
+        <td><span class="badge badge-pass">Pass</span></td>
+        <td>LAZY fetch, no obvious N+1 risk</td>
+      </tr>
+      <tr>
+        <td>Security</td>
+        <td><span class="badge badge-pass">Pass</span></td>
+        <td>No SQL injection vectors, proper input validation</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Recommended Action -->
+<div class="action-box">
+  <h3>Request Changes</h3>
+  <p>Please address the 3 critical issues (type mismatch bug, asymmetric create/update, Liquibase precondition) and re-request review.</p>
+</div>
+
+<div class="footer">
+  <p>Review generated by Claude Code with <strong>oc-core-reviewer</strong> (backend)</p>
+  <p>PR: <a href="https://bitbucket.org/opencellsoft/opencell-core/pull-requests/14831">https://bitbucket.org/opencellsoft/opencell-core/pull-requests/14831</a></p>
+</div>
+
+</body>
+</html>

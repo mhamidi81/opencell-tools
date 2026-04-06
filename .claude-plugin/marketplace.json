@@ -19,11 +19,6 @@
       "description": "Connect to Figma MCP server to extract design context, generate code from designs, and retrieve design tokens"
     },
     {
-      "name": "oc-atlassian-mcp",
-      "source": "./plugins/atlassian-mcp",
-      "description": "Connect to Atlassian MCP server to access Jira tickets, Confluence pages, and Compass services"
-    },
-    {
       "name": "oc-bitbucket-mcp",
       "source": "./plugins/bitbucket-mcp",
       "description": "Connect to Bitbucket MCP server to create pull requests, manage repositories, and review code"
@@ -97,6 +92,11 @@
       "name": "oc-sonar-mcp",
       "source": "./plugins/sonar-mcp",
       "description": "Connect to SonarQube MCP server to access code quality metrics, issues, and analysis results"
+    },
+    {
+      "name": "oc-postgres-mcp",
+      "source": "./plugins/oc-postgres-mcp",
+      "description": "Connect to PostgreSQL via MCP for database health analysis, index tuning, query optimization, and safe SQL execution"
     }
   ]
 }

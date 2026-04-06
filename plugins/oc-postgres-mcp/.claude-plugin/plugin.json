@@ -1,0 +1,23 @@
+{
+  "name": "oc-postgres-mcp",
+  "description": "Connect to PostgreSQL via MCP for database health analysis, index tuning, query optimization, and safe SQL execution",
+  "version": "1.0.0",
+  "mcpServers": {
+    "postgres": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "--network=host",
+        "crystaldba/postgres-mcp",
+        "--access-mode=unrestricted",
+        "${DATABASE_URI}"
+      ],
+      "env": {
+        "DATABASE_URI": "${DATABASE_URI}"
+      }
+    }
+  }
+}

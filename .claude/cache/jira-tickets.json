@@ -1,0 +1,22 @@
+{
+  "lastUpdated": "2026-03-30T12:00:00.000Z",
+  "tickets": {
+    "INTRD-27746": {
+      "key": "INTRD-27746",
+      "summary": "[VAT recognition - 432 :  Paid to date] 1. Configuration",
+      "type": "Story",
+      "status": "In Progress",
+      "assignee": {
+        "displayName": "Vladimir Morev",
+        "accountId": "5da44c09f094440c44b9596f"
+      },
+      "description": "DO NOT USE - This field is not to be used anymore for Stories. Please use dedicated text fields.",
+      "labels": [],
+      "components": [],
+      "fixVersions": [],
+      "priority": "Unknown",
+      "subtasks": [],
+      "cachedAt": "2026-03-30T12:00:00.000Z"
+    }
+  }
+}

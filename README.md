@@ -19,7 +19,6 @@ A collection of Claude Code plugins that streamline the OpenCell developer workf
 
 | Plugin | Description |
 |--------|-------------|
-| **oc-atlassian-mcp** | Access Jira tickets, Confluence pages, and Compass services |
 | **oc-bitbucket-mcp** | Create pull requests, manage repositories, and review code on Bitbucket |
 | **oc-figma-mcp** | Extract design context, generate code from Figma designs, and retrieve design tokens |
 | **oc-playwright-mcp** | Automate browser interactions, take screenshots, and test web applications |
