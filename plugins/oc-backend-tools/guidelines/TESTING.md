@@ -1,0 +1,729 @@
+# Opencell Project - Testing Guidelines
+
+> **Note**: This document contains testing-specific guidelines for the Opencell project. For general development guidelines (entities, services, API, etc.), see [CLAUDE.md](./CLAUDE.md).
+
+> **Development Environment**: See **[DEVELOPMENT_SETUP.md](./DEVELOPMENT_SETUP.md)** for Java/Maven execution commands on this machine.
+
+This guide covers:
+- Unit test patterns and best practices
+- Service layer testing with EntityManager mocking
+- API layer testing with ArgumentCaptor
+- Integration testing with Postman
+
+---
+
+# Unit Test Guidelines
+
+## Test Coverage Target
+
+**Aim for 80% code coverage** as a minimum quality standard:
+- Focus on critical business logic and complex methods
+- Cover main scenarios, edge cases, and error conditions
+
+## General Structure
+
+### Test Method Naming
+
+- Use descriptive names following the pattern: `test_methodName_scenario_expectedResult`
+    - Example: `test_calculatePrice_withDiscount_returnsDiscountedPrice`
+
+### AAA Pattern
+
+- **Arrange**: Set up test data and preconditions
+- **Act**: Call the method being tested
+- **Assert**: Verify the expected outcome
+
+
+### Test Independence
+
+- Each test should be independent and not rely on other tests
+- Reset any shared state between tests
+
+
+### Test Edge Cases
+- Null values
+- Empty collections
+- Boundary values
+- Error conditions
+
+
+### Test Data
+
+**Write tests with real scenarios in mind** - use meaningful test data that represents actual usage:
+- Use helper methods for creating test objects
+- Consider using test data builders for complex objects
+- Use meaningful values that relate to the test scenario
+- Model test data after real-world use cases
+
+### Date Handling in Tests
+
+**CRITICAL: Use dates relative to `LocalDate.now()` so tests remain valid over time**
+
+Never hardcode absolute dates (e.g., `LocalDate.of(2026, 4, 16)`) in tests. If acceptance criteria specify hardcoded dates (e.g., "CSD = May 15, 2026"), translate them into relative offsets from today.
+
+```java
+// ❌ WRONG - will fail in 6 months
+LocalDate fiscalStart = LocalDate.of(2026, 1, 1);
+LocalDate fiscalEnd = LocalDate.of(2026, 12, 31);
+
+// ✅ CORRECT - always valid
+LocalDate today = LocalDate.now();
+LocalDate fiscalStart = today.minusMonths(6).withDayOfMonth(1);
+LocalDate fiscalEnd = fiscalStart.plusMonths(12).minusDays(1);
+```
+
+**Exceptions**: Use absolute dates only when testing entities that are guaranteed to always be in the past (e.g., `LocalDate.of(1900, 1, 1)`) or always in the future (e.g., `today.plusYears(10)`).
+
+## Mocking
+
+### When to Mock
+
+- Mock external dependencies (services, repositories, etc.)
+- **CRITICAL: Don't mock the class under test**
+- **CRITICAL: Never mock methods in the class you're testing** - always let the real logic execute
+  - Mock external dependencies only (other services, repositories, EntityManager)
+  - Example: When testing `ContractItemService.update()`, don't mock `update()` itself - mock EntityManager instead
+
+### Mockito Best Practices
+
+- Use `@Mock` for dependencies
+- Use `@InjectMocks` for the class under test
+- Use `ArgumentCaptor` to verify complex arguments
+- For varargs, use `captor.getAllValues()` to get all captured values
+- Prefer using `@Spy` with `@InjectMocks` annotations over manual spy creation
+  - Injects all mocked dependencies automatically
+  - Supports partial mocking while maintaining dependency injection
+
+### Stubbing Patterns for Spied Objects
+
+**CRITICAL: Use `doReturn().when()` pattern for spied objects, NOT `when().thenReturn()`**
+
+When stubbing methods on spied objects (`@Spy` with `@InjectMocks`):
+- **ALWAYS use**: `doReturn(value).when(spy).method(args)` for methods returning values
+- **ALWAYS use**: `doNothing().when(spy).method(args)` for void methods
+- **ALWAYS use**: `doAnswer(invocation -> {...}).when(spy).method(args)` for complex stubbing
+- **NEVER use**: `when(spy.method(args)).thenReturn(value)` or `when(spy.method(args)).thenAnswer(...)`
+
+**Reason**: The `when().thenReturn()` pattern calls the real method during stubbing setup, which will fail if the method has null dependencies or side effects.
+
+**Examples:**
+
+```java
+// ✅ CORRECT - for methods returning a value
+doReturn(entity).when(spiedService).update(entity);
+doReturn(entity).when(spiedService).findByCode("TEST");
+
+// ✅ CORRECT - for void methods
+doNothing().when(spiedService).remove(entity);
+doNothing().when(spiedService).validateStatusTransition(anyString(), any(), any());
+
+// ✅ CORRECT - for void methods with complex logic (e.g., create)
+doAnswer(invocation -> {
+    Entity e = invocation.getArgument(0);
+    e.setId(1L);
+    return null;
+}).when(spiedService).create(any());
+
+// ❌ WRONG - calls real method during setup!
+when(spiedService.update(entity)).thenReturn(entity);
+
+// ❌ WRONG - calls real method during setup!
+when(spiedService.create(any())).thenAnswer(invocation -> { ... });
+```
+
+**Rule of thumb**:
+- For regular mocks (`@Mock`): Either pattern works, `when().thenReturn()` is more common
+- For spied objects (`@Spy`): **ALWAYS** use `do*().when()` pattern to avoid calling real methods during setup
+
+**CRITICAL: This applies to ALL methods on spied objects, including inherited methods like `findById()`, `update()`, `create()`, etc.**
+
+```java
+// ✅ CORRECT - stubbing spied service methods
+doReturn(entity).when(spiedService).findById(1L);
+doReturn(entity).when(spiedService).findByCode("CODE");
+doReturn(entity).when(spiedService).update(any());
+
+// ❌ WRONG - will call real method during setup!
+when(spiedService.findById(1L)).thenReturn(entity);
+when(spiedService.update(any())).thenReturn(entity);
+```
+
+### EntityManager Mocking Patterns
+
+**CRITICAL: When testing service CRUD methods (create, update, remove), mock EntityManager operations instead of mocking the service methods themselves**
+
+This allows the real business logic and validation to execute while avoiding actual database operations.
+
+**Pattern for create() tests:**
+
+```java
+@Test
+public void test_create_withValidData_validatesAndPersists() throws Exception {
+    // Arrange
+    ContractItem contractItem = new ContractItem();
+    contractItem.setCode("ITEM_001");
+
+    // Mock EntityManager.persist() to set ID without database
+    doReturn(entityManager).when(contractItemService).getEntityManager();
+    doAnswer(invocation -> {
+        ContractItem item = invocation.getArgument(0);
+        item.setId(1L);
+        return null;
+    }).when(entityManager).persist(any(ContractItem.class));
+
+    // Act
+    contractItemService.create(contractItem);
+
+    // Assert
+    assertThat(contractItem.getId()).isEqualTo(1L);
+    verify(entityManager).persist(contractItem);
+}
+```
+
+**Pattern for update() tests:**
+
+```java
+@Test
+public void test_update_withValidData_mergesEntity() throws Exception {
+    // Arrange
+    ContractItem contractItem = new ContractItem();
+    contractItem.setId(1L);
+
+    // Mock EntityManager.merge() to return entity without database
+    doReturn(entityManager).when(contractItemService).getEntityManager();
+    when(entityManager.merge(any(ContractItem.class))).thenReturn(contractItem);
+
+    // Act
+    ContractItem result = contractItemService.update(contractItem);
+
+    // Assert
+    assertThat(result).isNotNull();
+    verify(entityManager).merge(contractItem);
+}
+```
+
+**Pattern for remove() tests:**
+
+```java
+@Test
+public void test_remove_withValidEntity_removesFromDatabase() throws Exception {
+    // Arrange
+    ContractItem contractItem = new ContractItem();
+    contractItem.setId(1L);
+
+    // Mock EntityManagerWrapper and EntityManager for remove
+    when(emWrapper.getEntityManager()).thenReturn(entityManager);
+    when(entityManager.contains(any())).thenReturn(true);
+
+    // Act
+    contractItemService.remove(contractItem);
+
+    // Assert
+    verify(entityManager).remove(any());
+}
+```
+
+**Required mocks for service tests:**
+
+```java
+@Mock
+private EntityManager entityManager;
+
+@Mock
+private org.meveo.jpa.EntityManagerWrapper emWrapper;
+
+@Mock
+private org.meveo.service.base.DeletionService deletionService;
+```
+
+## Service Layer Testing
+
+### Testing Validation Methods
+
+**CRITICAL: Don't mock validation methods in the class being tested**
+
+When testing business methods (create, update, etc.) that call validation methods:
+- **DO**: Let the real validation execute with valid test data
+- **DON'T**: Mock validation methods with `doNothing()` - this skips validation entirely
+- Test validation failures separately in dedicated validation tests
+
+**Correct Pattern:**
+
+```java
+@Test
+public void test_update_withValidFormula_executesRealValidation() throws Exception {
+    // Arrange
+    IndexationFormula formula = new IndexationFormula();
+    formula.setStatus(IndexationFormulaStatusEnum.PUBLISHED); // Valid status
+
+    ContractItem item = new ContractItem();
+    item.setFormula(formula);
+
+    // Mock EntityManager, but NOT validation methods
+    doReturn(entityManager).when(contractItemService).getEntityManager();
+    when(entityManager.merge(any())).thenReturn(item);
+
+    // Act - real validation will execute and pass
+    contractItemService.update(item);
+
+    // Assert
+    verify(contractItemService).validateFormulaStatusForContractItem(formula);
+}
+
+@Test
+public void test_validateFormulaStatus_withInvalidStatus_throwsException() {
+    // Test validation failures separately with invalid data
+    IndexationFormula formula = new IndexationFormula();
+    formula.setStatus(IndexationFormulaStatusEnum.DRAFT); // Invalid status
+
+    assertThatExceptionOfType(ValidationException.class)
+        .isThrownBy(() -> contractItemService.validateFormulaStatusForContractItem(formula))
+        .withMessageContaining("PUBLISHED or IN_USE");
+}
+```
+
+**Incorrect Pattern (DO NOT USE):**
+
+```java
+// BAD - Mocking validation skips the logic entirely
+doNothing().when(contractItemService).validateFormulaStatusForContractItem(any());
+
+// Act
+contractItemService.update(item); // Validation never actually runs!
+
+// This test is meaningless - it only tests that the mocked method was called
+verify(contractItemService).validateFormulaStatusForContractItem(any());
+```
+
+**Why this matters:**
+- Mocking validation methods creates false test coverage
+- You're only testing that the method was called, not that validation works
+- Bugs in validation logic won't be caught by these tests
+- Use valid test data and let real validation execute to test the full integration
+
+## API Layer Testing
+
+### Testing CRUD Methods (create, update)
+
+**CRITICAL: Use ArgumentCaptor to capture and verify entity mapping**
+
+Pattern: Capture argument → Return captured object with ID → Verify captured fields → Verify returned DTO
+
+**Correct Pattern:**
+
+```java
+@Test
+public void test_create_withValidData_capturesCorrectEntityFields() throws Exception {
+    // Arrange
+    IndexationDto dto = ImmutableIndexationDto.builder()
+            .code("CPI_2024")
+            .description("CPI 2024")
+            .status(IndexationStatusEnum.DRAFT)
+            .build();
+
+    when(indexationService.findByCode("CPI_2024")).thenReturn(null);
+    when(entityToDtoConverter.getCustomFieldsDTO(...)).thenReturn(null);
+
+    // Capture the argument and return the same object with ID set
+    ArgumentCaptor<Indexation> entityCaptor = ArgumentCaptor.forClass(Indexation.class);
+    when(indexationService.create(entityCaptor.capture())).thenAnswer(invocation -> {
+        Indexation entity = invocation.getArgument(0);
+        entity.setId(1L);
+        return entity;
+    });
+
+    // Act
+    IndexationDto result = indexationApi.create(dto);
+
+    // Assert - verify the captured entity has correct field values from DTO
+    Indexation capturedEntity = entityCaptor.getValue();
+    assertThat(capturedEntity.getCode()).isEqualTo("CPI_2024");
+    assertThat(capturedEntity.getDescription()).isEqualTo("CPI 2024");
+    assertThat(capturedEntity.getStatus()).isEqualTo(IndexationStatusEnum.DRAFT);
+
+    // Verify returned DTO has all correct field values
+    assertThat(result).isNotNull();
+    assertThat(result.getId()).isEqualTo(1L);
+    assertThat(result.getCode()).isEqualTo("CPI_2024");
+    assertThat(result.getDescription()).isEqualTo("CPI 2024");
+    assertThat(result.getStatus()).isEqualTo(IndexationStatusEnum.DRAFT);
+}
+```
+
+**Incorrect Pattern (DO NOT USE):**
+
+```java
+// BAD - Mocking service return separately
+when(indexationService.create(any())).thenReturn(mockedEntity);
+// Then verifying the mocked entity fields - this doesn't test actual mapping!
+```
+
+### Testing Mapper Methods (fromDto, toDto)
+
+**Test scenarios:**
+- **fromDto()**: All fields provided, null values (not updated), empty strings (cleared), individual field updates
+- **toDto()**: All fields populated, null entity, nested resources
+
+```java
+@Test
+public void test_fromDto_withNullValues_doesNotUpdateFields() throws Exception {
+    // Arrange - Setup entity with all fields populated
+    Indexation entity = new Indexation();
+    entity.setCode("ORIGINAL_CODE");
+    entity.setDescription("Original description");
+    entity.setStatus(IndexationStatusEnum.PUBLISHED);
+
+    // DTO with only code set, all other fields null
+    IndexationDto dto = ImmutableIndexationDto.builder()
+            .code("NEW_CODE")
+            .build();
+
+    // Act
+    indexationApi.fromDto(dto, entity);
+
+    // Assert - only code should be updated, all other fields remain unchanged
+    assertThat(entity.getCode()).isEqualTo("NEW_CODE");
+    assertThat(entity.getDescription()).isEqualTo("Original description");
+    assertThat(entity.getStatus()).isEqualTo(IndexationStatusEnum.PUBLISHED);
+}
+
+@Test
+public void test_fromDto_withEmptyStrings_clearsStringFields() throws Exception {
+    // Arrange
+    Indexation entity = new Indexation();
+    entity.setCode("ORIGINAL_CODE");
+    entity.setDescription("Original description");
+
+    // IMPORTANT: Do not test clearing code field - it's immutable after entity creation
+    IndexationDto dto = ImmutableIndexationDto.builder()
+            .description("")
+            .build();
+
+    // Act
+    indexationApi.fromDto(dto, entity);
+
+    // Assert - empty strings should clear description field, code remains unchanged
+    assertThat(entity.getCode()).isEqualTo("ORIGINAL_CODE");
+    assertThat(entity.getDescription()).isNull();
+}
+```
+
+**CRITICAL: Code Field Testing Rules**
+- **DO NOT test clearing code field with empty strings** - code is immutable after entity creation
+- Only test description and other mutable string fields for empty string clearing
+- Code field changes should only be tested in create operations, not in update operations
+
+### Testing Inherited CRUD Methods
+
+**CRITICAL: Test all inherited methods from BaseCrudApi:**
+
+- `find(String code)` - with valid, missing, and non-existent code
+- `find(Long id)` - with valid, null, and non-existent ID
+- `list()` - with results and no results
+- `remove(String code)` - with valid, missing, and non-existent code
+- `remove(Long id)` - with valid, null, and non-existent ID
+- `createOrUpdate()` - if applicable
+- `enableOrDisable()` - if applicable
+
+### Testing Custom Operations
+
+Test all custom business operations: Valid scenarios, missing parameters, non-existent entities, business rule violations
+
+### DTO Nested Resource Access
+
+When DTOs have nested Resource objects, use correct access pattern:
+
+```java
+// Correct - accessing nested resource field
+assertThat(result.getIndexation().getCode()).isEqualTo("CPI_2024");
+
+// Incorrect - trying to access non-existent flat field
+assertThat(result.getIndexationCode()).isEqualTo("CPI_2024"); // Method doesn't exist!
+```
+
+## Verification
+
+- Use `verify(mock, times(n))` to check number of invocations
+- For varargs methods, use `ArgumentCaptor` and `getAllValues()`:
+
+     ```
+     // For varargs methods like: void method(String arg1, Object... varargs)
+     ArgumentCaptor<Object> varargCaptor = ArgumentCaptor.forClass(Object.class);
+     verify(mock).method(eq("expectedArg1"), varargCaptor.capture());
+
+     // Get all captured varargs as a List
+     List<Object> capturedVarargs = varargCaptor.getAllValues();
+
+     // Verify individual vararg elements
+     assertThat(capturedVarargs.size()).isEqualTo(expectedSize);
+     assertThat(capturedVarargs.get(0)).isEqualTo(expectedFirstValue);
+     assertThat(capturedVarargs.get(1)).isEqualTo(expectedSecondValue);
+
+     ```
+
+- For multiple invocations of varargs methods, use `getAllValues()` carefully:
+
+     ```
+     // If the method is called multiple times
+     verify(mock, times(2)).method(any(), varargCaptor.capture());
+
+     // getAllValues() returns all captured values across all invocations
+     List<Object> allCapturedValues = varargCaptor.getAllValues();
+
+     // To get values from specific invocations:
+     // First invocation values
+     Object[] firstInvocationArgs = (Object[]) allCapturedValues.get(0);
+
+     // Second invocation values
+     Object[] secondInvocationArgs = (Object[]) allCapturedValues.get(1);
+
+     ```
+
+- Capture arguments and compare its values
+- For varargs, verify each argument separately
+
+
+### Assertions
+
+- Use AssertJ for Fluent Assertions
+- Prefer `assertThat()` over traditional assertions
+- Chain assertions for better readability
+- Use appropriate matchers for different types
+- Use `assertThatExceptionOfType(ExceptionType.class).isThrownBy(() -> { ... })` for exception testing
+- Verify exception message when relevant
+
+**Exception Testing Guidelines:**
+- **Service layer tests**: Expect `ValidationException` for validation errors, `BusinessException` for other business logic errors
+- **API layer tests**: Expect API-specific exceptions (`EntityDoesNotExistsException`, `MissingParameterException`, etc.)
+- Always verify exception message contains relevant context (entity code, ID, field name)
+  - Example: `.withMessageContaining("Invalid status transition").withMessageContaining("CPI_2024")`
+
+
+## Example Test Structure
+
+```java
+
+@Test
+public void test_methodName_scenario_expectedResult() {
+
+    // Arrange
+    // Set up test data and mocks
+
+    // Act
+    // Call the method being tested
+
+    // Assert
+    // Verify the expected outcome
+}
+```
+
+# Integration test guidelines
+
+# Postman Collections
+
+Provide Postman collection with:
+- Examples for all CRUD operations
+- Examples for custom operations
+- Error scenarios
+- Environment variables
+
+**CRITICAL: Request Body Requirements**
+
+- **Create requests**: Must include ALL entity fields in the request body
+  - Include all mandatory fields with valid values
+  - Include all optional fields (can be null or omitted)
+  - Include all i18n fields (descriptionI18n, longDescriptionI18n) with proper language codes (ENG, FRA, etc.)
+  - Include disabled field (can be set during creation)
+  - DO NOT include status field (managed through lifecycle actions)
+
+- **Update requests**: Must include all updatable entity fields
+  - Include all fields that can be updated
+  - Include all i18n fields with proper language codes
+  - DO NOT include status field (managed through lifecycle actions)
+  - DO NOT include disabled field (managed through enable/disable actions)
+
+- This ensures comprehensive testing of field mapping and validation
+
+## Environment Variables
+
+**CRITICAL: Use `opencell.url` variable for all API requests**
+
+- Variable name: `opencell.url` (not `base_url`)
+- Default value: `http://localhost:8080/opencell/api/rest` (includes full path)
+- The variable should include the complete path up to `/opencell/api/rest`
+
+**Pattern:** Use `{{opencell.url}}/v2/{domain}/{resource}` in all requests
+
+### Test Data Variables
+
+**CRITICAL: Use dynamically generated or sequence-based codes, not hardcoded values**
+
+- Use timestamps or UUIDs for unique codes: `"code": "CPI_{{$timestamp}}"`
+- Use sequential numbers: `"code": "BATCH_001"`, `"code": "BATCH_002"`
+- Store generated values in environment variables for reuse across requests
+- This allows tests to be run multiple times without conflicts
+
+**Example:**
+
+```javascript
+// In create request Pre-request Script:
+pm.environment.set("batch_code", "BATCH_" + Date.now());
+
+// In request body:
+{
+    "code": "{{batch_code}}"
+}
+
+// In subsequent requests, reuse the variable:
+GET {{opencell.url}}/v2/indexation/batches/{{batch_code}}
+```
+
+## API Call Verification
+
+**CRITICAL: Before creating ANY Postman request, you MUST read the actual REST resource interface and DTO source files. Never guess or assume URLs or payload fields.**
+
+### Step 1: Build an Endpoint Map (MANDATORY)
+
+Read the REST resource **interface** file (not the implementation) and extract every endpoint:
+
+1. **Class-level `@Path`** — e.g., `@Path("/v2/indexation/batches")` → this is the base path
+2. **Method-level `@Path`** — e.g., `@Path("/{id}")` → append to base path
+3. **Full URL** — concatenate class + method paths: `/v2/indexation/batches/{id}`
+4. **HTTP method** — read the annotation: `@GET`, `@POST`, `@PUT`, `@DELETE`. Do NOT assume action endpoints (publish, close, enable, disable) use PUT — many use `@POST`
+5. **Path parameters** — read `@PathParam` annotations. Note the exact name AND type (`Long id` vs `String code`)
+6. **Query parameters** — read `@QueryParam` annotations for optional parameters
+7. **Nested vs flat paths** — verify whether resources are nested (e.g., `/batches/{batchId}/priceIndexations`) or flat
+
+**Write out the complete endpoint map before proceeding.** Example:
+```
+Endpoint Map (from IndexationBatchResource.java):
+POST   /v2/indexation/batches                      → create(IndexationBatchDto)
+GET    /v2/indexation/batches/{id}                  → find(@PathParam("id") Long id)
+GET    /v2/indexation/batches                       → list(...)
+PUT    /v2/indexation/batches/{id}                  → update(@PathParam("id") Long id, ...)
+DELETE /v2/indexation/batches/{id}                  → delete(@PathParam("id") Long id)
+POST   /v2/indexation/batches/{code}/close          → close(@PathParam("code") String code)
+```
+
+### Step 2: Build a DTO Field Map (MANDATORY)
+
+For each endpoint that accepts a request body, read the **DTO class file** and extract every field:
+
+1. **Read the DTO class** — list all fields with their Java types
+2. **For Immutable DTOs (v2)** — also read the `fromDto()` method in the API service to see which fields are actually mapped from the DTO to the entity
+3. **Identify mandatory vs optional** — check `@NotNull` annotations and validation logic in the service layer
+4. **Read nested DTOs** — if a field type is another DTO (e.g., `List<PriceIndexationDto>`), read that DTO class too
+5. **Identify excluded fields** — status fields managed by lifecycle (e.g., `status`, `disabled`) should NOT be in create/update bodies
+
+**Write out the field list before proceeding.** Example:
+```
+IndexationBatchDto fields:
+- code: String (mandatory)
+- description: String (optional)
+- descriptionI18n: Map<String, String> (optional, i18n)
+- indexId: Long (mandatory, reference to Index)
+- startDate: Date (optional)
+Fields to EXCLUDE from create/update: status (lifecycle-managed)
+```
+
+### Step 3: Verify Every Postman Request (MANDATORY)
+
+After building the collection, verify EACH request against the maps from steps 1 and 2:
+
+- **URL**: Does this URL match the endpoint map character by character? Common mistakes:
+  - ❌ Using `{code}` when the interface says `@PathParam("id") Long id`
+  - ❌ Using `/{id}/action` when the interface says `/{code}/action`
+  - ❌ Inventing URLs for endpoints that don't exist in the interface
+  - ❌ Using wrong base path (e.g., `/v2/cpq/entity` when interface says `/v2/catalog/entity`)
+- **HTTP method**: Does the method match? Common mistakes:
+  - ❌ Using PUT for action endpoints that are annotated with `@POST`
+  - ❌ Using POST for update endpoints that are annotated with `@PUT`
+- **Request body fields**: Does the body contain ONLY fields from the DTO? Common mistakes:
+  - ❌ Including fields that don't exist in the DTO class
+  - ❌ Using wrong field names (e.g., `indexCode` when DTO has `indexId`)
+  - ❌ Using wrong field types (e.g., string `"123"` for a `Long` field)
+  - ❌ Including `status` field in create/update requests
+  - ❌ Missing nested DTO structure (e.g., flat field instead of nested object)
+
+## Authorization
+
+**CRITICAL: Set Basic Auth at collection level**
+
+- **Authorization Type**: Basic Auth
+- **Username**: `{{opencell.username}}`
+- **Password**: `{{opencell.password}}`
+- Configure at collection level so all requests inherit authentication
+
+## Test Organization and Independence
+
+**CRITICAL: Organize Postman tests to be independent and complete full CRUD cycles**
+
+### Test Independence Principles
+
+1. **Each test folder is self-contained** - Create all needed entities at the start
+2. **Complete CRUD cycle** - Create → Read → Update → Custom Operations → Delete within one folder
+3. **Fresh entities for each test section** - Don't reuse entities from previous test folders
+4. **Clean up at the end** - Delete all created entities in reverse dependency order
+
+### Test Structure Pattern
+
+**Organize by entity with full CRUD cycle:**
+
+```
+Folder: Entity Tests
+  ├── Create
+  ├── Get by Code/ID
+  ├── List
+  ├── Update
+  ├── Custom operations (enable, disable, close, etc.)
+  └── Delete
+
+For child entities: Create parent first, delete parent last
+```
+
+### List Test Assertions
+
+**CRITICAL: Access search results using `jsonData.searchResults` not `jsonData.data`**
+
+- List endpoint responses contain results in `searchResults` property
+- Use `pm.expect(jsonData.searchResults).to.be.an('array');` for array validation
+- Access individual items from `jsonData.searchResults[0]`
+
+### Deletion Best Practices
+
+- Delete each entity only once (by code OR ID, not both)
+- Delete in reverse dependency order (children first, then parents)
+
+### Error Scenario Tests
+
+- Test error scenarios in separate requests (e.g., "Create with missing required field")
+- Error tests don't need cleanup if entity wasn't created
+- Use descriptive names indicating expected error: "Create without code - should fail"
+
+### Test Assertions
+
+**CRITICAL: Use specific value assertions, not existence checks**
+
+- **DO**: Assert exact expected values - `pm.expect(jsonData.status).to.eql("DRAFT")`
+- **DON'T**: Assert field existence only - `pm.expect(jsonData.status).to.exist`
+
+**Example:**
+
+```javascript
+// ✅ CORRECT - Assert specific values
+pm.test("Batch status is DRAFT", function () {
+    var jsonData = pm.response.json();
+    pm.expect(jsonData.status).to.eql("DRAFT");
+});
+
+pm.test("Response has 3 lines", function () {
+    var jsonData = pm.response.json();
+    pm.expect(jsonData.priceIndexations.length).to.eql(3);
+});
+
+// ❌ WRONG - Only checks existence
+pm.test("Response has status", function () {
+    var jsonData = pm.response.json();
+    pm.expect(jsonData.status).to.exist; // Could be any value!
+});
+```

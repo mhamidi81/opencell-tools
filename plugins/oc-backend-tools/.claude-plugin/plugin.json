@@ -1,0 +1,5 @@
+{
+  "name": "oc-backend-tools",
+  "description": "Backend development toolkit for Opencell Core — agents for building entities, services, APIs, tests, and Postman collections, plus guideline-loading skills and an implementation orchestrator",
+  "version": "1.0.0"
+}

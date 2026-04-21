@@ -97,6 +97,11 @@
       "name": "oc-create-e2e-test",
       "source": "./plugins/oc-create-e2e-test",
       "description": "Create Playwright E2E tests from JIRA ticket requirements using the playwright-e2e-expert sub-agent"
+    },
+    {
+      "name": "oc-backend-tools",
+      "source": "./plugins/oc-backend-tools",
+      "description": "Backend development toolkit for Opencell Core — agents for building entities, services, APIs, tests, and Postman collections, plus guideline-loading skills and an implementation orchestrator"
     }
   ]
 }
