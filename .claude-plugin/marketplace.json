@@ -102,6 +102,11 @@
       "name": "oc-backend-tools",
       "source": "./plugins/oc-backend-tools",
       "description": "Backend development toolkit for Opencell Core — agents for building entities, services, APIs, tests, and Postman collections, plus guideline-loading skills and an implementation orchestrator"
+    },
+	 {
+      "name": "oc-archi-tools",
+      "source": "./plugins/oc-archi-tools",
+      "description": "Archi design toolkit for Opencell Core — agents and skills for Us analysis and design"
     }
   ]
 }
