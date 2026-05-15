@@ -43,6 +43,7 @@ These rules apply to ALL generated code:
    - Use `mcp__atlassian__getJiraIssue` with the ticket key
    - Extract: entity names, fields, business rules, API endpoints, relationships
    - **Extract acceptance criteria** from `customfield_10136` (Acceptance field in ADF format) — this contains test cases, expected statuses, and boundary conditions that must drive the test plan
+   - **HARD STOP: If the Jira ticket fetch fails (404, auth error, invalid cloud ID, or any other error), you MUST stop immediately and report the error to the user. Do NOT proceed with implementation without successfully reading the ticket. The ticket contents drive all subsequent phases.**
 
 2. **Scan existing code**:
    - Check if related entities, services, APIs already exist in the domain

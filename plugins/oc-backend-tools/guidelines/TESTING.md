@@ -614,6 +614,12 @@ For each endpoint that accepts a request body, read the **DTO class file** and e
 3. **Identify mandatory vs optional** — check `@NotNull` annotations and validation logic in the service layer
 4. **Read nested DTOs** — if a field type is another DTO (e.g., `List<PriceIndexationDto>`), read that DTO class too
 5. **Identify excluded fields** — status fields managed by lifecycle (e.g., `status`, `disabled`) should NOT be in create/update bodies
+6. **JAXB annotations determine JSON field names for v0/v1 DTOs** — v0/v1 DTOs use JAXB annotations that control JSON serialization names:
+   - `@XmlAttribute(name = "code")` on a field `entityCode` → JSON key is `code` (not `entityCode`)
+   - `@XmlElement(name = "role")` on a field `roles` → JSON key is the JAXB name
+   - `@XmlElementWrapper(name = "accessibleEntities")` + `@XmlElement(name = "accessibleEntity")` on a `List<T>` field → JSON key is the `@XmlElement` name: `"accessibleEntity": [...]` (the wrapper name is ignored in JSON)
+   - If no JAXB `name` attribute is specified (e.g., `@XmlAttribute()` without name), use the Java field name
+   - **Always check `@XmlAttribute`, `@XmlElement`, and `@XmlElementWrapper` annotations on DTO fields before writing JSON payloads**
 
 **Write out the field list before proceeding.** Example:
 ```
