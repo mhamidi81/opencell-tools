@@ -1,5 +1,4 @@
 ---
-name: reviewBackend
 description: Evaluate Opencell backend code changes against the project guidelines using the pr-reviewer agent. Reviews uncommitted changes, a specific Bitbucket PR, or lets you pick from open PRs.
 argument-hint: "[PR-number | list]"
 ---
@@ -16,7 +15,7 @@ Parse `$ARGUMENTS` to select the mode:
 - **A number** (e.g. `15042`) → **Mode PR**: review that pull request.
 - **`list`** (also accept `pr` or `prs`) → **Mode LIST**: list open pull requests and let the user choose one, then continue as Mode PR.
 
-> Distinguishing "no PR number" cases: a bare `/reviewBackend` always means *local uncommitted review*. To browse pull requests instead, the user must pass the `list` keyword. This removes the ambiguity between "review my local changes" and "show me the open PRs".
+> Distinguishing "no PR number" cases: a bare `/oc-backend-tools:reviewBackend` always means *local uncommitted review*. To browse pull requests instead, the user must pass the `list` keyword. This removes the ambiguity between "review my local changes" and "show me the open PRs".
 
 ---
 
@@ -152,11 +151,11 @@ Credentials come from `BITBUCKET_EMAIL` and `BITBUCKET_ACCESS_TOKEN` (Bitbucket 
 
 ```bash
 # Review current uncommitted changes
-/reviewBackend
+/oc-backend-tools:reviewBackend
 
 # Review pull request #15042 and (after confirmation) approve or request changes
-/reviewBackend 15042
+/oc-backend-tools:reviewBackend 15042
 
 # List open PRs, pick one, then review it
-/reviewBackend list
+/oc-backend-tools:reviewBackend list
 ```
