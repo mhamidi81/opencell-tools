@@ -11,7 +11,7 @@ Review a pull request associated with a JIRA ticket by fetching the PR diff from
 **Reviewer routing:**
 
 - **opencell-portal** (`https://bitbucket.org/opencellsoft/opencell-portal.git`) → `oc-frontend-reviewer:frontend-reviewer`
-- **opencell-core** (`https://bitbucket.org/opencellsoft/opencell-core.git`) → `oc-core-reviewer:oc-core-reviewer`
+- **opencell-core** (`https://bitbucket.org/opencellsoft/opencell-core.git`) → `oc-backend-tools:pr-reviewer`
 
 ## Context
 
@@ -49,8 +49,8 @@ Based on the remote URL, determine which reviewer agent to use:
   - Set [REVIEW-DOMAIN] = `frontend`
   - Set [REVIEW-CATEGORIES] to the frontend categories (see Step 6)
 - If remote URL contains `opencell-core`:
-  - Set [REVIEWER-AGENT] = `oc-core-reviewer:oc-core-reviewer`
-  - Set [REVIEWER-LABEL] = `oc-core-reviewer`
+  - Set [REVIEWER-AGENT] = `oc-backend-tools:pr-reviewer`
+  - Set [REVIEWER-LABEL] = `oc-backend-tools:pr-reviewer`
   - Set [REVIEW-DOMAIN] = `backend`
   - Set [REVIEW-CATEGORIES] to the backend categories (see Step 6)
 - If neither matches:
@@ -456,7 +456,7 @@ After displaying the report, offer the user actionable next steps:
 ```bash
 # Review a backend PR (opencell-core repo)
 /oc-review-pr INTRD-36922
-# → Detects opencell-core repo → uses oc-core-reviewer
+# → Detects opencell-core repo → uses oc-backend-tools:pr-reviewer
 # → Reviews Java/EJB/JPA/Liquibase code against core guidelines
 
 # Review a frontend PR (opencell-portal repo)

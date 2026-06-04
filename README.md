@@ -22,6 +22,18 @@ claude
 | **oc-fix-bug** | `/oc-fix-bug` | Fix a bug from a Jira ticket — update status to In Progress, create fix branch, and start fixing |
 | **oc-review-pr** | `/oc-review-pr` | Review a pull request linked to a Jira ticket — fetch PR, select appropriate reviewer agent, and generate a detailed report |
 
+### Backend toolkit (oc-backend-tools)
+
+`oc-backend-tools` is a complete backend development toolkit for Opencell Core. It bundles slash commands, builder/reviewer sub-agents, and guideline-loading skills that all share one source of truth: the guideline files under `plugins/oc-backend-tools/guidelines/` (CRITICAL_RULES, ENTITY, SERVICE, API, DATABASE, CODE_QUALITY, TESTING).
+
+| Type | Provides | Description |
+|------|----------|-------------|
+| Commands | `/implementBackend` | Orchestrate the full implementation of a Jira ticket across entities, database, services, API, tests, and Postman collections |
+| Commands | `/reviewBackend` | Evaluate backend changes against the guidelines — reviews uncommitted code, a specific Bitbucket PR (with approve/request-changes), or lets you pick from open PRs |
+| Sub-agents | `entity-builder`, `service-builder`, `api-builder`, `test-generator`, `postman-generator` | Builder agents that scaffold each layer following the guidelines |
+| Sub-agents | `pr-reviewer` | Backend code reviewer validating Java/EJB/JPA/Liquibase code against the guidelines, with a score and file:line suggestions |
+| Skills | `entity-guide`, `service-guide`, `api-guide`, `db-guide` | Auto-triggered skills that load the relevant guidelines when working on each layer |
+
 ### Sub-agents
 
 | Plugin | Description |
@@ -29,7 +41,6 @@ claude
 | **oc-frontend-engineer** | Expert React/TypeScript sub-agent for building, refactoring, and architecting frontend components |
 | **oc-frontend-designer** | Frontend designer sub-agent for translating Figma designs into implementation-ready React/MUI components with design tokens and styling |
 | **oc-frontend-reviewer** | Frontend code reviewer sub-agent that validates React/TypeScript code against project standards |
-| **oc-core-reviewer** | Backend code reviewer sub-agent for validating Java/EJB/JPA/Liquibase code against Opencell core project standards |
 | **oc-cypress-expert** | Cypress testing expert sub-agent for end-to-end testing, test automation, and flaky test resolution |
 
 ### MCP Integrations

@@ -1,5 +1,0 @@
-{
-  "name": "oc-core-reviewer",
-  "description": "Backend code reviewer sub-agent for validating Java/EJB/JPA/Liquibase code against Opencell core project standards",
-  "version": "1.0.0"
-}

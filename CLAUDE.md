@@ -21,7 +21,7 @@ plugins/<name>/
 There are three kinds of plugins:
 
 1. **Skills** — Slash commands users invoke directly (`/cache-jira`, `/oc-commit`, `/oc-pr`, `/oc-fix-bug`, `/oc-create-ui`, `/oc-review-pr`). Defined in `SKILL.md` files with YAML frontmatter.
-2. **Sub-agents** — Specialized AI personas spawned by skills or the main agent (`frontend-engineer`, `frontend-reviewer`, `frontend-designer`, `cypress-expert`, `oc-core-reviewer`). Defined in `.md` files under `agents/` with YAML frontmatter (`name`, `color`, `model`).
+2. **Sub-agents** — Specialized AI personas spawned by skills or the main agent (`frontend-engineer`, `frontend-reviewer`, `frontend-designer`, `cypress-expert`, `oc-backend-tools:pr-reviewer`). Defined in `.md` files under `agents/` with YAML frontmatter (`name`, `color`, `model`).
 3. **MCP Servers** — External service integrations configured in `plugin.json` under `mcpServers` (Bitbucket, Figma, Playwright, Opencell, SonarQube, PostgreSQL).
 
 ## How to Add a New Plugin
@@ -48,7 +48,7 @@ The skills chain together into a standard workflow:
 - `/oc-fix-bug` transitions the Jira ticket to "In Progress" and creates a `fix/TICKET` branch.
 - `/oc-commit` runs the appropriate reviewer agent before committing.
 - `/oc-pr` squashes commits and creates a PR (auto-detects Bitbucket vs GitHub).
-- `/oc-review-pr` selects the reviewer agent based on repository: `oc-frontend-reviewer` for opencell-portal, `oc-core-reviewer` for opencell-core.
+- `/oc-review-pr` selects the reviewer agent based on repository: `oc-frontend-reviewer` for opencell-portal, `oc-backend-tools:pr-reviewer` for opencell-core.
 
 ## MCP Servers Requiring Environment Variables
 

@@ -79,11 +79,6 @@
       "description": "Connect to the Opencell billing system via MCP to manage invoices, quotes, customers, payments, subscriptions, dunning, and all billing operations"
     },
     {
-      "name": "oc-core-reviewer",
-      "source": "./plugins/oc-core-reviewer",
-      "description": "Backend code reviewer sub-agent for validating Java/EJB/JPA/Liquibase code against Opencell core project standards"
-    },
-    {
       "name": "oc-sonar-mcp",
       "source": "./plugins/sonar-mcp",
       "description": "Connect to SonarQube MCP server to access code quality metrics, issues, and analysis results"
