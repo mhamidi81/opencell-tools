@@ -61,7 +61,7 @@
     {
       "name": "oc-frontend-test-writer",
       "source": "./plugins/frontend-test-writer",
-      "description": "Frontend test writer sub-agent that writes Vitest tests for changed React/TypeScript code following OpenCell Portal testing conventions"
+      "description": "Frontend test writer sub-agent and /oc-write-tests command that write Vitest tests for changed React/TypeScript code (or specific files) following OpenCell Portal testing conventions"
     },
     {
       "name": "oc-cypress-expert",
