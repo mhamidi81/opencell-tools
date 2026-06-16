@@ -59,6 +59,11 @@
       "description": "Frontend designer sub-agent for translating Figma designs into implementation-ready React/MUI components with design tokens and styling"
     },
     {
+      "name": "oc-frontend-test-writer",
+      "source": "./plugins/frontend-test-writer",
+      "description": "Frontend test writer sub-agent that writes Vitest tests for changed React/TypeScript code following OpenCell Portal testing conventions"
+    },
+    {
       "name": "oc-cypress-expert",
       "source": "./plugins/cypress-expert",
       "description": "Cypress testing expert sub-agent for end-to-end testing, test automation, and flaky test resolution"

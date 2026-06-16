@@ -1,0 +1,5 @@
+{
+  "name": "oc-frontend-test-writer",
+  "description": "Frontend test writer sub-agent that writes Vitest tests for changed React/TypeScript code following OpenCell Portal testing conventions",
+  "version": "1.0.0"
+}

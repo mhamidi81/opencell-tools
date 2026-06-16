@@ -111,6 +111,20 @@ $ARGUMENTS = "INTRD-36922 dev"
   - Steps to reproduce (if available)
 - Start investigating and fixing the bug in the codebase
 
+### Step 6: Write Tests for the Fix
+
+Once the fix is implemented, add test coverage for the changed code **before** the review step (which runs later in `/oc-commit`):
+
+- Use the **frontend-test-writer** sub-agent (via Task tool with `subagent_type: oc-frontend-test-writer:frontend-test-writer`)
+- Pass it the [BASE-BRANCH] so it can compute the diff, plus the list of files you changed while fixing the bug
+- The agent will:
+  - Inspect the git diff to find the changed React/TypeScript source files
+  - Write or update Vitest `*.spec.tsx` / `*.spec.ts` tests following project conventions
+  - Run Vitest to verify the new tests pass
+- Present the agent's report (test files created/updated and the run result) to the user
+- If the agent surfaces a real defect in the fix, address it before continuing
+- If there is no meaningfully testable change, note this and continue
+
 ## Examples
 
 ```bash

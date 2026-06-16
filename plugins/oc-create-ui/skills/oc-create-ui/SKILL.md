@@ -134,6 +134,19 @@ $ARGUMENTS = "INTRD-36922 dev"
    - Use Playwright MCP server to run and validate the app
    - Verify all functionality works as specified
 
+#### Step 7: Write Tests for the Page
+
+Once the page is implemented and validated, add test coverage for the changed code **before** the review step (which runs later in `/oc-commit`):
+
+- Use the **frontend-test-writer** sub-agent (via Task tool with `subagent_type: oc-frontend-test-writer:frontend-test-writer`)
+- Pass it the [BASE-BRANCH] so it can compute the diff, plus the list of files created for the page (Form.tsx, mappers.ts, components, hooks)
+- The agent will:
+  - Inspect the git diff to find the changed React/TypeScript source files
+  - Write or update Vitest `*.spec.tsx` / `*.spec.ts` tests following project conventions (FormWrapper, renderWithApp, MSW)
+  - Run Vitest to verify the new tests pass
+- Present the agent's report (test files created/updated and the run result) to the user
+- If the agent surfaces a real defect in the page, address it before continuing
+
 ## Examples
 
 ```bash
