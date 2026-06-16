@@ -20,8 +20,8 @@ plugins/<name>/
 
 There are three kinds of plugins:
 
-1. **Skills** — Slash commands users invoke directly (`/cache-jira`, `/oc-commit`, `/oc-pr`, `/oc-fix-bug`, `/oc-create-ui`, `/oc-review-pr`). Defined in `SKILL.md` files with YAML frontmatter.
-2. **Sub-agents** — Specialized AI personas spawned by skills or the main agent (`frontend-engineer`, `frontend-reviewer`, `frontend-designer`, `cypress-expert`, `oc-backend-tools:pr-reviewer`). Defined in `.md` files under `agents/` with YAML frontmatter (`name`, `color`, `model`).
+1. **Skills** — Slash commands users invoke directly (`/cache-jira`, `/oc-commit`, `/oc-pr`, `/oc-fix-bug`, `/oc-create-ui`, `/oc-review-pr`, `/oc-write-tests`). Defined in `SKILL.md` files with YAML frontmatter.
+2. **Sub-agents** — Specialized AI personas spawned by skills or the main agent (`frontend-engineer`, `frontend-reviewer`, `frontend-designer`, `frontend-test-writer`, `cypress-expert`, `oc-backend-tools:pr-reviewer`). Defined in `.md` files under `agents/` with YAML frontmatter (`name`, `color`, `model`).
 3. **MCP Servers** — External service integrations configured in `plugin.json` under `mcpServers` (Bitbucket, Figma, Playwright, Opencell, SonarQube, PostgreSQL).
 
 ## How to Add a New Plugin
@@ -41,14 +41,15 @@ There are three kinds of plugins:
 The skills chain together into a standard workflow:
 
 ```
-/cache-jira TICKET  →  /oc-fix-bug TICKET  →  [fix code]  →  /oc-commit TICKET  →  /oc-pr TICKET  →  /oc-review-pr TICKET
+/cache-jira TICKET  →  /oc-fix-bug TICKET  →  [fix code]  →  [write tests]  →  /oc-commit TICKET  →  /oc-pr TICKET  →  /oc-review-pr TICKET
 ```
 
 - `/cache-jira` stores ticket data in `.claude/cache/jira-tickets.json` (1-hour TTL). Other commands read from this cache.
-- `/oc-fix-bug` transitions the Jira ticket to "In Progress" and creates a `fix/TICKET` branch.
+- `/oc-fix-bug` transitions the Jira ticket to "In Progress" and creates a `fix/TICKET` branch, then writes Vitest tests on the fix via the `frontend-test-writer` agent as its final step (before review in `/oc-commit`).
 - `/oc-commit` runs the appropriate reviewer agent before committing.
 - `/oc-pr` squashes commits and creates a PR (auto-detects Bitbucket vs GitHub).
 - `/oc-review-pr` selects the reviewer agent based on repository: `oc-frontend-reviewer` for opencell-portal, `oc-backend-tools:pr-reviewer` for opencell-core.
+- `/oc-write-tests` invokes the `frontend-test-writer` agent directly to write Vitest tests for changed code (git diff vs a base branch) or for specific files passed as arguments — usable outside the Jira flow. `/oc-create-ui` also runs this agent as its final development step before review.
 
 ## MCP Servers Requiring Environment Variables
 
