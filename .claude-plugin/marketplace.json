@@ -8,100 +8,105 @@
     "description": "A collection of Claude Code plugins that streamline the OpenCell developer workflow — from Jira ticket management and UI scaffolding to automated commits, pull requests, and code review, with built-in integrations for Atlassian, Bitbucket, Figma, and Playwright."
   },
   "plugins": [
-{
-      "name": "oc-figma-mcp",
-      "source": "./plugins/figma-mcp",
-      "description": "Connect to Figma MCP server to extract design context, generate code from designs, and retrieve design tokens"
+    {
+      "name": "oc-fe-engineer",
+      "source": "./plugins/frontend/oc-fe-engineer",
+      "description": "Expert React/TypeScript UI engineer sub-agent for building, refactoring, and architecting frontend components"
     },
     {
-      "name": "oc-bitbucket-mcp",
-      "source": "./plugins/bitbucket-mcp",
-      "description": "Connect to Bitbucket MCP server to create pull requests, manage repositories, and review code"
+      "name": "oc-fe-reviewer",
+      "source": "./plugins/frontend/oc-fe-reviewer",
+      "description": "Frontend code reviewer sub-agent for validating React/TypeScript code against project standards"
     },
     {
-      "name": "oc-playwright-mcp",
-      "source": "./plugins/playwright-mcp",
-      "description": "Connect to Playwright MCP server to automate browser interactions, take screenshots, and test web applications"
+      "name": "oc-fe-designer",
+      "source": "./plugins/frontend/oc-fe-designer",
+      "description": "Frontend designer sub-agent for translating Figma designs into implementation-ready React/MUI components with design tokens and styling"
+    },
+    {
+      "name": "oc-fe-test-writer",
+      "source": "./plugins/frontend/oc-fe-test-writer",
+      "description": "Frontend test writer sub-agent and /oc-fe-write-tests command that write Vitest tests for changed React/TypeScript code (or specific files) following OpenCell Portal testing conventions"
+    },
+    {
+      "name": "oc-fe-create-ui",
+      "source": "./plugins/frontend/oc-fe-create-ui",
+      "description": "Create UI page from JIRA ticket ID using the oc-fe-engineer sub-agent"
+    },
+    {
+      "name": "oc-fe-fix-bug",
+      "source": "./plugins/frontend/oc-fe-fix-bug",
+      "description": "Fix a bug from a JIRA ticket: update status, create fix branch, and start fixing"
+    },
+    {
+      "name": "oc-fe-cypress-expert",
+      "source": "./plugins/frontend/oc-fe-cypress-expert",
+      "description": "Cypress testing expert sub-agent for end-to-end testing, test automation, and flaky test resolution"
+    },
+    {
+      "name": "oc-fe-create-e2e-test",
+      "source": "./plugins/frontend/oc-fe-create-e2e-test",
+      "description": "Create Playwright E2E tests from JIRA ticket requirements using the oc-fe-e2e-expert sub-agent"
+    },
+    {
+      "name": "oc-be-tools",
+      "source": "./plugins/backend/oc-be-tools",
+      "description": "Backend development toolkit for Opencell Core — agents for building entities, services, APIs, tests, and Postman collections, guideline-loading skills, an implementation orchestrator (/oc-be-implement), and a guideline-based code review command (/oc-be-review)"
+    },
+    {
+      "name": "oc-ar-tools",
+      "source": "./plugins/archi/oc-ar-tools",
+      "description": "Archi design toolkit for Opencell Core — agents and skills for US analysis and technical design"
     },
     {
       "name": "oc-cache-jira",
-      "source": "./plugins/cache-jira",
+      "source": "./plugins/common/oc-cache-jira",
       "description": "Fetch and cache JIRA ticket data locally for use by other OpenCell commands"
     },
     {
       "name": "oc-commit",
-      "source": "./plugins/oc-commit",
+      "source": "./plugins/common/oc-commit",
       "description": "Commit changes using JIRA ticket ID and summary from cache with automatic code review"
     },
     {
       "name": "oc-pull-request",
-      "source": "./plugins/oc-pull-request",
+      "source": "./plugins/common/oc-pull-request",
       "description": "Push changes and create a pull request for a JIRA ticket with automatic squash and PR creation"
     },
     {
-      "name": "oc-create-ui",
-      "source": "./plugins/oc-create-ui",
-      "description": "Create UI page from JIRA ticket ID using the frontend-engineer sub-agent"
-    },
-    {
-      "name": "oc-frontend-engineer",
-      "source": "./plugins/frontend-engineer",
-      "description": "Expert React/TypeScript UI engineer sub-agent for building, refactoring, and architecting frontend components"
-    },
-    {
-      "name": "oc-frontend-reviewer",
-      "source": "./plugins/frontend-reviewer",
-      "description": "Frontend code reviewer sub-agent for validating React/TypeScript code against project standards"
-    },
-    {
-      "name": "oc-frontend-designer",
-      "source": "./plugins/frontend-designer",
-      "description": "Frontend designer sub-agent for translating Figma designs into implementation-ready React/MUI components with design tokens and styling"
-    },
-    {
-      "name": "oc-cypress-expert",
-      "source": "./plugins/cypress-expert",
-      "description": "Cypress testing expert sub-agent for end-to-end testing, test automation, and flaky test resolution"
-    },
-    {
-      "name": "oc-fix-bug",
-      "source": "./plugins/oc-fix-bug",
-      "description": "Fix a bug from a JIRA ticket: update status, create fix branch, and start fixing"
-    },
-    {
       "name": "oc-review-pr",
-      "source": "./plugins/oc-review-pr",
-      "description": "Review a pull request linked to a JIRA ticket using the frontend-reviewer agent with a detailed report and suggested fixes"
+      "source": "./plugins/common/oc-review-pr",
+      "description": "Review a pull request linked to a JIRA ticket using the oc-fe-reviewer agent with a detailed report and suggested fixes"
+    },
+    {
+      "name": "oc-figma-mcp",
+      "source": "./plugins/mcp/oc-figma-mcp",
+      "description": "Connect to Figma MCP server to extract design context, generate code from designs, and retrieve design tokens"
+    },
+    {
+      "name": "oc-bitbucket-mcp",
+      "source": "./plugins/mcp/oc-bitbucket-mcp",
+      "description": "Connect to Bitbucket MCP server to create pull requests, manage repositories, and review code"
+    },
+    {
+      "name": "oc-playwright-mcp",
+      "source": "./plugins/mcp/oc-playwright-mcp",
+      "description": "Connect to Playwright MCP server to automate browser interactions, take screenshots, and test web applications"
     },
     {
       "name": "oc-opencell-mcp",
-      "source": "./plugins/opencell-mcp",
+      "source": "./plugins/mcp/oc-opencell-mcp",
       "description": "Connect to the Opencell billing system via MCP to manage invoices, quotes, customers, payments, subscriptions, dunning, and all billing operations"
     },
     {
       "name": "oc-sonar-mcp",
-      "source": "./plugins/sonar-mcp",
+      "source": "./plugins/mcp/oc-sonar-mcp",
       "description": "Connect to SonarQube MCP server to access code quality metrics, issues, and analysis results"
     },
     {
       "name": "oc-postgres-mcp",
-      "source": "./plugins/oc-postgres-mcp",
+      "source": "./plugins/mcp/oc-postgres-mcp",
       "description": "Connect to PostgreSQL via MCP for database health analysis, index tuning, query optimization, and safe SQL execution"
-    },
-    {
-      "name": "oc-create-e2e-test",
-      "source": "./plugins/oc-create-e2e-test",
-      "description": "Create Playwright E2E tests from JIRA ticket requirements using the playwright-e2e-expert sub-agent"
-    },
-    {
-      "name": "oc-backend-tools",
-      "source": "./plugins/oc-backend-tools",
-      "description": "Backend development toolkit for Opencell Core — agents for building entities, services, APIs, tests, and Postman collections, plus guideline-loading skills and an implementation orchestrator"
-    },
-	 {
-      "name": "oc-archi-tools",
-      "source": "./plugins/oc-archi-tools",
-      "description": "Archi design toolkit for Opencell Core — agents and skills for Us analysis and design"
     }
   ]
 }

@@ -1,5 +1,0 @@
-{
-  "name": "oc-create-e2e-test",
-  "description": "Create Playwright E2E tests from JIRA ticket requirements using the playwright-e2e-expert sub-agent",
-  "version": "1.0.0"
-}
