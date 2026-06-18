@@ -100,6 +100,66 @@ Implement standard operations with consistent naming:
 - Methods returning DTO/data → use 200 OK (or 201 Created for POST)
 - Methods returning void → use 204 No Content
 
+### Hypermedia Links and Response Building (v3)
+
+**CRITICAL: v3 REST resources extend `org.meveo.apiv3.base.RestResource<R>` and build every response through its helpers — do not assemble `Response` with ad-hoc `Response.ok(...)`/`Response.created(...)` calls in the endpoint.**
+
+`RestResource<R extends Resource>` centralises ETag/Cache-Control handling, the entity→URL construction, and HATEOAS link attachment. The concrete resource only implements `copyWithLinks(R dto, Link... links)` (because the Immutables-generated `copyOf`/`withLinks` live on the concrete immutable type, e.g. `ImmutableInvoiceDto`, and cannot be reached through a generic type parameter):
+
+```java
+@Override
+protected InvoiceDto copyWithLinks(InvoiceDto dto, Link... links) {
+    return ImmutableInvoiceDto.copyOf(dto).withLinks(links);
+}
+```
+
+**Two complementary link layers** — every write endpoint expresses the affected resource both ways:
+
+| Layer | Built by | Goes to | Purpose |
+|---|---|---|---|
+| `Location` header | `LinkGenerator.getUriBuilderFromResource(this.getClass(), id)` | HTTP header | Canonical URL of the affected resource |
+| Body `links[]` | `toResourceWithLink(dto)` → `copyWithLinks` → `SelfLinkGenerator` | inside the DTO | `self` link + allowed actions |
+
+**Use the matching base helper for each operation:**
+
+| Operation | Helper | Status | Body | Location header |
+|---|---|---|---|---|
+| Read one | `buildGetResponse(request, dto)` | 200 | self-linked DTO | — |
+| Read list | `buildSearchResponse(request, genericSearchResponse)` | 200 | each item self-linked + pagination links on the wrapper | — |
+| Create | `buildCreatedResponse(dto)` | 201 | self-linked DTO | ✓ |
+| Mutate (update/validate/reject/rebuild/cancel/setRate…) | `buildUpdatedResponse(dto)` | 200 | self-linked DTO | ✓ |
+| Deferred mutation (recalculate) | `buildAcceptedResponse(dto)` | 202 | self-linked DTO | ✓ |
+
+**CRITICAL: Action endpoints must return the updated, self-linked resource — not an empty body.** The action's API-service method must **return the updated DTO** (it already holds the loaded, mutated entity — convert it with `toDto(...)`); do NOT leave the service method `void` and re-read the entity in the resource (that causes a wasteful second DB load):
+
+```java
+// API service — return the DTO from the already-loaded entity (no re-fetch)
+public InvoiceDto validate(Long id) {
+    Invoice invoice = findInvoiceEligibleToUpdate(id);
+    invoiceService.validateInvoice(invoice, true);
+    return toDto(invoice, entityToDtoConverter.getCustomFieldsDTO(invoice, CustomFieldInheritanceEnum.INHERIT_NO_MERGE));
+}
+
+// REST resource — pass the returned DTO straight to the helper
+public Response validate(@PathParam("id") Long id) {
+    return buildUpdatedResponse(invoiceApiService.validate(id));   // 200 + Location + self-linked invoice
+}
+```
+
+```java
+// ❌ WRONG — void service method forces the resource to re-load the entity
+public void validate(Long id) { ... }                       // discards the entity it just updated
+return buildUpdatedResponse(invoiceApiService.find(id));    // second DB load
+```
+
+This works because the on-entity service operations run in the caller's transaction, so the managed entity reflects the change in memory — `toDto(invoice, ...)` is correct without a refresh. (If an operation instead commits in a separate `@TransactionAttribute(REQUIRES_NEW)` transaction, refresh the entity before converting.)
+
+**Do NOT put the resource URL in the response body** (e.g. `Response.ok(uri)` / `Response.accepted(uri)`). The URL belongs in the `Location` header (set by the helpers); the body is always the self-linked DTO.
+
+**Exceptions** — endpoints whose result is operation-specific data rather than the resource keep returning that data as-is (do not force them through the helpers): bulk filter operations (`*ByFilter`), `sendByEmail` (sent flag), `refreshRate` (status message), `generate` (generation results), file/PDF downloads.
+
+**Paginated list links:** `GenericSearchResponse<T>` exposes a `links` field; `buildSearchResponse` self-links each item and attaches `next`/`previous` pagination links (built from the response's `paging` offset/limit/total) on the wrapper.
+
 ### Error Handling
 
 #### Exception Types

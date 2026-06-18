@@ -41,8 +41,15 @@ These rules apply to ALL generated code:
 
 1. **Fetch Jira ticket** using MCP Atlassian tools:
    - Use `mcp__atlassian__getJiraIssue` with the ticket key
+   - **Opencell stories keep their content in custom fields — the standard `description` field is usually EMPTY.** The default field set does not return custom fields, so request `fields: ["*all"]` and read these (ADF format):
+     - `customfield_10134` → **Requirement**
+     - `customfield_10135` → **Functional design** (business rules, portal/API behavior)
+     - `customfield_10136` → **Acceptance** (Gherkin Given/When/Then test cases, expected statuses, boundary conditions — drives the test plan)
+     - `customfield_10137` → **Technical design** (the implementation plan: migrations, scripts, API changes)
+   - Custom field IDs above are valid only for the `opencellsoft.atlassian.net` instance (cloudId `648ef912-b483-4da2-91af-73ea1e3fdad8`)
+   - Also read **sub-tasks and comments** — a comment may override or refine the design fields
    - Extract: entity names, fields, business rules, API endpoints, relationships
-   - **Extract acceptance criteria** from `customfield_10136` (Acceptance field in ADF format) — this contains test cases, expected statuses, and boundary conditions that must drive the test plan
+   - A `fields: ["*all"]` response is large and may exceed the tool output cap (it gets saved to a file); parse the custom fields out with a script rather than reading the whole dump
    - **HARD STOP: If the Jira ticket fetch fails (404, auth error, invalid cloud ID, or any other error), you MUST stop immediately and report the error to the user. Do NOT proceed with implementation without successfully reading the ticket. The ticket contents drive all subsequent phases.**
 
 2. **Scan existing code**:
