@@ -58,6 +58,11 @@
       "source": "./plugins/archi/oc-ar-tools",
       "description": "Archi design toolkit for Opencell Core — agents and skills for US analysis and technical design"
     },
+	{
+      "name": "oc-ar-ai-tools",
+      "source": "./plugins/archi/oc-ar-ai-tools",
+      "description": "Archi design toolkit for Opencell Core — agents and skills for US analysis and technical design dedicated to claude AI developpement"
+    },
     {
       "name": "oc-cache-jira",
       "source": "./plugins/common/oc-cache-jira",
