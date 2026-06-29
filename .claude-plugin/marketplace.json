@@ -39,6 +39,11 @@
       "description": "Fix a bug from a JIRA ticket: update status, create fix branch, and start fixing"
     },
     {
+      "name": "oc-fe-fix-pr",
+      "source": "./plugins/frontend/oc-fe-fix-pr",
+      "description": "Fix the review remarks of a pull request: read its unresolved Bitbucket comments, fix them on the PR branch via oc-fe-engineer, then reply, resolve, and push"
+    },
+    {
       "name": "oc-fe-cypress-expert",
       "source": "./plugins/frontend/oc-fe-cypress-expert",
       "description": "Cypress testing expert sub-agent for end-to-end testing, test automation, and flaky test resolution"
