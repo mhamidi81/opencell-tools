@@ -86,6 +86,29 @@ Relay the agent's report to the user, including:
 
 If the agent surfaced a real defect rather than a test bug, highlight it so the user can decide how to proceed.
 
+### Step 5: Mark the Ticket as Tested by the Frontend AI Test Writer
+
+After the tests are written and verified, set the JIRA **AI field** (`customfield_10613`) to `frontend_test` to record that the frontend AI test writer added coverage.
+
+**Resolve the ticket id first:**
+
+- This skill takes no ticket argument (it can run outside the Jira flow), so derive the ticket id from the current branch name: match the `XXX-NNNNN` pattern in the output of `git rev-parse --abbrev-ref HEAD` (e.g. `bugfix/INTRD-36922-...` → `INTRD-36922`).
+- If no ticket id can be resolved from the branch, skip this step and note it.
+
+**Skip conditions:**
+
+- Skip if the agent reported no meaningfully testable change (no tests were written).
+- Skip if no ticket id could be resolved from the branch.
+
+**Set the field** using the Atlassian MCP server (`editJiraIssue`):
+
+- `issueIdOrKey`: [TICKET-NUMBER]
+- `fields`: `{ "customfield_10613": { "value": "frontend_test" } }`
+
+`customfield_10613` is a single-select field. Always pass the option in the **value format** — `{ "value": "frontend_test" }`. Do not substitute an option `id` or a bare string.
+
+If the update fails, warn the user but continue.
+
 ## Examples
 
 ```bash

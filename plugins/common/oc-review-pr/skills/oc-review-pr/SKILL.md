@@ -428,7 +428,19 @@ Where [status-icon] is:
 *PR: [PR-URL]*
 ```
 
-### 10. Offer Next Steps
+### 10. Mark the Ticket as Reviewed by the Frontend AI Reviewer
+
+**This step runs ONLY when [REVIEW-DOMAIN] is `frontend` (i.e., the repository is opencell-portal).** Skip it entirely for backend (opencell-core) reviews.
+
+Once the review report has been generated, set the JIRA **AI field** (`customfield_10613`) to `frontend_review` to record that the frontend AI reviewer reviewed the ticket.
+
+- Use the Atlassian MCP server (`editJiraIssue`):
+  - `issueIdOrKey`: [TICKET-NUMBER]
+  - `fields`: `{ "customfield_10613": { "value": "frontend_review" } }`
+- `customfield_10613` is a single-select field. Always pass the option in the **value format** — `{ "value": "frontend_review" }`. Do not substitute an option `id` or a bare string.
+- If the update fails, warn the user but continue.
+
+### 11. Offer Next Steps
 
 After displaying the report, offer the user actionable next steps:
 
@@ -471,5 +483,6 @@ After displaying the report, offer the user actionable next steps:
 # 4. Run a comprehensive code review with the selected agent
 # 5. For opencell-core: fetch SonarQube quality gate, metrics, and issues
 # 6. Display a detailed report with scores, issues, sonar marks, and fix suggestions
-# 7. Offer to apply fixes or post the review as a PR comment
+# 7. For opencell-portal: set the JIRA AI field (customfield_10613) to frontend_review
+# 8. Offer to apply fixes or post the review as a PR comment
 ```
