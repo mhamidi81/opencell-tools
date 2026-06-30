@@ -53,6 +53,19 @@ claude
 | Sub-agents | `oc-be-pr-reviewer` | Backend code reviewer validating Java/EJB/JPA/Liquibase code against the guidelines, with a score and file:line suggestions |
 | Skills | `/oc-be-entity-guide`, `/oc-be-service-guide`, `/oc-be-api-guide`, `/oc-be-db-guide` | Skills that load the relevant guidelines when working on each layer |
 
+### Functional toolkit (oc-fn-tools)
+
+`oc-fn-tools` (func factory) bundles the functional / product-design skills for Opencell. These are **auto-loading** skills — no slash command; each triggers from context — covering Jira authoring, Confluence docs, portal capture, and the design-first delivery methodology.
+
+| Type | Provides | Description |
+|------|----------|-------------|
+| Skills | `oc-fn-func-design` | Author Jira INTRD issues (Epic / User Story / Enabler / Bug / Feature) — templates, ADF custom fields, acceptance criteria. Functional lane; defers Technical-design authoring to `oc-ar-tech-design`. |
+| Skills | `oc-fn-documentation` | Create / update Confluence pages in the Opencell docs space (Concepts + User Manuals) |
+| Skills | `oc-fn-portal` | Drive the Opencell Portal via Playwright for design/docs screenshots (not testing); ships the headless `oc-fn-playwright` MCP server |
+| Skills | `oc-fn-project-management` | Design-first phased delivery methodology — phase gates, ADRs, repo/CI conventions |
+
+Requires the Atlassian (Rovo) connector for the Jira/Confluence skills (not bundled).
+
 ### Sub-agents (frontend)
 
 | Plugin | Description |

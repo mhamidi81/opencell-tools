@@ -1,0 +1,21 @@
+{
+  "name": "oc-fn-tools",
+  "description": "Functional/product toolkit for Opencell — Jira INTRD issue authoring (oc-fn-func-design), Confluence docs-space authoring (oc-fn-documentation), Playwright-driven Opencell Portal navigation & screenshots (oc-fn-portal), and the design-first phased delivery methodology (oc-fn-project-management). Bundles a headless Playwright MCP server (oc-fn-playwright).",
+  "version": "1.1.1",
+  "author": "Stéphane Chambrin",
+  "mcpServers": {
+    "oc-fn-playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--headless",
+        "--image-responses=omit",
+        "--console-level=error",
+        "--viewport-size=1280x720",
+        "--timeout-action=30000"
+      ]
+    }
+  }
+}

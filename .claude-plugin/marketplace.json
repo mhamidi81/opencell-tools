@@ -63,7 +63,7 @@
       "source": "./plugins/archi/oc-ar-tools",
       "description": "Archi design toolkit for Opencell Core — agents and skills for US analysis and technical design"
     },
-	{
+    {
       "name": "oc-ar-ai-tools",
       "source": "./plugins/archi/oc-ar-ai-tools",
       "description": "Archi design toolkit for Opencell Core — agents and skills for US analysis and technical design dedicated to claude AI developpement"
@@ -117,6 +117,11 @@
       "name": "oc-postgres-mcp",
       "source": "./plugins/mcp/oc-postgres-mcp",
       "description": "Connect to PostgreSQL via MCP for database health analysis, index tuning, query optimization, and safe SQL execution"
+    },
+    {
+      "name": "oc-fn-tools",
+      "source": "./plugins/func/oc-fn-tools",
+      "description": "Functional/product toolkit for Opencell — Jira INTRD issue authoring (oc-fn-func-design), Confluence docs-space authoring (oc-fn-documentation), Playwright-driven Opencell Portal navigation & screenshots (oc-fn-portal), and the design-first phased delivery methodology (oc-fn-project-management). Bundles a headless Playwright MCP server (oc-fn-playwright)."
     }
   ]
 }

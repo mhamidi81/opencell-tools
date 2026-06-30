@@ -1,0 +1,132 @@
+/* @theme opencell */
+/*
+ * Opencell brand Marp theme — shared across initiatives in this repo.
+ * Palette & typography from "Opencell Charte Graphique 2023"
+ * (SharePoint › 2 - Marketing › 01_Brand › 01_Visual assets › 01_Guidelines):
+ *   Heading 1: Playfair Display Black · Heading 2: Montserrat uppercase · Body: Montserrat
+ *   #CF1428 (rouge) · #FA5757 (corail) · #121011 (noir) · #EDE4E9 (rose pâle)
+ *
+ * Usage: front-matter `theme: opencell`, render with
+ *   npx -y @marp-team/marp-cli --theme-set <repo-root>/assets/marp/opencell.css <deck>.md -o <deck>.html
+ * Title/closing slides: add `<!-- _class: lead -->`.
+ */
+
+@import 'default';
+/* REMOTE DEPENDENCY: the @import below fetches Montserrat + Playfair Display from Google Fonts at
+   render time, so it needs network access and will NOT render the brand fonts offline (air-gapped CI,
+   no network) — it degrades to system sans. For offline rendering, replace this line with locally
+   bundled font files / @font-face data URIs in your repo copy of the theme. */
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&family=Playfair+Display:wght@900&display=swap');
+
+:root {
+  --oc-red: #CF1428;
+  --oc-coral: #FA5757;
+  --oc-black: #121011;
+  --oc-pale: #EDE4E9;
+}
+
+section {
+  font-family: 'Montserrat', 'Segoe UI', -apple-system, sans-serif;
+  font-size: 25px;
+  line-height: 1.45;
+  color: var(--oc-black);
+  background: #ffffff;
+  padding: 65px 70px;
+}
+
+/* Slide titles — charte "Heading 2": Montserrat uppercase, red accent rule */
+section h2 {
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 1.25em;
+  color: var(--oc-black);
+  border-bottom: 4px solid var(--oc-red);
+  padding-bottom: 0.35em;
+  margin-bottom: 0.9em;
+}
+
+/* Big titles — charte "Heading 1": Playfair Display Black */
+section h1 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-weight: 900;
+  font-size: 2.1em;
+  color: var(--oc-black);
+}
+
+section a { color: var(--oc-red); }
+section code { background: var(--oc-pale); color: var(--oc-black); }
+
+section table { font-size: 0.82em; border-collapse: collapse; }
+section table th {
+  background: var(--oc-black);
+  color: #ffffff;
+  border: none;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 0.5em 0.8em;
+}
+section table td { border: none; border-bottom: 1px solid var(--oc-pale); padding: 0.5em 0.8em; }
+section table tr:nth-child(even) td { background: #f7f3f5; }
+
+section blockquote {
+  border-left: 5px solid var(--oc-coral);
+  background: #faf7f9;
+  color: var(--oc-black);
+  padding: 0.4em 1em;
+}
+
+/* Page number & footer */
+section::after { font-family: 'Montserrat', sans-serif; font-size: 0.55em; color: #9b9395; }
+footer { font-family: 'Montserrat', sans-serif; font-size: 13px; color: #9b9395; left: 70px; bottom: 28px; }
+
+/* Lead (title / closing) slides — red brand background, white text */
+section.lead {
+  background: var(--oc-red);
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+section.lead h1 { color: #ffffff; font-size: 2.4em; }
+section.lead h1::after {
+  content: '';
+  display: block;
+  width: 110px;
+  height: 6px;
+  background: #ffffff;
+  margin-top: 0.35em;
+}
+section.lead h2 {
+  color: #ffffff;
+  border-bottom: none;
+  font-size: 1.1em;
+  letter-spacing: 0.06em;
+  padding-bottom: 0;
+}
+section.lead p, section.lead li { color: var(--oc-pale); }
+section.lead strong { color: #ffffff; }
+section.lead a { color: #ffffff; text-decoration: underline; }
+section.lead code { background: rgba(255,255,255,0.15); color: #ffffff; }
+
+/* Logo (embedded from opencell-logo-{red,white}.svg) */
+section::before {
+  content: '';
+  position: absolute;
+  top: 24px;
+  right: 70px;
+  width: 120px;
+  height: 45px;
+  background: url('data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4NCjwhLS0gR2VuZXJhdG9yOiBBZG9iZSBJbGx1c3RyYXRvciAyNy4zLjEsIFNWRyBFeHBvcnQgUGx1Zy1JbiAuIFNWRyBWZXJzaW9uOiA2LjAwIEJ1aWxkIDApICAtLT4NCjxzdmcgdmVyc2lvbj0iMS4xIiBpZD0iQ2FscXVlXzEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHg9IjBweCIgeT0iMHB4Ig0KCSB2aWV3Qm94PSIwIDAgMjAwMCA3NTAiIHN0eWxlPSJlbmFibGUtYmFja2dyb3VuZDpuZXcgMCAwIDIwMDAgNzUwOyIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSI+DQo8c3R5bGUgdHlwZT0idGV4dC9jc3MiPg0KCS5zdDB7ZmlsbDojQ0UxNDI4O30NCjwvc3R5bGU+DQo8Zz4NCgk8cGF0aCBjbGFzcz0ic3QwIiBkPSJNMTkyOC44LDQ1MC4xVjI0OS44aC01OHYyNTAuNEgyMDAwdi01MC4xSDE5MjguOHogTTE3MzEsNDUwLjFWMjQ5LjhoLTU4djI1MC40aDEyOS4xdi01MC4xSDE3MzF6DQoJCSBNMTU5MS40LDI5Ni4zdi00Ni41aC0xNTIuOHYyNTAuNGgxNTIuOHYtNDYuNWgtOTQuOHYtNTUuMWg5NC44di00NS40aC05NC44di01Ni45SDE1OTEuNHogTTEzMDYuMyw0MTAuNGMtNy4yLDI0LjctMjkuMyw0NC02Myw0NA0KCQljLTQ1LjQsMC03NS44LTM1LjQtNzUuOC03OS40YzAtNDEuNSwyNy4yLTc5LjQsNzUuMS03OS40YzM2LjksMCw1OSwyMi4yLDY0LjQsNTEuNWg2MC40Yy02LjgtNTcuNi01Mi4yLTEwMy43LTEyNS42LTEwMy43DQoJCWMtODUuNSwwLTEzMy40LDYzLTEzMy40LDEzMS42YzAsNzAuMSw1MC40LDEzMS43LDEzNC4xLDEzMS43YzcwLjEsMCwxMTUuNi00My4zLDEyNS4yLTk2LjJIMTMwNi4zeiBNODg5LjIsMjQ5LjhoLTYwLjV2MjUwLjRoNTgNCgkJdi0xNjFsOTAuMSwxNjFoNjAuNVYyNDkuOGgtNTcuNnYxNjMuMUw4ODkuMiwyNDkuOHogTTc0Ny4yLDI5Ni4zdi00Ni41SDU5NC40djI1MC40aDE1Mi44di00Ni41aC05NC44di01NS4xaDk0Ljh2LTQ1LjRoLTk0LjgNCgkJdi01Ni45SDc0Ny4yeiBNNDI5LjEsMzgzLjZoLTM5LjdWMjk3aDM5LjdjMjQuMywwLDQwLjEsMjAsNDAuMSw0My4zQzQ2OS4yLDM2My42LDQ1My41LDM4My42LDQyOS4xLDM4My42IE0zMzEuNSw1MDAuMmg1OHYtNjkuNA0KCQloNDYuOWM1NS41LDAsOTEuMi00MS45LDkxLjItOTAuNWMwLTQ4LjctMzUuOC05MC41LTkxLjItOTAuNUgzMzEuNVY1MDAuMnogTTYxLjEsNDA2LjljMTEuOSwyNC44LDM3LjMsNDIsNjYuNiw0Mg0KCQljMjkuNCwwLDU0LjctMTcuMiw2Ni42LTQyaDYxLjFjLTE0LjMsNTcuMy02Niw5OS44LTEyNy43LDk5LjhDNjYsNTA2LjYsMTQuMyw0NjQuMiwwLDQwNi45SDYxLjF6IE0xOTQuNCwzNDMuMQ0KCQljLTExLjktMjQuOC0zNy4zLTQyLTY2LjYtNDJjLTI5LjQsMC01NC43LDE3LjItNjYuNiw0MkgwYzE0LjMtNTcuMyw2Ni05OS44LDEyNy43LTk5LjhjNjEuNywwLDExMy41LDQyLjUsMTI3LjcsOTkuOEgxOTQuNHoiLz4NCjwvZz4NCjwvc3ZnPg0K') no-repeat center / contain;
+}
+section.lead::before {
+  background-image: url('data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4NCjwhLS0gR2VuZXJhdG9yOiBBZG9iZSBJbGx1c3RyYXRvciAyNy4zLjEsIFNWRyBFeHBvcnQgUGx1Zy1JbiAuIFNWRyBWZXJzaW9uOiA2LjAwIEJ1aWxkIDApICAtLT4NCjxzdmcgdmVyc2lvbj0iMS4xIiBpZD0iQ2FscXVlXzEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHg9IjBweCIgeT0iMHB4Ig0KCSB2aWV3Qm94PSIwIDAgMjAwMCA3NTAiIHN0eWxlPSJlbmFibGUtYmFja2dyb3VuZDpuZXcgMCAwIDIwMDAgNzUwOyIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSI+DQo8c3R5bGUgdHlwZT0idGV4dC9jc3MiPg0KCS5zdDB7ZmlsbDojRkZGRkZGO30NCjwvc3R5bGU+DQo8Zz4NCgk8cGF0aCBjbGFzcz0ic3QwIiBkPSJNMTkyOC44LDQ1MC4xVjI0OS44aC01OHYyNTAuNEgyMDAwdi01MC4xSDE5MjguOHogTTE3MzEsNDUwLjFWMjQ5LjhoLTU4djI1MC40aDEyOS4xdi01MC4xSDE3MzF6DQoJCSBNMTU5MS40LDI5Ni4zdi00Ni41aC0xNTIuOHYyNTAuNGgxNTIuOHYtNDYuNWgtOTQuOHYtNTUuMWg5NC44di00NS40aC05NC44di01Ni45SDE1OTEuNHogTTEzMDYuMyw0MTAuNGMtNy4yLDI0LjctMjkuMyw0NC02Myw0NA0KCQljLTQ1LjQsMC03NS44LTM1LjQtNzUuOC03OS40YzAtNDEuNSwyNy4yLTc5LjQsNzUuMS03OS40YzM2LjksMCw1OSwyMi4yLDY0LjQsNTEuNWg2MC40Yy02LjgtNTcuNi01Mi4yLTEwMy43LTEyNS42LTEwMy43DQoJCWMtODUuNSwwLTEzMy40LDYzLTEzMy40LDEzMS42YzAsNzAuMSw1MC40LDEzMS43LDEzNC4xLDEzMS43YzcwLjEsMCwxMTUuNi00My4zLDEyNS4yLTk2LjJIMTMwNi4zeiBNODg5LjIsMjQ5LjhoLTYwLjV2MjUwLjRoNTgNCgkJdi0xNjFsOTAuMSwxNjFoNjAuNVYyNDkuOGgtNTcuNnYxNjMuMUw4ODkuMiwyNDkuOHogTTc0Ny4yLDI5Ni4zdi00Ni41SDU5NC40djI1MC40aDE1Mi44di00Ni41aC05NC44di01NS4xaDk0Ljh2LTQ1LjRoLTk0LjgNCgkJdi01Ni45SDc0Ny4yeiBNNDI5LjEsMzgzLjZoLTM5LjdWMjk3aDM5LjdjMjQuMywwLDQwLjEsMjAsNDAuMSw0My4zQzQ2OS4yLDM2My42LDQ1My41LDM4My42LDQyOS4xLDM4My42IE0zMzEuNSw1MDAuMmg1OHYtNjkuNA0KCQloNDYuOWM1NS41LDAsOTEuMi00MS45LDkxLjItOTAuNWMwLTQ4LjctMzUuOC05MC41LTkxLjItOTAuNUgzMzEuNVY1MDAuMnogTTYxLjEsNDA2LjljMTEuOSwyNC44LDM3LjMsNDIsNjYuNiw0Mg0KCQljMjkuNCwwLDU0LjctMTcuMiw2Ni42LTQyaDYxLjFjLTE0LjMsNTcuMy02Niw5OS44LTEyNy43LDk5LjhDNjYsNTA2LjYsMTQuMyw0NjQuMiwwLDQwNi45SDYxLjF6IE0xOTQuNCwzNDMuMQ0KCQljLTExLjktMjQuOC0zNy4zLTQyLTY2LjYtNDJjLTI5LjQsMC01NC43LDE3LjItNjYuNiw0MkgwYzE0LjMtNTcuMyw2Ni05OS44LDEyNy43LTk5LjhjNjEuNywwLDExMy41LDQyLjUsMTI3LjcsOTkuOEgxOTQuNHoiLz4NCjwvZz4NCjwvc3ZnPg0K');
+  top: auto;
+  right: auto;
+  bottom: 45px;
+  left: 70px;
+  width: 190px;
+  height: 71px;
+}
