@@ -125,6 +125,16 @@ Once the fix is implemented, add test coverage for the changed code **before** t
 - If the agent surfaces a real defect in the fix, address it before continuing
 - If there is no meaningfully testable change, note this and continue
 
+### Step 7: Mark the Ticket as Handled by the Frontend AI Dev
+
+Once the bug is fixed, set the JIRA **AI field** (`customfield_10613`) to `frontend_dev` to record that the frontend AI dev addressed the ticket.
+
+- Use the Atlassian MCP server (`editJiraIssue`):
+  - `issueIdOrKey`: [TICKET-NUMBER]
+  - `fields`: `{ "customfield_10613": { "value": "frontend_dev" } }`
+- `customfield_10613` is a single-select field. Always pass the option in the **value format** — `{ "value": "frontend_dev" }`. Do not substitute an option `id` or a bare string.
+- If the update fails, warn the user but continue.
+
 ## Examples
 
 ```bash

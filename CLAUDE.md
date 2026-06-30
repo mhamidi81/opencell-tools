@@ -67,12 +67,12 @@ The skills chain together into a standard workflow:
 ```
 
 - `/oc-cache-jira` stores ticket data in `.claude/cache/jira-tickets.json` (1-hour TTL). Other commands read from this cache.
-- `/oc-fe-fix-bug` transitions the Jira ticket to "In Progress" and creates a `fix/TICKET` branch, then writes Vitest tests on the fix via the `oc-fe-test-writer` agent as its final step (before review in `/oc-commit`).
+- `/oc-fe-fix-bug` transitions the Jira ticket to "In Progress" and creates a `fix/TICKET` branch, writes Vitest tests on the fix via the `oc-fe-test-writer` agent (before review in `/oc-commit`), then sets the Jira AI field (`customfield_10613`) to `frontend_dev`.
 - `/oc-commit` runs the appropriate reviewer agent before committing.
 - `/oc-pull-request` squashes commits and creates a PR (auto-detects Bitbucket vs GitHub).
-- `/oc-review-pr` selects the reviewer agent based on repository: `oc-fe-reviewer` for opencell-portal, `oc-be-tools:oc-be-pr-reviewer` for opencell-core.
-- `/oc-fe-fix-pr` closes the review loop: given a PR id (or a Jira ticket whose PR is found on Bitbucket), it reads the PR's **unresolved** Bitbucket comments, checks out the PR's own source branch, fixes each remark via the `oc-fe-engineer` agent, writes Vitest tests via `oc-fe-test-writer`, commits and pushes to the PR branch, then replies to and resolves each addressed comment.
-- `/oc-fe-write-tests` invokes the `oc-fe-test-writer` agent directly to write Vitest tests for changed code (git diff vs a base branch) or for specific files passed as arguments — usable outside the Jira flow. `/oc-fe-create-ui` also runs this agent as its final development step before review.
+- `/oc-review-pr` selects the reviewer agent based on repository: `oc-fe-reviewer` for opencell-portal, `oc-be-tools:oc-be-pr-reviewer` for opencell-core. For frontend (opencell-portal) reviews, it then sets the Jira AI field (`customfield_10613`) to `frontend_review`.
+- `/oc-fe-fix-pr` closes the review loop: given a PR id (or a Jira ticket whose PR is found on Bitbucket), it reads the PR's **unresolved** Bitbucket comments, checks out the PR's own source branch, fixes each remark via the `oc-fe-engineer` agent, writes Vitest tests via `oc-fe-test-writer`, commits and pushes to the PR branch, sets the Jira AI field (`customfield_10613`) to `frontend_dev`, then replies to and resolves each addressed comment.
+- `/oc-fe-write-tests` invokes the `oc-fe-test-writer` agent directly to write Vitest tests for changed code (git diff vs a base branch) or for specific files passed as arguments — usable outside the Jira flow; when the current branch maps to a ticket, it sets the Jira AI field (`customfield_10613`) to `frontend_test`. `/oc-fe-create-ui` also runs this agent as its final development step before review, then sets the Jira AI field (`customfield_10613`) to `frontend_dev`.
 - `/oc-be-implement` orchestrates a full backend ticket across the `oc-be-*` builder agents; `/oc-be-review` reviews backend changes via `oc-be-pr-reviewer`.
 
 ## MCP Servers Requiring Environment Variables

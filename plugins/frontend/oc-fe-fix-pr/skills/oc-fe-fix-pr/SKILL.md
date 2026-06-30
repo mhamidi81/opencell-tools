@@ -6,7 +6,7 @@ argument-hint: <PR-ID | TICKET-ID> (e.g., 123 or INTRD-36922)
 
 ## Purpose
 
-Address the reviewer feedback on a pull request. Given a PR id (or a JIRA ticket whose PR can be found on Bitbucket), this skill reads the **unresolved** review comments via the Bitbucket MCP, checks out the **same branch** used by the PR, fixes each remark with the `oc-fe-engineer` agent, adds test coverage, commits and pushes to the PR branch, then replies to and resolves each addressed comment on Bitbucket.
+Address the reviewer feedback on a pull request. Given a PR id (or a JIRA ticket whose PR can be found on Bitbucket), this skill reads the **unresolved** review comments via the Bitbucket MCP, checks out the **same branch** used by the PR, fixes each remark with the `oc-fe-engineer` agent, adds test coverage, commits and pushes to the PR branch, sets the JIRA AI field (`customfield_10613`) to `frontend_dev`, then replies to and resolves each addressed comment on Bitbucket.
 
 This is a **frontend** skill targeting the `opencell-portal` repository.
 
@@ -184,7 +184,31 @@ Commit the fixes to [PR-SOURCE-BRANCH] and push so the PR updates.
 - If the push is rejected because the remote branch advanced, run `git pull --rebase origin [PR-SOURCE-BRANCH]` and push again.
 - Confirm the push succeeded before proceeding (the reply/resolve steps should reflect pushed changes).
 
-### Step 10: Reply To and Resolve Each Addressed Comment
+### Step 10: Mark the Ticket as Handled by the Frontend AI Dev
+
+Once at least one remark was `Fixed` in Step 7 and the changes are pushed, set the JIRA **AI field** (`customfield_10613`) to `frontend_dev` to record that the frontend AI dev addressed the review.
+
+**Resolve the ticket id first:**
+
+- If a [TICKET-NUMBER] is already known (Step 2 ran because a ticket was given), use it.
+- If only a numeric [PR-ID] was given, try to derive the ticket id by matching the `XXX-NNNNN` pattern in [PR-TITLE] or [PR-SOURCE-BRANCH] (e.g. `bugfix/INTRD-36922-...` → `INTRD-36922`).
+- If no ticket id can be resolved, skip this step and note it in the final report.
+
+**Skip conditions:**
+
+- Skip if no remark was actually `Fixed` in Step 7 (nothing was changed).
+- Skip if no ticket id could be resolved.
+
+**Set the field** using the Atlassian MCP server (`editJiraIssue`):
+
+- `issueIdOrKey`: [TICKET-NUMBER]
+- `fields`: `{ "customfield_10613": { "value": "frontend_dev" } }`
+
+`customfield_10613` is a single-select field. Always pass the option in the **value format** — `{ "value": "frontend_dev" }`. Do not substitute an option `id` or a bare string.
+
+If the update fails, warn the user but continue (do not abort the reply/resolve steps).
+
+### Step 11: Reply To and Resolve Each Addressed Comment
 
 For every remark marked `Fixed` in Step 7:
 
@@ -220,7 +244,7 @@ curl -s -X POST -H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}" \
   "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/comments/[COMMENT-ID]/resolve"
 ```
 
-### Step 11: Final Report
+### Step 12: Final Report
 
 Present a summary:
 
@@ -237,6 +261,7 @@ Present a summary:
 
 **Tests:** [oc-fe-test-writer result — files + pass/fail]
 **Commit:** [commit hash / message]
+**JIRA AI field:** [customfield_10613 set to `frontend_dev` on TICKET-NUMBER / skipped — reason]
 **Comments:** [N replied & resolved], [M left open]
 
 The PR has been updated. Review the remaining open remarks (if any) at [PR-URL].
@@ -259,5 +284,6 @@ The PR has been updated. Review the remaining open remarks (if any) at [PR-URL].
 # 5. Fix each remark with the oc-fe-engineer agent
 # 6. Write Vitest tests for the changes (oc-fe-test-writer)
 # 7. Commit and push to the PR branch
-# 8. Reply to and resolve each addressed comment on Bitbucket
+# 8. Set the JIRA AI field (customfield_10613) to frontend_dev
+# 9. Reply to and resolve each addressed comment on Bitbucket
 ```
