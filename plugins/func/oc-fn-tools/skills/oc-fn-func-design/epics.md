@@ -60,6 +60,41 @@ demonstrable, not just functional*. Technical needs surfaced while decomposing b
 architect-created **Enablers**, not Stories: list them separately for the architect lane rather
 than emitting them as child Stories.
 
+## Domain model & decided design inputs
+
+Cross-cutting principle and the bounded-exception framing: see `SKILL.md` § *Decided model bindings
+— name the conceptual home in the functional design*. The Epic is where the **consolidated**
+conceptual model lives, so child Stories reference it instead of each re-deriving (and drifting) it.
+
+**Placement.** A dedicated *Domain model & decided design inputs* section in the Epic `description`,
+after the strategic outcome / scope and before the breakdown of child work (it sits alongside the
+*Limits & volumes (envelope)* section as the other shared, inherited envelope). The Epic template
+**INTRD-1949** carries the scaffold.
+
+**What it contains** — the conceptual data dictionary, at the conceptual level only:
+
+- **New entities** introduced by the Epic + their key attributes.
+- **Attributes added to existing entities** (name the entity and the attribute).
+- **Read-only sources** the work consumes but does not own.
+- **Decided inputs** the architect must respect, **each with its rationale / ADR** so the decision
+  is not re-litigated downstream.
+
+**Stay conceptual.** Physical realization — tables, JPA mappings, indexes, DDL — is out of lane here;
+it belongs to the architect in each Story's *Technical design* (`customfield_10137`). Close the
+section with a boundary note: *the architect lane owns the physical design in each Story's Technical
+design; decided inputs are not to be re-litigated; to change a constraint, update this Epic first.*
+
+**Inheritance.** Child Stories **inherit** this section the same way they inherit the *Limits &
+volumes (envelope)* — each Story names only its slice (its *Held on (conceptual model)* rows, see
+`stories.md` § *Information requirements — naming decided model bindings*) and **references** the
+Epic. The shared model is defined **once** on the Epic; children narrow or reference it, never
+duplicate it (duplication drifts).
+
+**Render gotcha (Epic `description`).** In an Epic `description`, a bare `{ENUM}` in curly braces gets
+macro-parsed by Jira and isolated onto its own line, and an inline-code mark there renders as a
+literal `{{..}}`. Prefer plain prose ("values: A, B, C") over "{A, B, C}" in Epic descriptions.
+(Inside Story custom fields `10134`–`10137`, inline-code chips render fine.)
+
 ## Limits & volumes (envelope)
 
 Cross-cutting rule and strict-answering policy: see `SKILL.md` § *Limits & volumes — mandatory reflection*. The Epic carries the **envelope** that child Stories and Enablers inherit and refine.

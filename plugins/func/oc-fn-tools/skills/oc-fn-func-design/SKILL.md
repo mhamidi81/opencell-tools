@@ -1,7 +1,7 @@
 ---
 name: oc-fn-func-design
-version: 1.18.0
-updated: 2026-06-30T16:08:10+02:00
+version: 1.19.0
+updated: 2026-06-30T22:37:23+02:00
 author: Stéphane Chambrin
 description: >
   Rules and reference data for working with Jira issues in the Opencell INTRD project
@@ -127,7 +127,52 @@ domain.
 
 **See also: `oc-ar-tech-design` (oc-ar-tools)** — the architect lane's technical-design authoring skill.
 
+**Complement.** This boundary has a counterpart that runs the other way: when a Story depends on an **already-decided** conceptual model element, the func/PO lane **must name the conceptual binding** in the functional fields — it does not get to leave it implicit. Naming the *conceptual* home (entity.attribute) is functional and in-lane; the *physical* design (tables, JPA mappings, indexes, DDL) it maps to still belongs to *Technical design* (`customfield_10137`), the architect lane. See § *Decided model bindings — name the conceptual home in the functional design*.
+
 This boundary is scoped to the User Story Technical design field; it does not change how Claude authors other issue types.
+
+## Decided model bindings — name the conceptual home in the functional design
+
+> **See also** § *Authoring boundary — Technical design belongs to the architect lane* above — this
+> rule is its complement (name the conceptual binding in the functional fields; the physical design
+> still belongs to *Technical design*).
+
+**Driving principle — architects work from the Jira issue, not the design ADRs.** The architects
+build a Story from its Jira fields **alone**; they do **not** read the design repo's ADRs or `.md`
+files. So **any decided conceptual model element a Story depends on MUST be named in the Story's —
+or its Epic's — functional design.** Never leave a settled model decision implicit in an ADR the
+architects can't see: if it isn't in the issue, for them it doesn't exist, and they will re-invent
+or re-litigate it.
+
+**This is a bounded exception, not a reversal.** The functional-first default still holds — most
+Stories simply *list the information* they need in business terms and never name a database or model
+property (see `stories.md`). The exception fires only for an **already-decided** element the
+architect must respect: then, and only then, name its conceptual home.
+
+- **Stay conceptual.** Name the conceptual entity/attribute (e.g. `EreportingSetting.vatRegime`) and
+  the decided input behind it, with its source (ADR / spec). The **physical** realization — tables,
+  JPA mappings, indexes, DDL — is out of lane; it belongs to the architect in *Technical design*
+  (`customfield_10137`).
+- **Per-type placement.**
+  - **Story** → the *Information requirements* of *Functional design* (`customfield_10135`), via the
+    optional *Held on (conceptual model)* column — see `stories.md` § *Information requirements —
+    naming decided model bindings*.
+  - **Epic** → a consolidated *Domain model & decided design inputs* section in the `description`,
+    **inherited** by child Stories (each names only its slice and references the Epic) — see
+    `epics.md` § *Domain model & decided design inputs*.
+
+**Worked example (INTRD e-reporting / OER).** The Phase-4 Stories named user-facing information
+("VAT regime", "VAT status") but not the conceptual entities holding it — `EreportingSetting`
+(layered Provider default + per-Seller override), the `EreportingVatRegime` reference table,
+`taxablePersonStatus` (default on `CustomerCategory`, override on `BillingAccount` — **not**
+`AccountEntity.vatStatus`), `EreportingPeriod`. Those lived only in the design repo's ADRs/`.md`, so
+the architects would have re-invented or re-litigated them. Fix: name each conceptual home in the
+functional fields, leaving physical realization to the architect lane.
+
+**Reviewer expectation.** When a decided model element exists for a Story's data, **reject** an
+*Information requirements* section that names the user-facing information but omits its conceptual
+home. (The default still stands where no decision is fixed — listing information without a model
+property is correct there, not a gap.)
 
 ## Reading efficiency — field selection
 
