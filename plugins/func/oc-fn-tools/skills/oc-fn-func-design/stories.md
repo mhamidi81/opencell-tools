@@ -220,6 +220,44 @@ Cross-cutting rule and strict-answering policy: see `SKILL.md` § *Limits & volu
 
 **Reviewer expectation.** A story whose technical design ends with seven `N/A — ...` lines is suspect: at minimum, latency target, data-volume horizon, and degradation behaviour are almost always applicable for any story that touches a backend flow or a non-trivial UI list.
 
+## Information requirements — naming decided model bindings
+
+Cross-cutting principle and the bounded-exception framing: see `SKILL.md` § *Decided model bindings
+— name the conceptual home in the functional design*. This section is the Story-level mechanics.
+
+The *Information requirements* of *Functional design* (`customfield_10135`) lists the information a
+Story needs **in business terms**. **Default:** we don't directly name database/model properties —
+we list the information (e.g. "the customer's VAT regime"), and the architect decides where it
+lives. Most Stories stay here.
+
+**Bounded exception — already-decided model element.** When a model decision is **already fixed**
+(e.g. settled in design) and the architect must respect it, name the conceptual entity/attribute
+here — mirror the live generic template (INTRD-1486) wording verbatim:
+
+> When a model decision is ALREADY fixed (e.g. settled in design) and the architect must respect it,
+> name the conceptual entity/attribute here (e.g. `EreportingSetting.vatRegime`). Stay conceptual —
+> the physical design (tables, JPA mappings, indexes) belongs in Technical design.
+
+This is the exception for ALREADY-DECIDED elements, **not** a reversal of the default — a Story with
+no settled model decision still just lists information.
+
+**The *Held on (conceptual model)* column.** The home for the binding is the optional
+*Held on (conceptual model)* column on the *Information requirements* table. Per row, name
+`entity.attribute` + a one-line decided-input / why + the decision source (ADR / spec). Leave it
+empty for rows whose model home isn't decided yet.
+
+**Reference the Epic, don't duplicate it.** When the parent Epic carries a *Domain model & decided
+design inputs* section (`epics.md` § *Domain model & decided design inputs*), the Story names only
+**its slice** and references the Epic — the shared model is defined once on the Epic, not copied into
+every Story.
+
+**Template coverage.** The generic (INTRD-1486) and backend (INTRD-42531) Story templates carry this
+clause and the *Held on* column. The frontend template (INTRD-42554) intentionally does **not** — it
+has no *Information requirements* section and defers data-model concerns to its paired backend Story.
+
+**Reviewer expectation.** When a decided model element exists for a Story's data, reject an
+*Information requirements* section that names the user-facing information but omits its conceptual home.
+
 ## GUI labels — bilingual (EN + FR)
 
 When a Story has a real GUI (the *GUI* section is **not** `N/A`), every user-facing label must be given in **both English and French** — field labels, **enum / selector values**, buttons, tab and section titles, and actions. The clean form is a bilingual table under *Descriptions and mockups*:
