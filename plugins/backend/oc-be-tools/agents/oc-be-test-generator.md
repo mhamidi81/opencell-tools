@@ -58,3 +58,23 @@ You will receive file paths of service and API classes to test.
 ## Output
 
 Return the list of test files created.
+
+## Report your file manifest (AI-usage stats)
+
+If your dispatch prompt includes an **AI-stats manifest path** (e.g. `.claude/cache/ai-stats/<RUN_ID>/tests.json`), then after ALL file work is complete, write a JSON manifest to that exact path as your **final action**. This lets `/oc-be-calculate-ai-use` attribute sub-agent work that is otherwise invisible in the session transcript. If no manifest path was provided, skip this step.
+
+Schema:
+```json
+{
+  "agent": "oc-be-test-generator",
+  "phase": "tests",
+  "timestamp": "<ISO-8601 UTC>",
+  "files": [
+    { "path": "opencell-admin/ejbs/src/test/java/org/meveo/service/domain/FooServiceTest.java", "action": "create" }
+  ]
+}
+```
+- Repo-relative paths, forward slashes.
+- `action`: `create` for a new file, `modify` for an edit to an existing file.
+- Get the timestamp with `date -u +%Y-%m-%dT%H:%M:%SZ` (best-effort; omit the field if unavailable).
+- List every test class you created or modified.
