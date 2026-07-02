@@ -566,6 +566,22 @@ In addition to Javadoc, add Swagger annotations to REST interface definition and
 - **Method level**: Add `@Operation` with summary, tags, description, and all possible response codes
 - **Parameters**: Use `@Parameter` annotation with description and required status
 
+#### Tag Naming
+
+Group related endpoints under a consistent, hierarchical tag name, using ` - ` as the separator from broadest to narrowest:
+
+`<Domain>[ - <Subdomain>] - <Entity>`
+
+- All endpoints for one entity share a single tag; sibling entities share the `<Domain>[ - <Subdomain>]` prefix so Swagger UI clusters them together.
+- Use a singular, human-readable entity name (e.g. `Batch`, `Index value`) — not the Java class or URL path segment.
+- Do **not** leave standalone/ungrouped tags (e.g. `IndexationBatch`, `PriceIndexation`), and avoid redundant repetition (e.g. `... - Indexation - Indexation`).
+- Example — the indexation domain:
+  - `Charging and rating - Indexation - Index`
+  - `Charging and rating - Indexation - Index value`
+  - `Charging and rating - Indexation - Indexation formula`
+  - `Charging and rating - Indexation - Batch`
+  - `Charging and rating - Indexation - Price indexation`
+
 #### DTO Swagger Annotations
 
 - Always use `@Schema` annotations on DTO fields

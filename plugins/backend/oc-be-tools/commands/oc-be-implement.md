@@ -35,6 +35,11 @@ These rules apply to ALL generated code:
 - If existing branch: run `git branch --show-current` to confirm, and tell the user which branch they're on
 - Users may have multiple tickets on the same branch
 
+**Set up the AI-stats run directory** (used later by `/oc-be-calculate-ai-use` to attribute sub-agent work):
+- Define `RUN_ID = {TICKET}-{yyyymmdd-HHMMSS}` (get the timestamp via `date -u +%Y%m%d-%H%M%S`).
+- Create `.claude/cache/ai-stats/{RUN_ID}/`.
+- Every builder agent dispatched below is given its manifest path inside this directory. This is cheap and non-blocking — if it fails, continue the implementation normally.
+
 **Only proceed to Phase 1 after branch is confirmed.**
 
 ### Phase 1: Requirements Gathering
@@ -106,18 +111,23 @@ Wait for user to review and approve the plan.
 
 Execute sequentially with review checkpoints between each step:
 
+**In every agent dispatch below, include this line so the agent records its file manifest:**
+> "Write your file manifest to `.claude/cache/ai-stats/{RUN_ID}/{phase}.json` per your manifest instructions." (phase = `entity`, `service`, `api`, `tests`, `postman`)
+
+Your own review fixes are made in this (main) context and are captured by the session transcript — you do **not** write a manifest for those; `/oc-be-calculate-ai-use` reads them separately and reports them as the post-review fix contribution.
+
 **Step 1: Entity + Liquibase**
-- Dispatch the `oc-be-entity-builder` agent with the approved plan
+- Dispatch the `oc-be-entity-builder` agent with the approved plan (manifest: `entity.json`)
 - Present created files to user for review
 - Ask: "Entity layer complete. Review before proceeding to services?"
 
 **Step 2: Service Layer**
-- Dispatch the `oc-be-service-builder` agent with the plan + entity file paths
+- Dispatch the `oc-be-service-builder` agent with the plan + entity file paths (manifest: `service.json`)
 - Present created files to user for review
 - Ask: "Service layer complete. Review before proceeding to API?"
 
 **Step 3: API Layer**
-- Dispatch the `oc-be-api-builder` agent with the plan + entity + service file paths
+- Dispatch the `oc-be-api-builder` agent with the plan + entity + service file paths (manifest: `api.json`)
 - Present created files to user for review
 
 **Step 4: Compile Check**
@@ -153,14 +163,14 @@ Present a testing plan:
 Wait for user approval, then:
 
 **Step 5: Unit Tests**
-- Dispatch the `oc-be-test-generator` agent with service + API file paths
+- Dispatch the `oc-be-test-generator` agent with service + API file paths (manifest: `tests.json`)
 - Run tests:
 ```bash
 cmd.exe /c 'set "JAVA_HOME=C:\andrius\programs\jdk-21" && C:\andrius\programs\apache-maven-3.9.9\bin\mvn.cmd test -Dtest=EntityNameServiceTest,EntityNameApiServiceTest -pl opencell-admin\ejbs'
 ```
 
 **Step 6: Postman Collection**
-- Dispatch the `oc-be-postman-generator` agent with REST resource paths
+- Dispatch the `oc-be-postman-generator` agent with REST resource paths (manifest: `postman.json`)
 - Output to `opencell-tests/US-Tests/`
 
 ### Phase 5: Wrap-up
@@ -193,4 +203,8 @@ Present summary:
 - US-Tests/EntityName.postman_collection.json (Created)
 ```
 
+Build the "Files Created/Modified" list by aggregating the manifests in `.claude/cache/ai-stats/{RUN_ID}/*.json` (union with anything you edited directly in this context). Group by layer as shown.
+
 Suggest commit message: `{TICKET}: {brief description}`
+
+Then remind the user they can run **`/oc-be-calculate-ai-use`** to record AI-usage stats on the Jira ticket — it reads these manifests (so sub-agent work is attributed) plus this session's transcript (for your post-review fixes), and reports contribution/retention broken down by artifact category.

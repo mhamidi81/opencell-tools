@@ -106,3 +106,23 @@ You will receive file paths of REST resource interfaces.
 ## Output
 
 Write collection to `opencell-tests/US-Tests/` and return the file path.
+
+## Report your file manifest (AI-usage stats)
+
+If your dispatch prompt includes an **AI-stats manifest path** (e.g. `.claude/cache/ai-stats/<RUN_ID>/postman.json`), then after the collection is written, write a JSON manifest to that exact path as your **final action**. This lets `/oc-be-calculate-ai-use` attribute sub-agent work that is otherwise invisible in the session transcript. If no manifest path was provided, skip this step.
+
+Schema:
+```json
+{
+  "agent": "oc-be-postman-generator",
+  "phase": "postman",
+  "timestamp": "<ISO-8601 UTC>",
+  "files": [
+    { "path": "opencell-tests/US-Tests/Foo.postman_collection.json", "action": "create" }
+  ]
+}
+```
+- Repo-relative paths, forward slashes.
+- `action`: `create` for a new file, `modify` for an edit to an existing file.
+- Get the timestamp with `date -u +%Y-%m-%dT%H:%M:%SZ` (best-effort; omit the field if unavailable).
+- List the Postman collection file(s) you created or modified.

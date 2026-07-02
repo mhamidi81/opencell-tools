@@ -78,3 +78,25 @@ You will receive:
 ## Output
 
 Return the list of all files created or modified.
+
+## Report your file manifest (AI-usage stats)
+
+If your dispatch prompt includes an **AI-stats manifest path** (e.g. `.claude/cache/ai-stats/<RUN_ID>/api.json`), then after ALL file work is complete, write a JSON manifest to that exact path as your **final action**. This lets `/oc-be-calculate-ai-use` attribute sub-agent work that is otherwise invisible in the session transcript. If no manifest path was provided, skip this step.
+
+Schema:
+```json
+{
+  "agent": "oc-be-api-builder",
+  "phase": "api",
+  "timestamp": "<ISO-8601 UTC>",
+  "files": [
+    { "path": "opencell-api-dto/src/main/java/org/meveo/api/dto/domain/FooDto.java", "action": "create" },
+    { "path": "opencell-api/apiv2/src/main/java/org/meveo/api/domain/resource/FooResource.java", "action": "create" },
+    { "path": "opencell-api/src/main/java/org/meveo/apiv2/JaxRsActivatorApiV2.java", "action": "modify" }
+  ]
+}
+```
+- Repo-relative paths, forward slashes.
+- `action`: `create` for a new file, `modify` for an edit to an existing file.
+- Get the timestamp with `date -u +%Y-%m-%dT%H:%M:%SZ` (best-effort; omit the field if unavailable).
+- List every file you created or modified — DTOs, API services, REST resources/impls, and the JaxRsActivator registration.
