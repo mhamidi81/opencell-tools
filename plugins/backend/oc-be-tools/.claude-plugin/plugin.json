@@ -1,5 +1,5 @@
 {
   "name": "oc-be-tools",
-  "description": "Backend development toolkit for Opencell Core — agents for building entities, services, APIs, tests, and Postman collections, guideline-loading skills, an implementation orchestrator (/oc-be-implement) whose sub-agents record file manifests, a guideline-based code review command (/oc-be-review), and an AI-usage estimator (/oc-be-calculate-ai-use) with per-category and first-pass-vs-fix breakdowns",
-  "version": "1.3.0"
+  "description": "Backend development toolkit for Opencell Core — agents for building entities, services, APIs, tests, and Postman collections, guideline-loading skills, an implementation orchestrator (/oc-be-implement) whose sub-agents record file manifests, a guideline-based code review command (/oc-be-review), and an AI-usage estimator (/oc-be-calculate-ai-use) with per-category and first-pass-vs-fix breakdowns plus a planning/analysis effort axis for planning-heavy tickets",
+  "version": "1.4.0"
 }

@@ -1,5 +1,5 @@
 ---
-description: Estimate how much of the current work came from AI (Claude Code) and how much of the AI's suggestions survived, using this session's transcript, the oc-be-implement sub-agent manifests, and file-history vs. the last commit (or uncommitted changes). Breaks the numbers down by artifact category and by first-pass-vs-fix provenance, lets the developer adjust, then posts them as a comment on the branch's JIRA ticket and tags it as backend_dev.
+description: Estimate how much of the current work came from AI (Claude Code) and how much of the AI's suggestions survived, using this session's transcript, the oc-be-implement sub-agent manifests, and file-history vs. the last commit (or uncommitted changes). Breaks the numbers down by artifact category and by first-pass-vs-fix provenance, and — for planning-heavy tickets with little code — reports the AI's planning/analysis effort as a separate band. Lets the developer adjust, then posts the result as a comment on the branch's JIRA ticket and tags it as backend_dev.
 argument-hint: "[--working | --commit <ref>] [--run <RUN_ID>]"
 ---
 
@@ -13,6 +13,7 @@ You estimate how much of the current piece of work came from AI (Claude Code) an
   2. **This session's transcript** — every `Write`/`Edit`/`MultiEdit` the assistant performed in the main context (your post-review fixes and the orchestrator's own edits).
   3. **File-history** (`~/.claude/file-history/<session>/`) — full versioned snapshots of tracked files; a backstop that also captures sub-agent edits to *existing* files.
 - **Final code** → the **last commit** by default, or the **uncommitted working tree** if that is what is being measured.
+- **Planning / analysis effort** (non-code) → from the `/oc-be-implement` planning manifest (`.claude/cache/ai-stats/<RUN_ID>/_planning.json`) if present, otherwise reconstructed from the transcript. Reported as an effort band, never a percentage (see Metrics).
 
 ## Metrics
 
@@ -32,6 +33,20 @@ The analyzer also reports **provenance** of the added lines:
 | **human** | Present in the final commit but in *no* AI source — hand-typed in the IDE. |
 
 The **fix burden** = `fix / (agent + fix)` — how much post-review steering the first pass needed.
+
+### Planning / analysis effort (non-code axis)
+
+Some tickets are mostly planning and discussion — the `/oc-be-implement` requirements-gathering and architecture-plan phases and the back-and-forth to approve the plan — with little committed code. That effort never lands in Jira/Confluence and is invisible to a line-based metric, so it is measured as **effort, not a percentage** (there is no artifact to take a percentage *of*):
+
+| Signal | Meaning |
+|--------|---------|
+| **revision rounds** | how many approve/revise cycles the plan went through with the developer (the strongest depth signal) |
+| **analysis tool calls** | Read/Grep/Glob/Bash/web/Jira lookups during planning |
+| **plan size** | word count of the approved architecture plan |
+| **duration** | wall-clock minutes in the planning window |
+| **assistant turns** | planning-phase assistant messages |
+
+These roll up to an **effort band — Low / Medium / High** (thresholds are seed values in `planning_band()`, meant to be tuned against your real runs). Preferred source is the planning manifest written by `/oc-be-implement` at plan approval; if absent, the analyzer **reconstructs** the window from the transcript — everything before the first code-producing action (first `Write`/`Edit` to a repo file, or the first builder sub-agent dispatch), scoped to the current branch via `gitBranch`. When fewer than `MEANINGFUL_CODE_MIN` (20) lines were added, the ticket is flagged **`planning-dominant`** and the effort band — not the code % — becomes the headline.
 
 > **These are best-effort estimates, not ground truth.** Contribution is complete when sub-agent manifests exist (they record sub-agent-created files that are otherwise invisible). Retention is content-based: a line AI wrote and later reworked — by AI *or* by the developer — will not match the final and counts as *not preserved*; that churn is expected and is the usual reason retention is well below 100% even when contribution is 100%. For files with no captured content (a sub-agent-created file present only in a manifest, never edited in the main context and not in file-history), contribution is counted but retention cannot be — this is reported as a warning. **The developer review step (Task 6) is the source of truth: the numbers can always be corrected before posting.**
 
@@ -78,7 +93,7 @@ There is intentionally **no ticket argument** — see Task 2.
 
 Collect these paths for the analyzer (each is optional — pass what exists):
 
-1. **Manifests** — `.claude/cache/ai-stats/<RUN_ID>/` (resolve `<RUN_ID>` per Argument Parsing). These carry the sub-agent authorship. If the directory is missing (work not done via `/oc-be-implement`, or an older run), warn and continue with the other sources.
+1. **Manifests** — `.claude/cache/ai-stats/<RUN_ID>/` (resolve `<RUN_ID>` per Argument Parsing). These carry the sub-agent authorship (`*.json` with a `files` list) **and** the planning effort (`_planning.json`, `type: "planning"`). If the directory is missing (work not done via `/oc-be-implement`, or an older run), warn and continue with the other sources — planning effort will be reconstructed from the transcript instead.
 2. **Transcripts** — pass the whole `~/.claude/projects/<PROJECT-SLUG>/` directory. The analyzer keeps only tool calls whose `file_path` is inside the repo, so unrelated sessions are naturally excluded, and post-review fixes from any of this ticket's sessions are captured.
 3. **File-history root** — `~/.claude/file-history/`. The analyzer maps each session's `file-history-snapshot` entries (found in the transcripts) to the backup blobs here.
 
@@ -94,10 +109,14 @@ python "<SCRATCHPAD>/ai_use_analyzer.py" \
   --transcripts "<PROJECT-SLUG directory OR a single .jsonl file>" \
   --manifests   "<.claude/cache/ai-stats/RUN_ID directory>" \
   --file-history-root "C:/Users/<you>/.claude/file-history" \
+  --branch "<current branch from git branch --show-current>" \
   --mode commit --commit HEAD          # or: --mode working
 ```
 
-Every source flag except `--repo` is optional. It prints a JSON object with `overall`, `by_category`, `provenance`, `retention`, `sources`, and `warnings`. Percentages are rounded to the nearest 5% (`round(x/5)*5`, clamped 0–100). A percentage is `null` when its denominator is 0 — treat it as "unknown".
+Every source flag except `--repo` is optional. `--branch` scopes planning reconstruction to sessions on the current branch (pass `git branch --show-current`); omit it in working mode if unsure. It prints a JSON object with `work_type`, `planning`, `overall`, `by_category`, `provenance`, `retention`, `sources`, and `warnings`. Percentages are rounded to the nearest 5% (`round(x/5)*5`, clamped 0–100). A percentage is `null` when its denominator is 0 — treat it as "unknown".
+
+- `work_type` is `code`, `planning-dominant` (< 20 lines added but planning effort detected), or `minimal-change`.
+- `planning` carries `detected`, `source` (`manifest`/`transcript`), `effort_band` (Low/Medium/High), `revision_rounds`, `analysis_tool_calls`, `plan_word_count`, `duration_minutes`, `assistant_turns`.
 
 ### `ai_use_analyzer.py`
 
@@ -106,6 +125,10 @@ Every source flag except `--repo` is optional. It prints a JSON object with `ove
 """Estimate AI contribution/retention for the current work from sub-agent manifests,
 the session transcript, and file-history, vs. the final code."""
 import argparse, glob, json, os, subprocess
+from datetime import datetime
+
+ANALYSIS_TOOLS = {"Read", "Grep", "Glob", "Bash", "WebFetch", "WebSearch", "LS"}
+MEANINGFUL_CODE_MIN = 20  # fewer added code lines than this => planning-dominant ticket
 
 def norm(l): return l.strip()
 def triv(l): return not any(c.isalnum() for c in l)
@@ -251,6 +274,137 @@ def final_content(repo, rel, mode, ref):
 def round5(x): return max(0, min(100, int(round(x / 5.0) * 5)))
 def pct(a, b): return round(100 * a / b, 1) if b else None
 
+# ---- planning / analysis effort axis (non-code) ----
+def _words(s): return len((s or "").split())
+
+def duration_minutes(start, end):
+    try:
+        p = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00"))
+        if start and end:
+            return max(0, round((p(end) - p(start)).total_seconds() / 60))
+    except (ValueError, AttributeError, TypeError):
+        pass
+    return 0
+
+def load_planning_manifest(manifests_dir):
+    """A planning manifest is any *.json with type == 'planning' in the run dir."""
+    if not manifests_dir or not os.path.isdir(manifests_dir): return None
+    for mf in sorted(glob.glob(os.path.join(manifests_dir, "*.json"))):
+        try:
+            with open(mf, encoding="utf-8") as fh: d = json.load(fh)
+        except (OSError, json.JSONDecodeError): continue
+        if d.get("type") == "planning": return d
+    return None
+
+def _user_text(o):
+    content = (o.get("message") or {}).get("content")
+    if isinstance(content, str): return content
+    if isinstance(content, list):
+        return " ".join(b.get("text", "") for b in content
+                        if isinstance(b, dict) and b.get("type") == "text")
+    return ""
+
+def reconstruct_planning(transcripts, repo, branch):
+    """Fallback when no planning manifest exists. Planning window = all activity
+    before the first code-producing action (Write/Edit to a repo file, or an
+    oc-be builder/generator sub-agent dispatch). Scoped to `branch` when given."""
+    if not transcripts: return None
+    files = sorted(glob.glob(os.path.join(transcripts, "*.jsonl"))) if os.path.isdir(transcripts) else [transcripts]
+    agg = {"assistant_turns": 0, "user_turns": 0, "analysis_tool_calls": 0,
+           "revision_rounds": 0, "plan_word_count": 0, "duration_minutes": 0,
+           "used_plan_mode": False}
+    saw = False
+    for jf in files:
+        events = []
+        try:
+            with open(jf, encoding="utf-8") as fh:
+                for raw in fh:
+                    try: events.append(json.loads(raw))
+                    except (json.JSONDecodeError, ValueError): continue
+        except OSError:
+            continue
+        if branch:
+            gbs = {o.get("gitBranch") for o in events if o.get("gitBranch")}
+            if gbs and branch not in gbs: continue   # session belongs to another branch
+        # locate the first code-producing action
+        first_code = None
+        for o in events:
+            if o.get("type") != "assistant": continue
+            for c in (o.get("message") or {}).get("content") or []:
+                if not isinstance(c, dict) or c.get("type") != "tool_use": continue
+                nm, inp = c.get("name"), (c.get("input") or {})
+                code = False
+                if nm in ("Write", "Edit", "MultiEdit"):
+                    rel = to_rel(inp.get("file_path") or "", repo)
+                    code = bool(rel and not rel.startswith(".."))
+                elif nm == "Task":
+                    st = inp.get("subagent_type") or ""
+                    code = ("builder" in st or "generator" in st or "oc-be" in st)
+                if code: first_code = o.get("timestamp"); break
+            if first_code: break
+        # walk the planning window (everything before first_code); track this
+        # session's own start/end so durations are summed per-session, never a
+        # meaningless min..max span across many sessions on a shared branch.
+        win = False
+        fstart = fend = None
+        for o in events:
+            ts = o.get("timestamp")
+            if first_code and ts and ts >= first_code: break
+            t = o.get("type")
+            if t == "user":
+                if _user_text(o).strip():
+                    agg["user_turns"] += 1; win = True
+            elif t == "assistant":
+                agg["assistant_turns"] += 1; win = True
+                for c in (o.get("message") or {}).get("content") or []:
+                    if not isinstance(c, dict) or c.get("type") != "tool_use": continue
+                    if c.get("name") in ANALYSIS_TOOLS: agg["analysis_tool_calls"] += 1
+                    if c.get("name") == "ExitPlanMode":
+                        agg["revision_rounds"] += 1; agg["used_plan_mode"] = True
+                        agg["plan_word_count"] = max(agg["plan_word_count"],
+                                                     _words((c.get("input") or {}).get("plan")))
+            if ts:
+                if fstart is None or ts < fstart: fstart = ts
+                if fend is None or ts > fend: fend = ts
+        if win:
+            saw = True
+            agg["duration_minutes"] += duration_minutes(fstart, fend)
+    return agg if saw else None
+
+def planning_band(p):
+    s = 0
+    s += 2 if p["revision_rounds"] >= 3 else 1 if p["revision_rounds"] >= 1 else 0
+    s += 2 if p["analysis_tool_calls"] >= 25 else 1 if p["analysis_tool_calls"] >= 8 else 0
+    s += 2 if p["plan_word_count"] >= 1200 else 1 if p["plan_word_count"] >= 400 else 0
+    s += 2 if p["duration_minutes"] >= 90 else 1 if p["duration_minutes"] >= 30 else 0
+    s += 1 if p["assistant_turns"] >= 25 else 0
+    return "High" if s >= 5 else "Medium" if s >= 2 else "Low"
+
+def build_planning(manifest, recon):
+    """Merge the planning manifest (authoritative for rounds/plan/timestamps) with
+    the transcript reconstruction (authoritative for tool/turn activity)."""
+    if not manifest and not recon: return {"detected": False}
+    m, r = manifest or {}, recon or {}
+    def pick(*vs):
+        for v in vs:
+            if v: return v
+        return 0
+    p = {
+        "detected": True,
+        "source": (["manifest"] if manifest else []) + (["transcript"] if recon else []),
+        "revision_rounds": pick(m.get("revision_rounds"), r.get("revision_rounds")),
+        "analysis_tool_calls": pick(r.get("analysis_tool_calls")),
+        "assistant_turns": pick(r.get("assistant_turns")),
+        "plan_word_count": pick(m.get("plan_word_count"), r.get("plan_word_count")),
+        "duration_minutes": (duration_minutes(m.get("planning_started"), m.get("plan_approved"))
+                             if m.get("planning_started") and m.get("plan_approved")
+                             else r.get("duration_minutes", 0)),
+        "used_plan_mode": bool(r.get("used_plan_mode")) or bool(manifest),
+    }
+    p["effort_band"] = planning_band(p)
+    if m.get("notes"): p["notes"] = m["notes"]
+    return p
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", required=True)
@@ -259,6 +413,7 @@ def main():
     ap.add_argument("--file-history-root", dest="fh_root")
     ap.add_argument("--mode", choices=["commit", "working"], default="commit")
     ap.add_argument("--commit", default="HEAD")
+    ap.add_argument("--branch")  # scopes planning reconstruction to this branch's sessions
     a = ap.parse_args()
     repo = os.path.abspath(a.repo)
     warnings = []
@@ -272,6 +427,21 @@ def main():
 
     added = added_lines_map(repo, a.mode, a.commit)
     total_added = sum(len(v) for v in added.values())
+
+    planning = build_planning(load_planning_manifest(a.manifests),
+                              reconstruct_planning(a.transcripts, repo, a.branch))
+    if total_added >= MEANINGFUL_CODE_MIN:
+        work_type = "code"
+    elif planning.get("detected"):
+        work_type = "planning-dominant"
+    else:
+        work_type = "minimal-change"
+    if work_type == "planning-dominant":
+        warnings.append("Planning-dominant ticket: little code committed — the planning-effort band, "
+                        "not the code contribution %, is the headline.")
+    if planning.get("detected") and "manifest" not in planning.get("source", []):
+        warnings.append("Planning effort reconstructed from the transcript (no _planning.json manifest). "
+                        "Run planning via /oc-be-implement for a precise record.")
 
     cats = ["production", "migration", "tests", "postman", "docs", "other"]
     agg = {c: {"added": 0, "agent": 0, "fix": 0, "human": 0} for c in cats}
@@ -329,6 +499,8 @@ def main():
 
     print(json.dumps({
         "mode": a.mode, "commit": a.commit,
+        "work_type": work_type,
+        "planning": planning,
         "headline": {"category": "production",
                      "contribution_pct": head.get("contribution_pct"),
                      "retention_pct": head.get("retention_pct")},
@@ -362,7 +534,11 @@ Show a clear breakdown. The **headline is production code**; everything else is 
 AI Use Estimate — [TICKET-NUMBER]
 =================================
 Measured:  last commit (HEAD)        # or: uncommitted changes
+Work type: code                      # or: planning-dominant / minimal-change
 Sources:   manifests <n> · transcript <n> files · file-history <n> files
+
+Planning/analysis effort: High  (source: manifest)
+  6 revision rounds · 38 analysis calls · ~1400-word plan · ~120 min · 44 turns
 
 Category         added   AI-contrib   retention
 production         980       100%         85%     ← headline
@@ -388,7 +564,15 @@ Explain briefly, in one line each: contribution counts sub-agent + main-context 
 
 If a metric is `null`, show it as `unknown` and say why (no added lines / no captured AI content).
 
-Then ask the developer to confirm or correct the **two headline numbers** (production contribution, production retention) using `AskUserQuestion` (one question per metric): offer the computed value first, marked *(Recommended)*, a couple of nearby 5% steps, and accept a free-form override. **Re-round** to the nearest 5% and clamp `0–100`. Store as `[CONTRIBUTION]` and `[RETENTION]`. (If the developer says all code is AI, set contribution to 100% even when the automated figure is lower — the automated number is a floor.)
+**Choose the headline by `work_type`:**
+- `code` → the headline is production contribution + retention (as before).
+- `planning-dominant` → the headline is the **planning effort band**; still show the code numbers but label them secondary ("<N> lines changed"). Say plainly that this ticket's AI value was in analysis/planning, not code volume.
+- `minimal-change` → little code and no planning detected; report what there is and lean on the developer's judgement.
+
+Then ask the developer to confirm or correct, using `AskUserQuestion`:
+- For code tickets — the **two headline numbers** (production contribution, production retention), one question each: offer the computed value first, marked *(Recommended)*, a couple of nearby 5% steps, and a free-form override. **Re-round** to the nearest 5% and clamp `0–100`. Store as `[CONTRIBUTION]` and `[RETENTION]`. (If the developer says all code is AI, set contribution to 100% even when the automated figure is lower — the automated number is a floor.)
+- Always — the **planning effort band** (`Low`/`Medium`/`High`) when planning was detected, defaulting to the computed band. Store as `[PLANNING-BAND]`. The band is a judgement call; the developer's choice wins.
+- Optionally, a **1–5 "AI usefulness on this ticket"** rating — the one signal no transcript captures (e.g. AI unblocked a hard design decision in two messages). Store as `[USEFULNESS]` if given.
 
 ---
 
@@ -396,7 +580,7 @@ Then ask the developer to confirm or correct the **two headline numbers** (produ
 
 Writing to JIRA is outward-facing. **Show exactly what will be posted and set, and ask for confirmation before writing.** Present the comment body, the field change (`customfield_10613` will include `backend_dev`), and the target ticket.
 
-Comment body:
+Comment body (**code** ticket):
 
 ```
 AI usage (Claude Code) — measured on <last commit HEAD | uncommitted changes>:
@@ -404,8 +588,21 @@ AI usage (Claude Code) — measured on <last commit HEAD | uncommitted changes>:
 - AI retention: [RETENTION]% of the AI-suggested code was preserved (the remainder was superseded by AI's own iterative fixes).
 
 Breakdown by artifact (contribution / retention): production <p>/<p> · migration <m>/<m> · tests <t>/<t> · Postman <pm>/<pm>. Post-review fix burden: <fix>%.
+<if planning detected:> Planning/analysis effort: [PLANNING-BAND] (<rounds> revision rounds, <n> analysis lookups, ~<w>-word plan, ~<min> min).
+<if [USEFULNESS] given:> Developer-rated usefulness: [USEFULNESS]/5.
 
 Method: estimated from the oc-be-implement sub-agent manifests, the Claude Code session transcript, and file-history vs. the final code, reviewed and confirmed by the developer. Values rounded to the nearest 5%.
+```
+
+Comment body (**planning-dominant** ticket — lead with effort, not code %):
+
+```
+AI usage (Claude Code) — <TICKET-NUMBER> was planning/analysis-dominant (only <N> code lines changed):
+- Planning/analysis effort: [PLANNING-BAND] — <rounds> plan revision rounds with the developer, <n> analysis lookups, a ~<w>-word design plan, ~<min> min of planning.
+- Code contribution (of the small change): [CONTRIBUTION]%.
+<if [USEFULNESS] given:> Developer-rated usefulness: [USEFULNESS]/5.
+
+Note: the AI value here was in requirements analysis and solution design (which is not committed to code), not in code volume. Method: planning effort from the oc-be-implement planning manifest (or reconstructed from the session transcript), reviewed and confirmed by the developer.
 ```
 
 On confirmation, use the **Atlassian MCP tools** (site `opencellsoft.atlassian.net`, cloudId `648ef912-b483-4da2-91af-73ea1e3fdad8`; resolve via `getAccessibleAtlassianResources` if unknown).
@@ -430,7 +627,7 @@ On confirmation, use the **Atlassian MCP tools** (site `opencellsoft.atlassian.n
 
 ```
 Posted to [TICKET-NUMBER]:
-  ✓ Comment added (AI contribution [CONTRIBUTION]%, AI retention [RETENTION]%)
+  ✓ Comment added (contribution [CONTRIBUTION]% · retention [RETENTION]% · planning [PLANNING-BAND])
   ✓ Tagged backend_dev on customfield_10613   (or: already present — no change)
 ```
 
@@ -457,5 +654,6 @@ If the developer declines, print the comment body and intended field change so t
 - **Contribution vs. retention.** Contribution is complete with manifests; retention is content-based and only defined for files whose line content was captured (transcript or file-history). Manifest-only files are counted for contribution and reported as retention-unknown.
 - **Attribution.** A final line is `fix` if it appears in a main-context edit, else `agent` if the file is in a manifest or the line is in file-history, else `human`. Whitespace-normalized, pure-punctuation lines ignored, distinct-line based per file (heavy rewrites de-duplicated).
 - **Squashed / cross-branch commits.** When many sessions/branches are squashed into one commit, file-history alone under-covers it; manifests restore coverage for the parts built via `/oc-be-implement`.
+- **Planning effort is effort, not a percentage.** The requirements-gathering and architecture-plan work produces no committed artifact, so it can only be quantified as activity (rounds, lookups, plan size, time) rolled into a Low/Medium/High band. The band thresholds are seed values in `planning_band()` — tune them against your real runs. Reconstruction from the transcript is a fallback; the `/oc-be-implement` planning manifest is authoritative for revision rounds and plan size.
 - Always defer to the developer's adjusted numbers — the automatic figures are a starting point, not an audit.
 ```
