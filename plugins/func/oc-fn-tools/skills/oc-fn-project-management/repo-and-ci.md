@@ -141,13 +141,6 @@ paths is the safety model that lets an agent author code on a high-stakes system
   it documents — never deferred to a follow-up.
 - **Slide decks follow the same rule:** the Phase-2 deck is authored as `deck.md` (one section per
   slide + speaker notes) and the `.pptx` is **rendered from it** against the branded template — a
-  one-way print, never the master, never committed as a binary.
-  - **Locale formatting (non-negotiable, every Marp deck):** slideshows must display **24-hour time**
-    (never AM/PM) regardless of the presenting machine's browser/OS locale, and must **never** show a
-    date in an ambiguous all-numeric form (`dd/mm/yyyy`, `mm/dd/yyyy`, and the like). Any all-numeric
-    date uses **ISO-8601 (`YYYY-MM-DD`)**; dates written with a month name (`16 June 2026`, `Juin 2026`)
-    are unambiguous and fine as-is. The bespoke presenter-view clock calls `toLocaleTimeString()` with
-    no locale (so it inherits the browser locale and defaults to AM/PM on en-US), so **force it
-    deck-side**: inject a `<script>` that overrides no-argument `toLocaleTimeString()` to `fr-FR` 24h,
-    and render with `--html` (the flag that preserves the script). When rendering, pass the input file
-    **first** and `--theme-set` **last** (it is an array flag and will otherwise consume the input path).
+  one-way print, never the master, never committed as a binary. Deck authoring, the branded theme, the
+  render command, the overflow check, and the **24h-time / ISO-date locale non-negotiable** live in the
+  **`oc-fn-decks`** skill.

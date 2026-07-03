@@ -1,7 +1,7 @@
 {
   "name": "oc-fn-tools",
-  "description": "Functional/product toolkit for Opencell — Jira INTRD issue authoring (oc-fn-func-design), Confluence docs-space authoring (oc-fn-documentation), Playwright-driven Opencell Portal navigation & screenshots (oc-fn-portal), and the design-first phased delivery methodology (oc-fn-project-management). Bundles a headless Playwright MCP server (oc-fn-playwright).",
-  "version": "1.2.0",
+  "description": "Functional/product toolkit for Opencell — Jira INTRD issue authoring (oc-fn-func-design), Confluence docs-space authoring (oc-fn-documentation), Playwright-driven Opencell Portal navigation & screenshots (oc-fn-portal), the design-first phased delivery methodology (oc-fn-project-management), branded slide-deck authoring & rendering with the Opencell Marp theme (oc-fn-decks), and GUI/screen design against the Opencell Figma design system (oc-fn-gui-design). Bundles a headless Playwright MCP server (oc-fn-playwright).",
+  "version": "1.2.1",
   "author": "Stéphane Chambrin",
   "mcpServers": {
     "oc-fn-playwright": {

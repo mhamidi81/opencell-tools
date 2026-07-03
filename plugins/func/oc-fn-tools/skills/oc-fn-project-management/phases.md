@@ -85,13 +85,13 @@ risk sat entirely on the three items above.)*
 - **Purpose:** get a formal mandate and resources *before* sinking heavy design effort — and *after*
   enough scoping to be credible. This is the single phase that also yields a non-`.md` artifact (a
   slide deck), authored as `deck.md` and rendered one-way with the **Opencell Marp theme** — authoring
-  conventions, the render command, and the overflow check live in **`decks.md`**.
+  conventions, the render command, and the overflow check live in the **`oc-fn-decks`** skill.
 - **Deliverables:** **business case** (problem, qualitative value, **effort in man-days + delay**,
   risks, the "ask"); high-level architecture sketch (reuse the candidate architecture from `PLAN.md`); a
   light **feasibility read** from the architect + infra owner; **slideware** for the approvers.
   **For a Claude-authored build, the figures that matter at this gate are effort (man-days) and delay —
   not euros/ROI/P&L**, which Finance builds later; quantify with the authoring + human-floor model in
-  `decks.md`.
+  `phase2-estimate.md`.
 - **Exit gate:** **go/no-go** — SteerCo for a full product, sponsor/lead sign-off for a big feature
   (`engagement.md`). A "go" means: mandate, budget/resourcing, and stakeholder time secured.
 - **Who:** sponsor/lead presents; approvers decide; architect + infra give the feasibility read.
