@@ -107,6 +107,28 @@ Enter plan mode and present the implementation plan. Structure:
 
 Wait for user to review and approve the plan.
 
+**After the plan is approved, record a planning manifest.** The requirements-gathering and architecture-plan work (and the discussion to approve it) is real AI effort that produces no committed code and never lands in Jira/Confluence, so it is invisible to a line-based metric. This manifest lets `/oc-be-calculate-ai-use` credit it. Write `.claude/cache/ai-stats/{RUN_ID}/_planning.json`:
+
+```json
+{
+  "type": "planning",
+  "agent": "oc-be-implement",
+  "phase": "planning",
+  "ticket": "{TICKET}",
+  "run_id": "{RUN_ID}",
+  "planning_started": "<ISO-8601 UTC when Phase 1 began>",
+  "plan_approved": "<ISO-8601 UTC now>",
+  "revision_rounds": <how many approve/revise cycles the plan went through before this approval; 0 if approved as first draft>,
+  "plan_word_count": <word count of the approved plan>,
+  "plan_text": "<the approved architecture plan, verbatim>",
+  "notes": "<1-2 lines: the key design decisions or ambiguities resolved with the developer>"
+}
+```
+
+- Get timestamps with `date -u +%Y-%m-%dT%H:%M:%SZ`; track `planning_started` from when you began Phase 1.
+- `revision_rounds` is the strongest signal of analysis depth — count each round where the developer asked for a change before approving.
+- Best-effort and non-blocking: if writing fails, continue the implementation normally.
+
 ### Phase 3: Implementation
 
 Execute sequentially with review checkpoints between each step:
@@ -207,4 +229,4 @@ Build the "Files Created/Modified" list by aggregating the manifests in `.claude
 
 Suggest commit message: `{TICKET}: {brief description}`
 
-Then remind the user they can run **`/oc-be-calculate-ai-use`** to record AI-usage stats on the Jira ticket — it reads these manifests (so sub-agent work is attributed) plus this session's transcript (for your post-review fixes), and reports contribution/retention broken down by artifact category.
+Then remind the user they can run **`/oc-be-calculate-ai-use`** to record AI-usage stats on the Jira ticket — it reads these manifests (so sub-agent work and the planning effort are attributed) plus this session's transcript (for your post-review fixes), and reports contribution/retention broken down by artifact category as well as the planning/analysis effort captured in `_planning.json`.
