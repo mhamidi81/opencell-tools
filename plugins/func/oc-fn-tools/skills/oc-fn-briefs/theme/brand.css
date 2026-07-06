@@ -1,0 +1,121 @@
+/* @brand opencell-documents — Opencell Charte Graphique 2023, document (non-slide) variant.
+ *
+ * The DOCUMENT counterpart to oc-fn-decks/theme/opencell.css (which is the Marp *slide*
+ * theme). Same brand identity — palette, logo, type intent — but laid out for a flowing,
+ * print-ready A4 document (one-pagers, notes, briefs, memos, short reports) rendered to
+ * HTML/PDF via headless Chromium, NOT for slides.
+ *
+ * Shared identity: the palette below is the same Charte Graphique 2023 used by oc-fn-decks;
+ * the logos are the same SVGs (symlinked in ./). Keep the palette in sync with the decks
+ * theme — the Charte Graphique is the source of truth.
+ *
+ * Fonts: default to a system sans stack so LOCAL rendering is offline-safe (no network at
+ * print time). For exact brand type, uncomment the Google Fonts @import below — but then the
+ * render machine needs network, and a committed self-contained doc should prefer embedded
+ * @font-face data URIs over a remote @import (same discipline as the decks theme).
+ */
+
+/* @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&family=Playfair+Display:wght@900&display=swap'); */
+
+:root{
+  --oc-red:#CE1428;        /* primary brand red (logo) */
+  --oc-red-ink:#a30f1f;    /* darker red for numerals/text on white — passes contrast */
+  --oc-coral:#FA5757;      /* accent / bar gradient start */
+  --oc-black:#121011;      /* not pure black — brand ink */
+  --oc-ink:#1a1618;        /* body text */
+  --oc-grey:#6b6367;       /* secondary text */
+  --oc-line:#e7e0e3;       /* hairlines / borders */
+  --oc-tint:#faf0f1;       /* red-tinted fill (table head, footer) */
+  --oc-tint2:#f7f3f5;      /* neutral tint (bar track) */
+  --oc-sans:'Montserrat','Segoe UI',system-ui,-apple-system,Arial,sans-serif;
+  --oc-serif:'Playfair Display',Georgia,serif;  /* reserve for display H1 if desired */
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:var(--oc-sans);
+  color:var(--oc-ink); font-size:10.5pt; line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+}
+.sheet{max-width:820px;margin:0 auto;padding:0 22px 28px}
+
+/* ── Header band: red bar with the white logo + optional classification tag ───────────── */
+.band{
+  background:var(--oc-red); color:#fff; margin:0 -22px 18px;
+  padding:16px 22px 14px; display:flex; align-items:center;
+  justify-content:space-between; gap:16px;
+}
+.band svg{height:26px;width:auto;display:block}   /* white logo, inlined in the document */
+.band .tag{
+  font-size:8pt; letter-spacing:.14em; text-transform:uppercase;
+  opacity:.9; border:1px solid rgba(255,255,255,.55); border-radius:3px;
+  padding:3px 8px; white-space:nowrap;
+}
+
+/* ── Title block ──────────────────────────────────────────────────────────────────────── */
+h1{font-size:19pt;line-height:1.15;margin:2px 0 4px;font-weight:800;letter-spacing:-.01em}
+h1 .sub{color:var(--oc-red)}
+.meta{color:var(--oc-grey);font-size:9pt;margin:0 0 16px}
+.meta b{color:var(--oc-ink);font-weight:700}
+p.lead{margin:0 0 12px;font-size:10pt}
+
+/* ── KPI tile row ─────────────────────────────────────────────────────────────────────── */
+.kpis{display:flex;gap:10px;margin:0 0 18px}
+.kpi{flex:1;border:1px solid var(--oc-line);border-top:3px solid var(--oc-red);
+  border-radius:5px;padding:9px 11px;background:#fff}
+.kpi .n{font-size:17pt;font-weight:800;color:var(--oc-red-ink);line-height:1.05}
+.kpi .n small{font-size:10pt;font-weight:700;color:var(--oc-ink)}
+.kpi .l{font-size:8pt;color:var(--oc-grey);margin-top:3px;letter-spacing:.02em;text-transform:uppercase}
+
+/* ── Section headings ─────────────────────────────────────────────────────────────────── */
+h2{font-size:11.5pt;margin:20px 0 8px;font-weight:800;color:var(--oc-ink);
+  padding-bottom:4px;border-bottom:2px solid var(--oc-red)}
+h2 .hint{font-weight:600;color:var(--oc-grey);font-size:8.5pt;text-transform:none;letter-spacing:0}
+
+/* ── Tables (inventories, comparisons) ────────────────────────────────────────────────── */
+table{width:100%;border-collapse:collapse;font-size:9pt}
+thead th{background:var(--oc-tint);color:var(--oc-red-ink);text-align:left;
+  font-weight:700;padding:6px 8px;border-bottom:1.5px solid var(--oc-red);font-size:8.5pt;
+  text-transform:uppercase;letter-spacing:.03em}
+th.num,td.num{text-align:right;white-space:nowrap}
+tbody td{padding:6px 8px;border-bottom:1px solid var(--oc-line);vertical-align:middle}
+tbody tr:nth-child(even) td{background:#fbf9fa}
+td .del{font-weight:700}
+td .why{color:var(--oc-grey);font-size:8pt;line-height:1.35;display:block;margin-top:1px}
+tfoot td{padding:7px 8px;font-weight:800;border-top:2px solid var(--oc-red);font-size:9.5pt;background:var(--oc-tint)}
+
+/* Magnitude bar (fixed track + value beside it — legible regardless of fill length) */
+.solo{display:flex;align-items:center;gap:9px}
+.track{flex:0 0 62px;height:13px;background:var(--oc-tint2);border-radius:3px;position:relative;overflow:hidden}
+.track>span{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,var(--oc-coral),var(--oc-red));border-radius:3px}
+.solo .val{font-size:8.8pt;font-weight:700;white-space:nowrap;color:var(--oc-ink)}
+.solo .val small{color:var(--oc-grey);font-weight:600}
+
+/* Pill badge (multipliers, counts, statuses) */
+.x{display:inline-block;background:var(--oc-red);color:#fff;font-weight:800;font-size:8pt;
+  border-radius:10px;padding:1px 7px}
+.x.ink{background:var(--oc-black)}
+
+/* ── Framing / call-out cards ─────────────────────────────────────────────────────────── */
+.cards{display:flex;gap:12px;margin:12px 0 0}
+.card{flex:1;border:1px solid var(--oc-line);border-radius:6px;padding:11px 13px;background:#fff}
+.card h3{margin:0 0 5px;font-size:9.5pt;color:var(--oc-red-ink);font-weight:800}
+.card .big{font-size:12pt;font-weight:800;color:var(--oc-ink);margin:0 0 5px}
+.card p{margin:0;font-size:8.7pt;color:var(--oc-ink);line-height:1.4}
+
+/* ── Method / caveats footnote ────────────────────────────────────────────────────────── */
+.note{margin-top:16px;border-top:1px solid var(--oc-line);padding-top:10px;font-size:7.8pt;color:var(--oc-grey);line-height:1.5}
+.note b{color:var(--oc-ink)}
+.note .k{color:var(--oc-red-ink);font-weight:700}
+
+/* ── Print / PDF (A4) ─────────────────────────────────────────────────────────────────── */
+@media print{
+  body{font-size:10pt}
+  .sheet{max-width:none;padding:0}
+  .band{margin:0 0 16px}
+  .kpi,.card,tr,.kpis,.cards{break-inside:avoid}
+  thead{display:table-header-group}   /* repeat header if a table splits across pages */
+  h2{break-after:avoid}
+}
+@page{size:A4;margin:13mm}
