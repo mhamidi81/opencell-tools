@@ -1,7 +1,7 @@
 ---
 name: oc-fn-project-management
-version: 1.8.0
-updated: 2026-06-27T12:00:00+02:00
+version: 1.9.0
+updated: 2026-07-03T07:50:10+02:00
 author: Stéphane Chambrin
 description: >
   How to run an Opencell project from kickoff to release: the design-first phased
@@ -53,6 +53,7 @@ and *defers* to them at the relevant gate:
 | **`oc-fn-func-design`** | the *how* of Jira authoring — Epics, Stories, Enablers, ADF, custom fields, and a Story's **functional** sections (Requirement, Functional Design, Acceptance); creates the empty Technical-design scaffold but does **not** author it | at the backlog gate (Phase 4) and for every issue after |
 | **`oc-ar-tech-design`** (marketplace `oc-ar-tools`, where available) | the *how* of a Story's **Technical design** section (`customfield_10137`), authored from the Phase-5 technical artifacts | at the technical-design gate (Phase 5) |
 | **`oc-fn-documentation`** | the *how* of Confluence pages | at the docs/release gate (Phase 7) |
+| **`oc-fn-decks`** | the *how* of a branded slide deck — Marp theme, authoring, rendering, overflow, locale rule | at the Phase-2 framing/approval deck (and any standalone deck) |
 
 **Process layer vs execution layer.** This skill is the **process** layer — the phased model and
 its gates. On an `oc-fn-tools` + common-plugins setup, the per-ticket implementation in **Phase 6**
@@ -170,7 +171,8 @@ Keep this spine in context; pull in the file that matches the phase you're worki
 | Recording a decision, ADR format, Decision Register, `DECISIONS.md` | `decisions-adr.md` |
 | Repo layout, branching, commits, tags, PR review tiers, CI/CD | `repo-and-ci.md` |
 | Who to involve when, the approval/SteerCo gate, roles | `engagement.md` |
-| Authoring/rendering the **Phase-2 deck** with the Opencell Marp theme | `decks.md` |
+| Sizing the Phase-2 ask — effort/delay, no euros (Claude-authored builds) | `phase2-estimate.md` |
+| Authoring/rendering a branded deck (theme, Marp, overflow, locale) | the **`oc-fn-decks`** skill |
 | Choosing where the Jira backlog lives (existing vs dedicated vs hybrid) | `jira-project-choice.md` |
 | Scaffolding a new project/feature from scratch | `templates/` (see §7) |
 

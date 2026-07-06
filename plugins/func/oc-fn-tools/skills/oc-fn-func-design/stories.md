@@ -260,6 +260,15 @@ has no *Information requirements* section and defers data-model concerns to its 
 
 ## GUI labels — bilingual (EN + FR)
 
+> **Designing the screen (not just describing it).** When a Story has GUI impact, the *GUI* section
+> should carry an **actual design** — real Design-System components, tokens, a screenshot, and a
+> Figma link — not prose that leaves the screen for a developer to invent. Producing that design is
+> the **`oc-fn-gui-design`** skill's job (it reads the Opencell Figma design system — MUI v6 — in the
+> same Phase-2 lane). This lane still owns **writing** the design into the Story: the ADF, the
+> bilingual labels below, and the inline-media safety rule for the screenshot (see `SKILL.md`
+> § *Destructive edits on fields containing inline media*). `oc-fn-gui-design` produces the artifacts
+> (link + dated screenshot + grounded spec) and hands them here.
+
 When a Story has a real GUI (the *GUI* section is **not** `N/A`), every user-facing label must be given in **both English and French** — field labels, **enum / selector values**, buttons, tab and section titles, and actions. The clean form is a bilingual table under *Descriptions and mockups*:
 
 | Element | Label (EN) | Label (FR) |

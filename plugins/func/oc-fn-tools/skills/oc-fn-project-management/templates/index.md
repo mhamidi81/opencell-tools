@@ -15,7 +15,7 @@
 | `DECISIONS-skeleton.md` | `DECISIONS.md` (repo root) | ADR index; mirrors to the Confluence "Decision Log" |
 | `README-skeleton.md` | `README.md` (repo root) | What the project is, how to navigate docs, build/run |
 | `CLAUDE-skeleton.md` | `CLAUDE.md` (repo root) | Project-specific agent rules; points back at this methodology |
-| `marp/` (whole dir) | `assets/marp/` (repo root) | Shared **Opencell Marp deck theme** (`opencell.css` + logos) for the Phase-2 deck. Copied verbatim — it's the canonical master; the repo copy is what decks reference. See `decks.md`. |
+| `oc-fn-decks` skill → `theme/` | `assets/marp/` (repo root) | Shared **Opencell Marp deck theme** (`opencell.css` + logos) for the Phase-2 deck. Copy the `oc-fn-decks` skill's `theme/` contents in — that skill holds the canonical master; the repo copy is what decks reference. See the **`oc-fn-decks`** skill. |
 
 ## The `docs/` tree to create (Phase 0)
 
@@ -25,7 +25,7 @@
 ├── README.md          # from README-skeleton.md
 ├── DECISIONS.md       # from DECISIONS-skeleton.md
 ├── CLAUDE.md          # from CLAUDE-skeleton.md
-├── assets/marp/       # Opencell deck theme, from templates/marp/ (Phase-2 deck — see decks.md)
+├── assets/marp/       # Opencell deck theme, from the oc-fn-decks skill's theme/ (Phase-2 deck)
 └── docs/
     ├── decisions/     # ADR-NNNN-*.md + adr-template.md (+ a short README pointing at the convention)
     ├── functional/    # Phase 1+: scope, glossary, personas, use-cases, nfr, specs/, user-manual/
@@ -44,4 +44,4 @@ working; ADRs are folder-scoped and gate tags namespaced `<initiative>/phase-N`.
 
 For the deck theme in a **shared design repo**, `assets/marp/` lives **once at the shared repo root**
 (shared by every initiative), not duplicated in each initiative folder; a per-initiative deck under
-`<initiative>/docs/process/` references it via the relative path to the root (`decks.md`).
+`<initiative>/docs/process/` references it via the relative path to the root (the **`oc-fn-decks`** skill).
