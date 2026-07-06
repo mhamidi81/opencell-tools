@@ -33,8 +33,8 @@ body{font-family:var(--oc-sans);color:var(--oc-ink);font-size:10.5pt;line-height
 h1{font-size:19pt;line-height:1.15;margin:2px 0 4px;font-weight:800;letter-spacing:-.01em}
 h1 .sub{color:var(--oc-red)}
 .meta{color:var(--oc-grey);font-size:9pt;margin:0 0 16px}
-.meta b{color:var(--oc-ink);font-weight:700}
-p.lead{margin:0 0 12px;font-size:10pt}
+.meta b,.meta strong{color:var(--oc-ink);font-weight:700}
+.lead{margin:0 0 12px;font-size:10pt}
 .kpis{display:flex;gap:10px;margin:0 0 18px}
 .kpi{flex:1;border:1px solid var(--oc-line);border-top:3px solid var(--oc-red);border-radius:5px;padding:9px 11px;background:#fff}
 .kpi .n{font-size:17pt;font-weight:800;color:var(--oc-red-ink);line-height:1.05}
@@ -61,10 +61,12 @@ tfoot td{padding:7px 8px;font-weight:800;border-top:2px solid var(--oc-red);font
 .card{flex:1;border:1px solid var(--oc-line);border-radius:6px;padding:11px 13px;background:#fff}
 .card h3{margin:0 0 5px;font-size:9.5pt;color:var(--oc-red-ink);font-weight:800}
 .card .big{font-size:12pt;font-weight:800;color:var(--oc-ink);margin:0 0 5px}
+.card .big p{margin:0;font-size:inherit;font-weight:inherit;line-height:inherit;color:inherit}
 .card p{margin:0;font-size:8.7pt;color:var(--oc-ink);line-height:1.4}
 .note{margin-top:16px;border-top:1px solid var(--oc-line);padding-top:10px;font-size:7.8pt;color:var(--oc-grey);line-height:1.5}
-.note b{color:var(--oc-ink)}
+.note b,.note strong{color:var(--oc-ink)}
 .note .k{color:var(--oc-red-ink);font-weight:700}
+.note p{margin:0}
 @media print{body{font-size:10pt}.sheet{max-width:none;padding:0}.band{margin:0 0 16px}.kpi,.card,tr,.kpis,.cards{break-inside:avoid}thead{display:table-header-group}h2{break-after:avoid}}
 @page{size:A4;margin:13mm}
 </style>

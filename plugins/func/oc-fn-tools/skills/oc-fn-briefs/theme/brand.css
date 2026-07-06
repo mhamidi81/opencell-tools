@@ -57,8 +57,8 @@ body{
 h1{font-size:19pt;line-height:1.15;margin:2px 0 4px;font-weight:800;letter-spacing:-.01em}
 h1 .sub{color:var(--oc-red)}
 .meta{color:var(--oc-grey);font-size:9pt;margin:0 0 16px}
-.meta b{color:var(--oc-ink);font-weight:700}
-p.lead{margin:0 0 12px;font-size:10pt}
+.meta b,.meta strong{color:var(--oc-ink);font-weight:700}   /* <b> hand-authored · <strong> from markdown */
+.lead{margin:0 0 12px;font-size:10pt}                        /* p.lead (template) or ::: lead (markdown) */
 
 /* ── KPI tile row ─────────────────────────────────────────────────────────────────────── */
 .kpis{display:flex;gap:10px;margin:0 0 18px}
@@ -102,12 +102,14 @@ tfoot td{padding:7px 8px;font-weight:800;border-top:2px solid var(--oc-red);font
 .card{flex:1;border:1px solid var(--oc-line);border-radius:6px;padding:11px 13px;background:#fff}
 .card h3{margin:0 0 5px;font-size:9.5pt;color:var(--oc-red-ink);font-weight:800}
 .card .big{font-size:12pt;font-weight:800;color:var(--oc-ink);margin:0 0 5px}
+.card .big p{margin:0;font-size:inherit;font-weight:inherit;line-height:inherit;color:inherit} /* markdown wraps the line in a <p> */
 .card p{margin:0;font-size:8.7pt;color:var(--oc-ink);line-height:1.4}
 
 /* ── Method / caveats footnote ────────────────────────────────────────────────────────── */
 .note{margin-top:16px;border-top:1px solid var(--oc-line);padding-top:10px;font-size:7.8pt;color:var(--oc-grey);line-height:1.5}
-.note b{color:var(--oc-ink)}
+.note b,.note strong{color:var(--oc-ink)}   /* <b> hand-authored · <strong> from markdown */
 .note .k{color:var(--oc-red-ink);font-weight:700}
+.note p{margin:0}   /* markdown wraps the footnote text in a <p> */
 
 /* ── Print / PDF (A4) ─────────────────────────────────────────────────────────────────── */
 @media print{

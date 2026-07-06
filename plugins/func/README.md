@@ -11,7 +11,7 @@ Bundle plugin (`plugins/func/oc-fn-tools`) with seven skills:
 - **oc-fn-portal** — drive the Opencell Portal via Playwright for design/docs screenshots (not testing). Ships the headless `oc-fn-playwright` MCP server.
 - **oc-fn-project-management** — the design-first phased delivery methodology (gates, ADRs, repo/CI conventions).
 - **oc-fn-decks** — author & render Opencell-branded slide decks with the Marp theme (Charte Graphique 2023): theme, authoring conventions, `marp-cli` rendering, overflow + locale checks.
-- **oc-fn-briefs** — author & render branded Opencell documents (one-pagers / notes / briefs / memos): the document brand theme (Charte Graphique 2023), a fill-in one-pager template, headless-Chromium HTML → PDF rendering. The non-slide sibling of `oc-fn-decks`.
+- **oc-fn-briefs** — author & render branded Opencell documents (one-pagers / notes / briefs / memos): markdown-first (a `.md` source → Pandoc → self-contained branded HTML → headless-Chromium PDF), with a hand-authored HTML escape hatch for bespoke layouts, on the document brand theme (Charte Graphique 2023). The non-slide sibling of `oc-fn-decks`.
 - **oc-fn-gui-design** — design GUI-impacting Stories against the Opencell Figma design system (MUI v6): read components/tokens, produce a grounded screen spec (+ optional mockup), optionally author editable Figma frames in a sandbox. Feeds the Story's GUI section.
 
 **Requires** the Atlassian (Rovo) connector for the Jira/Confluence skills, and the Figma connector for `oc-fn-gui-design` — neither is bundled here; enable them in claude.ai.
