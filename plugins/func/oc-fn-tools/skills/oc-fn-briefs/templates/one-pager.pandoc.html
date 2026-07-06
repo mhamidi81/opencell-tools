@@ -1,0 +1,57 @@
+<!doctype html>
+<!--
+  Opencell branded one-pager — Pandoc HTML TEMPLATE (oc-fn-briefs skill, Tier-1 markdown path).
+
+  This is the FIXED CHROME for a markdown-authored brief: the red header band + inlined white
+  logo, the title/accent/meta/lead block, and the CSS links. The document's body comes from a
+  `.md` source (the greppable source of truth); pandoc renders it into the body slot below.
+
+  It is NOT filled by hand — pandoc renders it. See SKILL.md § Rendering (Tier 1):
+
+    pandoc <slug>.md \
+      --template <skill>/templates/one-pager.pandoc.html \
+      --lua-filter <skill>/theme/oc-brief.lua \
+      --css <skill>/theme/brand.css --embed-resources --standalone \
+      -o <slug>.html
+
+  --embed-resources inlines brand.css (and any local image) into the output, so the committed
+  <slug>.html is self-contained (offline, CSP-safe) — same guarantee as the Tier-2 template.
+  The logo is inlined here directly (fixed chrome, never changes per document).
+
+  Metadata variables (set in the .md YAML front matter):
+    title   — document title (required)
+    accent  — trailing phrase rendered in red after the title (optional)
+    tag      — classification pill in the header band (optional, e.g. "Internal · confidential")
+    meta    — the grey context line under the title (optional; markdown inline OK, e.g. **bold**)
+    lead    — an intro sentence rendered as p.lead (optional)
+    lang    — document language (optional; defaults to en)
+-->
+<html lang="$if(lang)$$lang$$else$en$endif$">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>$if(title)$$title$$else$Opencell document$endif$</title>
+$for(css)$
+<link rel="stylesheet" href="$css$">
+$endfor$
+$for(header-includes)$
+$header-includes$
+$endfor$
+</head>
+<body>
+<div class="sheet">
+  <div class="band">
+    <svg viewBox="0 0 2000 750" role="img" aria-label="Opencell" fill="#ffffff"><path d="M1928.8,450.1V249.8h-58v250.4H2000v-50.1H1928.8z M1731,450.1V249.8h-58v250.4h129.1v-50.1H1731z M1591.4,296.3v-46.5h-152.8v250.4h152.8v-46.5h-94.8v-55.1h94.8v-45.4h-94.8v-56.9H1591.4z M1306.3,410.4c-7.2,24.7-29.3,44-63,44c-45.4,0-75.8-35.4-75.8-79.4c0-41.5,27.2-79.4,75.1-79.4c36.9,0,59,22.2,64.4,51.5h60.4c-6.8-57.6-52.2-103.7-125.6-103.7c-85.5,0-133.4,63-133.4,131.6c0,70.1,50.4,131.7,134.1,131.7c70.1,0,115.6-43.3,125.2-96.2H1306.3z M889.2,249.8h-60.5v250.4h58v-161l90.1,161h60.5V249.8h-57.6v163.1L889.2,249.8z M747.2,296.3v-46.5H594.4v250.4h152.8v-46.5h-94.8v-55.1h94.8v-45.4h-94.8v-56.9H747.2z M429.1,383.6h-39.7V297h39.7c24.3,0,40.1,20,40.1,43.3C469.2,363.6,453.5,383.6,429.1,383.6 M331.5,500.2h58v-69.4h46.9c55.5,0,91.2-41.9,91.2-90.5c0-48.7-35.8-90.5-91.2-90.5H331.5V500.2z M61.1,406.9c11.9,24.8,37.3,42,66.6,42c29.4,0,54.7-17.2,66.6-42h61.1c-14.3,57.3-66,99.8-127.7,99.8C66,506.6,14.3,464.2,0,406.9H61.1z M194.4,343.1c-11.9-24.8-37.3-42-66.6-42c-29.4,0-54.7,17.2-66.6,42H0c14.3-57.3,66-99.8,127.7-99.8c61.7,0,113.5,42.5,127.7,99.8H194.4z"/></svg>
+$if(tag)$    <span class="tag">$tag$</span>
+$endif$  </div>
+$if(title)$
+  <h1>$title$$if(accent)$ <span class="sub">$accent$</span>$endif$</h1>
+$endif$
+$if(meta)$  <p class="meta">$meta$</p>
+$endif$
+$if(lead)$  <p class="lead">$lead$</p>
+$endif$
+$body$
+</div>
+</body>
+</html>
