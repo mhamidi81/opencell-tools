@@ -1,18 +1,22 @@
 ---
 name: oc-fn-decks
-version: 1.1.0
-updated: 2026-07-03T09:29:57+02:00
+version: 1.3.1
+updated: 2026-07-09T19:05:00+02:00
 author: Stéphane Chambrin
 description: >
   Author and render branded slide decks with the Opencell Marp theme (Charte
-  Graphique 2023). Load this skill whenever the user mentions a slide deck, a
-  presentation, slides, a pitch deck, a SteerCo deck, Marp, `.pptx` / PowerPoint,
-  or rendering a Markdown deck to HTML/PDF/PPTX — or asks to build, style, or
-  render an Opencell-branded deck. Carries the theme master (`theme/`), the
-  authoring conventions (lead slides, front-matter, one-way mirror), the
-  `marp-cli` render command, the overflow check, and the 24h-time / ISO-date
-  locale non-negotiable. Used for the **Phase-2 approval deck** in
-  `oc-fn-project-management` and for standalone strategy / SteerCo decks.
+  Graphique 2023) and/or as editable PowerPoint files on the OFFICIAL Opencell
+  PPT template. Load this skill whenever the user mentions a slide deck, a
+  presentation, slides, a pitch deck, a SteerCo deck, Marp, `.pptx` /
+  PowerPoint, the official template, or rendering a Markdown deck to
+  HTML/PDF/PPTX — or asks to build, style, or render an Opencell-branded deck.
+  Carries the theme master (`theme/`), the official-template PPTX lane
+  (`pptx/` + `pptx.md`: curated pandoc reference, embedded fonts, deck2pptx
+  pipeline), the authoring conventions (lead slides, front-matter, one-way
+  mirror), the `marp-cli` render command, the overflow check, and the
+  24h-time / ISO-date locale non-negotiable. Used for the **Phase-2 approval
+  deck** in `oc-fn-project-management` and for standalone strategy / SteerCo
+  decks.
 ---
 
 # Opencell slide decks — authoring & rendering with the Marp theme
@@ -42,6 +46,21 @@ must quantify*), or a standalone strategy / SteerCo deck.
   technical design vs. product value); `audience` fixes *tone* (formal SteerCo vs. informal team)
   and *depth* (headline-level for execs; detailed for practitioners).
 
+## Two deliverables — the audience also picks the lane
+
+One `.md` source, two renders:
+
+- **Marp HTML** (this file) — the presentation aid: self-contained, presenter view, 24h clock.
+  Sufficient on its own for working sessions and internal product-team decks.
+- **Official-template PPTX** (`pptx.md`) — an editable PowerPoint on the official Opencell
+  template. **Mandatory deliverable for SteerCo, customers, partners — any deck leaving the
+  product team** (company-wide template mandate; the CEO checks). Rendered from the *same*
+  `.md` via `pptx/deck2pptx.py`.
+
+The conventions below keep the source valid for both lanes; the PPTX-side deltas (front-matter
+metadata, `<!-- note: … -->`, no fenced divs) live in `pptx.md` — read it before authoring a
+deck that will ship as PPTX.
+
 ## Where the theme lives (and why it's in two places)
 
 - **Canonical master:** `theme/` in this skill — `opencell.css` + `opencell-logo-red.svg`
@@ -60,6 +79,9 @@ consuming repo keeps a working copy. Skill = source of truth; repo = the copy de
 `assets/marp/`. In a **shared design repo**, `assets/marp/` lives **once at the shared repo root**
 (shared by every initiative), not duplicated per initiative; a per-initiative deck references it via
 the relative path to the root.
+
+The same master/working-copy rule applies to the PPTX lane: this skill's `pptx/` is the canonical
+master; a repo producing official decks gets a copy at **`<repo-root>/assets/pptx/`**.
 
 ## The theme (Opencell Charte Graphique 2023)
 
@@ -80,7 +102,9 @@ Defined in `theme/opencell.css` (`/* @theme opencell */`, extends Marp `default`
 
 - **Front-matter:** `marp: true`, `theme: opencell`, `paginate: true`, and a `footer:` (e.g.
   `'© <year> Opencell — Internal · <initiative>'`). Do **not** set a `header:` — the logo is
-  the brand mark.
+  the brand mark. Add the deck metadata keys **`title:`**, **`subtitle:`** (fold the date in)
+  and **`author:`** (`'Name — Role, Opencell'`): Marp ignores them, and the PPTX lane builds
+  its cover from them — they must say the same thing as the title slide below.
 - **Title & closing slides:** `<!-- _class: lead -->` (red background, white text). On both, add
   `<!-- _footer: '' -->` (so the footer doesn't collide with the white logo) and
   `<!-- _paginate: false -->` (page numbers off on the bookends).
@@ -99,23 +123,37 @@ Defined in `theme/opencell.css` (`/* @theme opencell */`, extends Marp `default`
   <Presenter Name> — <Role>, Opencell
   <Month YYYY>
   ```
-- **Closing slide — required content:** an `#` **H1** `Thank you`, followed by a **short recap** —
-  2–3 bullet phrases restating the key takeaways (for a Phase-2 / SteerCo deck: the recommendation
-  and the ask). Keep it to headlines — it's a bookend, not a summary essay. The full closing slide:
+- **Section slides:** a mid-deck slide holding **only** a bare `#` H1 (plus the `lead`
+  directives) marks a section break — red lead slide in HTML, photo section divider in the
+  PPTX lane. Keep them H1-only; any other content belongs on the following `##` slides.
+- **Closing — two slides:** first a **`## The ask`** content slide carrying the recap — 2–3
+  bullet phrases (for a Phase-2 / SteerCo deck: the recommendation, the ask, next step or
+  contact) — then the bookend, a lead slide with **only** an `#` H1 `Thank you`:
 
   ```markdown
+  ## The ask
+
+  - <Key takeaway / the recommendation>
+  - <The ask / decision needed>
+  - <Next step or contact>
+
+  ---
+
   <!-- _class: lead -->
   <!-- _paginate: false -->
   <!-- _footer: '' -->
 
   # Thank you
-
-  - <Key takeaway / the recommendation>
-  - <The ask / decision needed>
-  - <Next step or contact>
   ```
+
+  (The recap does not sit on the Thank-you slide itself: content under an H1 breaks the PPTX
+  render — see `pptx.md`.)
+- **Speaker notes:** an HTML comment `<!-- note: <text> -->` after a slide's content — Marp
+  presenter view shows it, and the PPTX lane converts it into a real PowerPoint speaker note.
 - **Structure that fits the brand:** one `##` (H2) title per content slide; short bullet phrases;
-  tables for inventories/asks (they render full-width with a black header + zebra rows). A red title +
+  tables for inventories/asks (they render full-width with a black header + zebra rows). **A table
+  (or image) goes LAST on its slide** — commentary above it, never below: in the PPTX lane, content
+  after a table spills onto an untitled continuation slide (see `pptx.md`). A red title +
   red closing slide make natural bookends.
 - **One-way mirror:** the **`.md` is the source of truth** (commit it, alongside the in-repo
   `assets/marp/` theme). The rendered **HTML/PDF/PPTX are untracked mirrors — never hand-edit them**;
@@ -147,6 +185,9 @@ npx -y @marp-team/marp-cli <path>/<deck>.md \
 - `--html` — pass it always; required when the deck embeds raw HTML or a `<script>` (e.g. the 24h-clock
   override); harmless otherwise.
 - Swap `-o ….pdf` or `--pptx` for other formats — **both need a local Chromium** (the HTML render does not).
+  Marp's `--pptx` produces image-slides (not editable) and ignores the official template — for the
+  **official editable PPTX deliverable**, use the pandoc lane instead: `python3
+  assets/pptx/deck2pptx.py <deck>.md` (see `pptx.md`).
 - `marp-cli` is invoked via `npx -y` (not usually installed globally).
 
 ## Overflow — always check before sharing

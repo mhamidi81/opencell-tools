@@ -1,14 +1,14 @@
 ---
 name: oc-fn-func-design
-version: 1.20.0
-updated: 2026-07-03T18:00:00+02:00
+version: 1.21.0
+updated: 2026-07-09T17:30:00+02:00
 author: Stéphane Chambrin
 description: >
   Rules and reference data for working with Jira issues in the Opencell INTRD project
   (opencellsoft.atlassian.net). Use this skill whenever the user mentions Jira, INTRD,
   User Story, Epic, Bug, Feature, or Initiative — including creating, reading, updating, or writing
   content for any issue type. Also trigger when the user asks about custom fields,
-  acceptance criteria, functional design, requirements, or issue templates for Opencell —
+  acceptance criteria, functional design, requirements, product-area Components (modules), or issue templates for Opencell —
   and for the scaffold/read/review side of a Story's Technical Design (creating the empty
   customfield_10137 template, or reviewing it). Authoring/filling the Technical Design field
   is the architect lane — defer to oc-ar-tech-design for "write the technical design for INTRD-*".
@@ -78,6 +78,24 @@ Load only the file relevant to the current task — do not pre-read all of them.
 
 - All Jira issues must be written in **English**.
 - Minimise token usage on every call. First pick the cheapest transport (see [Transport](#transport--rovo-mcp-baseline-vs-the-optional-jira-helper) — default to the `jira` helper when it is installed; otherwise use the Rovo MCP for every operation). Then, on whichever transport, pass an explicit `fields` allowlist (see [Reading efficiency](#reading-efficiency--field-selection)) and prefer `markdown` over ADF on MCP calls whenever possible (see [Content format policy](#content-format-policy--adf-vs-markdown)).
+
+## Product area — set the module Component
+
+INTRD carries the **product-area axis as a Jira Component** (the "module") — orthogonal to both the issue *type* and the altitude hierarchy (Initiative → Epic → Story/Enabler). Its purpose is **cost attribution**: an issue's effort must land in exactly one **primary** product module.
+
+- **Set the primary module Component on every Epic, Story, and Enabler you create** (and on a Bug, the module of the affected area). Pick the single module that best owns the work.
+- **Cross-tag a second Component only when the work genuinely spans modules** — e.g. a business screen that also advances the shared front-end substrate → its **business module (primary) + `Portal platform`** (cross-tag). Never park business-screen work in `Portal platform`.
+- **The 30 modules:**
+  - **Quote-to-Cash (13):** Catalog · CPQ · Customer & contract management · Mediation · Rating · Billing · Invoicing · Accounts Receivable · Accounting · Dunning · Payments · Revenue recognition · Reporting
+  - **Platform (3):** Core · Extensibility · Opencell AI
+  - **Front-end (1):** Portal platform *(shared substrate only)*
+  - **Connectors — CRM (2):** Salesforce · HubSpot
+  - **Connectors — Payment (5):** Stripe · Ingenico · GoCardless · Slimpay · SIPS
+  - **Channels (4):** Marketplace · Partner care · Selfcare · Marketing manager
+  - **Energy (2):** Energy vertical · Energy market communications
+- **`Backend` / `Frontend` are a *different* axis** (engineering layer, not product area) that coexists on the same field — an issue may carry `[Backend, Billing]`. Leave any existing `Backend`/`Frontend` in place; **add** the module Component, never replace the `components` field wholesale.
+- **Not a module:** irreducible cross-cutting tech/functional debt has **no** Component (a non-module bucket, not a label) — don't invent a "debt" Component.
+- The module is the *dimension* of work; **altitude** (Initiative/Epic/Story/Enabler) is the separate hierarchy (see `initiatives.md`). The old `Feature` type is **dissolved** — replaced by this Component axis plus the `Initiative` type.
 
 ## Authoring boundary — User Stories are functional, never technical
 
