@@ -556,27 +556,43 @@ Provide Postman collection with:
 
 ### Test Data Variables
 
-**CRITICAL: Use dynamically generated or sequence-based codes, not hardcoded values**
+**CRITICAL: The ONLY collection variable for building codes is a per-domain sequence number. Everything else is written literally in the request body.**
 
-- Use timestamps or UUIDs for unique codes: `"code": "CPI_{{$timestamp}}"`
-- Use sequential numbers: `"code": "BATCH_001"`, `"code": "BATCH_002"`
-- Store generated values in environment variables for reuse across requests
-- This allows tests to be run multiple times without conflicts
+1. **Iteration number = a sequence, NOT a timestamp.** In the folder's first pre-request script, increment a stored counter:
+   ```javascript
+   let iterationNr = parseInt(pm.collectionVariables.get("iteration_nr") || "0", 10) + 1;
+   pm.collectionVariables.set("iteration_nr", iterationNr);
+   ```
+   Do NOT use `Date.now()` / `{{$timestamp}}` — a readable, reproducible sequence number is required.
+
+2. **Build codes as a descriptive literal prefix + the sequence number, written directly in the body** — do not hide them behind per-code variables:
+   - ✅ `"code": "CONTRACT_TEST_SUB_FOR_CONTRACT_{{iteration_nr}}"`
+   - ❌ `"code": "{{test_sub_code}}"` (forces the reader to hunt for what `test_sub_code` is)
+
+3. **Static values are literals, never variables.** A value that never changes (an article code `ART-STD`, an invoice type `COM`, a category `CONSUMPTION`, a seller `SELLER_FR`) is written directly in the body. Do NOT do `pm.collectionVariables.set("test_accounting_article_code", "ART-STD")` and then reference `{{test_accounting_article_code}}` — it makes request bodies unreadable. Only IDs the server generates at runtime (invoice id, line id) are stored in variables and referenced back.
 
 **Example:**
 
 ```javascript
-// In create request Pre-request Script:
-pm.environment.set("batch_code", "BATCH_" + Date.now());
+// Pre-request: only the sequence counter
+let iterationNr = parseInt(pm.collectionVariables.get("iteration_nr") || "0", 10) + 1;
+pm.collectionVariables.set("iteration_nr", iterationNr);
 
-// In request body:
+// Request body: descriptive code + sequence, statics inline
 {
-    "code": "{{batch_code}}"
+    "code": "INVOICE_CRUD_BA_{{iteration_nr}}",
+    "customerAccount": "INVOICE_CA_{{iteration_nr}}",
+    "billingCycle": "INVOICE_BC_{{iteration_nr}}",
+    "country": "FR"
 }
-
-// In subsequent requests, reuse the variable:
-GET {{opencell.url}}/v2/indexation/batches/{{batch_code}}
 ```
+
+### Per-folder data isolation
+
+**Test folders must not share a data-aggregation root whose contents accumulate and make results order-dependent.** When a domain rolls data up under a parent entity — and one folder's activity would otherwise change what another folder sees on that parent — give each folder its own instance of that parent so every folder is independently reproducible regardless of which folders run or in what order. Shared, immutable reference data (sellers, articles, calendars, tax classes, etc.) can and should stay shared.
+
+- **Invoicing** aggregates invoice lines and unbilled data per **billing account**, so each invoicing folder MUST create and use its **own billing account** — otherwise lines from one folder leak into another folder's invoices (and the invoice-create can link stray unbilled lines). Give each folder a distinct, descriptive BA code, e.g. `INVOICE_CRUD_BA_{{iteration_nr}}`, `INVOICE_STATUS_BA_{{iteration_nr}}`, `INVOICE_LINES_BA_{{iteration_nr}}`, `INVOICE_BILLING_RUN_BA_{{iteration_nr}}`.
+- **Other domains** where folders only read/modify their own explicitly-created entities (no shared aggregation root) can safely reuse the same billing account / customer hierarchy.
 
 ## API Call Verification
 
@@ -704,14 +720,17 @@ For child entities: Create parent first, delete parent last
 
 - Test error scenarios in separate requests (e.g., "Create with missing required field")
 - Error tests don't need cleanup if entity wasn't created
-- Use descriptive names indicating expected error: "Create without code - should fail"
+- **A test that deliberately expects a failure/error response MUST have a name ending in `" - fail"`.** This makes negative tests obvious at a glance and greppable. Example: `"INV-DL-002 Delete validated invoice (error) - fail"`, `"Create without code - fail"`. A test whose name does NOT end in `" - fail"` must assert a success status; a test whose name DOES end in `" - fail"` must assert the specific error status (e.g. `400`/`404`), never a success code.
 
 ### Test Assertions
 
 **CRITICAL: Use specific value assertions, not existence checks**
 
 - **DO**: Assert exact expected values - `pm.expect(jsonData.status).to.eql("DRAFT")`
-- **DON'T**: Assert field existence only - `pm.expect(jsonData.status).to.exist`
+- **DON'T**: Assert field existence only - `pm.expect(jsonData.status).to.exist` or `pm.expect(jsonData.status).to.not.be.undefined`
+- **NEVER use `.to.not.be.undefined` / `.to.exist` for validation.** You control the request body, so you know the exact value to expect — assert it. For server-generated values you cannot know exactly, assert the concrete shape/constraint instead (`.to.be.a("number")`, `.to.be.a("string").with.length.above(0)`), never mere existence.
+- **Derive computed values from inputs.** Amounts follow from the submitted lines and the known tax rate (e.g. 3 lines 100 + 125 + 50 = 275 net; at 5% tax → `amountTax` 13.75, `amountWithTax` 288.75). Assert those exact numbers, not `to.be.above(0)`.
+- **At least one create (or update) request MUST validate ALL fields** of the returned DTO against concrete expected values — every echoed scalar, every default flag, and the full aggregate/line tree — so the response contract is fully pinned by at least one test.
 
 **Example:**
 
@@ -733,3 +752,32 @@ pm.test("Response has status", function () {
     pm.expect(jsonData.status).to.exist; // Could be any value!
 });
 ```
+
+### HTTP Status Code Assertions
+
+**CRITICAL: Assert one exact status code per request — never a set.**
+
+Each endpoint returns a single, deterministic status, so assert it exactly:
+
+- Create (`POST`) → `pm.response.to.have.status(201)`
+- Update / lifecycle action (`PUT`, `PATCH`) → `pm.response.to.have.status(200)`
+- Get / List (`GET`) → `pm.response.to.have.status(200)`
+- Error scenario → the one expected error status, e.g. `pm.response.to.have.status(400)`
+
+**The ONLY exception is `*/createOrUpdate` endpoints**, which return `201` when they create and `200` when they update — those may legitimately use `pm.expect(pm.response.code).to.be.oneOf([200, 201])`.
+
+```javascript
+// ✅ CORRECT - a create endpoint always returns 201
+pm.test("Status code is 201", function () {
+    pm.response.to.have.status(201);
+});
+
+// ❌ WRONG - hedging on the status hides a wrong response code
+pm.test("Status code is 200 or 201", function () {
+    pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+});
+```
+
+### Invoice auto-validation (`isAutoValidation`)
+
+When creating an invoice, **omitting `isAutoValidation` makes the invoice auto-validate** (status `VALIDATED`, invoice number assigned). A test that then exercises a lifecycle transition needing a non-validated invoice (validate / cancel / reject / quarantine a `DRAFT`) MUST set `"isAutoValidation": false` in the create body, otherwise the invoice is already `VALIDATED` and the transition fails.
