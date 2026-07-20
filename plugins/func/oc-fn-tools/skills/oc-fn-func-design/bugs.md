@@ -14,11 +14,16 @@ behaviour, it is a User Story or an Enabler, not a Bug.
 ## Template
 
 The Bug template is **INTRD-5340**. It uses the standard `description` field with the shared
-ADF vocabulary in [`SKILL.md` § Templates index](SKILL.md#templates-index) — including the
-read-side `description` gotcha (it fetches as Markdown; verify panels/colours with
+ADF structure in [`SKILL.md` § Templates index](SKILL.md#templates-index) — including the
+read-side `description` gotcha (it fetches as Markdown; verify structure with
 `expand: "renderedFields"`). **Read the template first**, then reproduce its structure: new
-Bugs written from it must be ADF with the dark-red (`#bf2600`) `strong` headings each
-followed by a `rule` node, not plain Markdown.
+Bugs written from it must be ADF with `strong` headings each followed by a `rule` node and the
+note panels, not plain Markdown.
+
+> **Bug headings carry *no* colour.** Unlike the Epic / Initiative / Enabler / Story / CR
+> templates (dark-red `#bf2600` headings), the Bug template's headings are **plain `strong`
+> with no `textColor`**. Do **not** add `#bf2600` to a Bug's headings — match the template
+> exactly (plain `strong` + `rule` + note panel).
 
 ## Fields
 

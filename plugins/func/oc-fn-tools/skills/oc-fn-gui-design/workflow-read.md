@@ -66,18 +66,25 @@ The design goes into the Story's *Functional design → GUI* section (`customfie
 `oc-fn-func-design` owns and writes. This skill produces the artifacts; func-design writes them in.
 Deliver all three (see `SKILL.md` § *Output contract*):
 
-1. **Figma link (source of truth)** — the node-specific URL of the frame (Mode A: the analogous
-   existing frame you referenced, or the new frame if Mode B ran). Hyperlink or Jira smart-link.
-2. **Screenshot (dated snapshot)**:
+1. **Figma link (source of truth) — always present, always clickable.** The node-specific URL of the
+   frame (Mode A: the analogous existing frame you referenced, or the new frame if Mode B ran), so the
+   dev reaches the live design in **one click**. Embed it as a real ADF `link` mark (`text` node with
+   `marks:[{type:"link",attrs:{href}}]`) — Jira does **not** auto-linkify raw URLs in ADF fields, so a
+   pasted URL renders as plain unclickable text. Never ship the GUI section without a clickable link.
+2. **Screenshot (dated snapshot) — attached AND inlined in the field body.**
    - Produce the PNG: `get_screenshot(fileKey, nodeId)` returns a short-lived URL + a curl command —
      run the curl to save the PNG to disk (or use `download_assets`). Do **not** base64 it into
-     context.
-   - Hand the file path to `oc-fn-func-design`, which **attaches it to the Story as a regular
-     attachment** and then references it from the GUI-section ADF. Because the **Rovo MCP has no
-     attachment-upload tool**, the upload goes through the `jira` helper (`~/.local/bin/jira`,
-     `POST …/issue/<key>/attachments`) or the user drags it in. **Never embed as an orphan
-     inline-media node** — that is func-design's *Destructive edits on fields containing inline media*
-     rule; an orphan media node can't be recovered via REST.
+     context. Note its pixel `width`/`height` (needed for the media node).
+   - Hand the file path to `oc-fn-func-design`, which (a) **attaches it to the Story as a regular
+     attachment** (Rovo MCP has no upload tool → `jira` helper / `curl`
+     `POST …/issue/<key>/attachments`, header `X-Atlassian-Token: no-check`, or the user drags it in),
+     and (b) **embeds it inline in the GUI-section ADF** so the design shows in the field body.
+   - **Inline-embed recipe:** do NOT use a `media` node of `type: "file"` with the Jira attachment id
+     — it fails validation (`ATTACHMENT_VALIDATION_ERROR`; the Media Services fileId isn't exposed by
+     REST). Use a `mediaSingle` → `media` node of **`type: "external"`** with
+     `url = https://<site>.atlassian.net/rest/api/3/attachment/content/<attachmentId>` (+ width/height).
+     It validates and renders inline for authenticated users. The file must ALSO stay a real
+     attachment (backup + satisfies the *Destructive edits on inline media* rule — nothing orphaned).
    - Caption: `Snapshot — <frame name> — as of <YYYY-MM-DD>`.
 3. **Grounded spec** — the component-by-component breakdown (DS component → MUI v6 → token bindings),
    layout, states, responsive notes, and the EN+FR label table. This is what func-design writes as
@@ -136,6 +143,7 @@ Tokens: titles → `Font_Tokens/font_size/text_h2`·`h3`, body/fields → `body1
 
 **5. Land it in the Story** (§ *Land the design in the Story*): Figma link
 `figma url DZ7EnuPmWBlkAsjHgEsoqI 3756:20173`
-→ `https://www.figma.com/design/DZ7EnuPmWBlkAsjHgEsoqI/?node-id=3756-20173` (source of truth); the
-PNG attached and captioned `Snapshot — Customer 360° · General information — as of <date>`; and the
-component/token/label spec above as the GUI-section substance — a build-ready screen, not prose.
+→ `https://www.figma.com/design/DZ7EnuPmWBlkAsjHgEsoqI/?node-id=3756-20173` (source of truth, always
+present); the PNG attached **and inlined in the field body** (external-URL media node, § *Land the
+design in the Story*) and captioned `Snapshot — Customer 360° · General information — as of <date>`;
+and the component/token/label spec above as the GUI-section substance — a build-ready screen, not prose.
