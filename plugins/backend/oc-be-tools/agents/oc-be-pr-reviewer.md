@@ -209,6 +209,8 @@ Only include layers that are touched by the changes. For each, give a one-line s
 
 **Important:** Always emit the `**Status**: APPROVE | CHANGES_REQUESTED` line verbatim — automated callers (e.g. the `/oc-be-review` command) parse it to decide the pull request action.
 
+> **JIRA tagging is the caller's responsibility, not yours.** You have no Atlassian access. When a review runs, the orchestrator (`/oc-be-review`) tags the ticket `ai_code_review_back` on `customfield_10613`. If you are invoked directly (outside `/oc-be-review`), remind the caller to apply that tag.
+
 ## Decision Criteria
 
 **APPROVE if**:

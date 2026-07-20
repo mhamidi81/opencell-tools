@@ -118,7 +118,7 @@ Wait for user to review and approve the plan.
   "run_id": "{RUN_ID}",
   "planning_started": "<ISO-8601 UTC when Phase 1 began>",
   "plan_approved": "<ISO-8601 UTC now>",
-  "revision_rounds": <how many approve/revise cycles the plan went through before this approval; 0 if approved as first draft>,
+  "revision_rounds": <plan iterations: how many times you presented the plan to the developer; 1 if approved on first presentation, +1 for each requested revision>,
   "plan_word_count": <word count of the approved plan>,
   "plan_text": "<the approved architecture plan, verbatim>",
   "notes": "<1-2 lines: the key design decisions or ambiguities resolved with the developer>"
@@ -126,7 +126,7 @@ Wait for user to review and approve the plan.
 ```
 
 - Get timestamps with `date -u +%Y-%m-%dT%H:%M:%SZ`; track `planning_started` from when you began Phase 1.
-- `revision_rounds` is the strongest signal of analysis depth — count each round where the developer asked for a change before approving.
+- `revision_rounds` (plan iterations) is the strongest signal of analysis depth — 1 means approved on first presentation; add 1 for each revision the developer asked for.
 - Best-effort and non-blocking: if writing fails, continue the implementation normally.
 
 ### Phase 3: Implementation

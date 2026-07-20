@@ -1,5 +1,5 @@
 ---
-description: Estimate how much of the current work came from AI (Claude Code) and how much of the AI's suggestions survived, using this session's transcript, the oc-be-implement sub-agent manifests, and file-history vs. the last commit (or uncommitted changes). Breaks the numbers down by artifact category and by first-pass-vs-fix provenance, and — for planning-heavy tickets with little code — reports the AI's planning/analysis effort as a separate band. Lets the developer adjust, then posts the result as a comment on the branch's JIRA ticket and tags it as backend_dev.
+description: Estimate how much of the current work came from AI (Claude Code) and how much of the AI's suggestions survived, using this session's transcript, the oc-be-implement sub-agent manifests, and file-history vs. the last commit (or uncommitted changes). Breaks the numbers down by artifact category and by first-pass-vs-fix provenance, and — for planning-heavy tickets with little code — reports the AI's planning/analysis effort as a separate band. Also counts unit tests added/modified and Postman assertion-vs-setup requests. Lets the developer adjust, then posts the result as a comment on the branch's JIRA ticket and tags it (customfield_10613) as ai_Dev_back for code and ai_test_back_dev for newly added tests.
 argument-hint: "[--working | --commit <ref>] [--run <RUN_ID>]"
 ---
 
@@ -47,6 +47,20 @@ Some tickets are mostly planning and discussion — the `/oc-be-implement` requi
 | **assistant turns** | planning-phase assistant messages |
 
 These roll up to an **effort band — Low / Medium / High** (thresholds are seed values in `planning_band()`, meant to be tuned against your real runs). Preferred source is the planning manifest written by `/oc-be-implement` at plan approval; if absent, the analyzer **reconstructs** the window from the transcript — everything before the first code-producing action (first `Write`/`Edit` to a repo file, or the first builder sub-agent dispatch), scoped to the current branch via `gitBranch`. When fewer than `MEANINGFUL_CODE_MIN` (20) lines were added, the ticket is flagged **`planning-dominant`** and the effort band — not the code % — becomes the headline.
+
+### Artifact counts & test-vs-setup
+
+Alongside line counts, the analyzer reports concrete test counts (independent of AI attribution — computed from the commit itself):
+
+- **Unit tests** — `@Test` methods in changed `src/test` `.java` files, split into **added** (method not in the base version) and **modified** (present before, body changed), plus `methods_total` in the final files.
+- **Postman** — every request in changed `*.postman_collection.json`, split into **assertion requests** (a `test` script containing `pm.test` / `pm.expect` / `pm.response.to` / `tests[...]` — the actual tests) and **setup/cleanup requests** (no assertions — data prep/teardown). Also `added_requests` / `added_assertion_requests` vs the base collection, so you see what this commit introduced rather than the whole collection.
+
+### Tags applied to `customfield_10613`
+
+Two tags, either or both:
+
+- **`ai_Dev_back`** — code changes excluding unit tests (added lines in production / migration / other source).
+- **`ai_test_back_dev`** — newly added unit tests and/or Postman requests (`tests.added > 0` or `postman.added_requests > 0`).
 
 > **These are best-effort estimates, not ground truth.** Contribution is complete when sub-agent manifests exist (they record sub-agent-created files that are otherwise invisible). Retention is content-based: a line AI wrote and later reworked — by AI *or* by the developer — will not match the final and counts as *not preserved*; that churn is expected and is the usual reason retention is well below 100% even when contribution is 100%. For files with no captured content (a sub-agent-created file present only in a manifest, never edited in the main context and not in file-history), contribution is counted but retention cannot be — this is reported as a warning. **The developer review step (Task 6) is the source of truth: the numbers can always be corrected before posting.**
 
@@ -113,10 +127,13 @@ python "<SCRATCHPAD>/ai_use_analyzer.py" \
   --mode commit --commit HEAD          # or: --mode working
 ```
 
-Every source flag except `--repo` is optional. `--branch` scopes planning reconstruction to sessions on the current branch (pass `git branch --show-current`); omit it in working mode if unsure. It prints a JSON object with `work_type`, `planning`, `overall`, `by_category`, `provenance`, `retention`, `sources`, and `warnings`. Percentages are rounded to the nearest 5% (`round(x/5)*5`, clamped 0–100). A percentage is `null` when its denominator is 0 — treat it as "unknown".
+Every source flag except `--repo` is optional. `--branch` scopes planning reconstruction to sessions on the current branch (pass `git branch --show-current`); omit it in working mode if unsure. It prints a JSON object with `work_type`, `planning`, `overall`, `by_category`, `provenance`, `artifacts`, `suggested_tags`, `sources`, and `warnings`. Percentages are rounded to the nearest 5% (`round(x/5)*5`, clamped 0–100). A percentage is `null` when its denominator is 0 — treat it as "unknown".
 
 - `work_type` is `code`, `planning-dominant` (< 20 lines added but planning effort detected), or `minimal-change`.
 - `planning` carries `detected`, `source` (`manifest`/`transcript`), `effort_band` (Low/Medium/High), `revision_rounds`, `analysis_tool_calls`, `plan_word_count`, `duration_minutes`, `assistant_turns`.
+- `by_category[c].added` is the added **line count** per artifact category (production/migration/tests/postman/docs/other).
+- `artifacts.tests` = `{files, methods_total, added, modified}` (unit-test methods, via `@Test` method-body diff of base-vs-final). `artifacts.postman` = `{files, requests_total, assertion_requests, setup_requests, added_requests, added_assertion_requests}` — `assertion_requests` are real tests (a `test` script with `pm.test`/`pm.expect`/`pm.response.to`/`tests[...]`); `setup_requests` are non-asserting data setup/cleanup calls.
+- `suggested_tags` ⊆ `{ai_Dev_back, ai_test_back_dev}` — see Task 6b.
 
 ### `ai_use_analyzer.py`
 
@@ -124,7 +141,7 @@ Every source flag except `--repo` is optional. `--branch` scopes planning recons
 #!/usr/bin/env python3
 """Estimate AI contribution/retention for the current work from sub-agent manifests,
 the session transcript, and file-history, vs. the final code."""
-import argparse, glob, json, os, subprocess
+import argparse, glob, json, os, re, subprocess
 from datetime import datetime
 
 ANALYSIS_TOOLS = {"Read", "Grep", "Glob", "Bash", "WebFetch", "WebSearch", "LS"}
@@ -273,6 +290,102 @@ def final_content(repo, rel, mode, ref):
 
 def round5(x): return max(0, min(100, int(round(x / 5.0) * 5)))
 def pct(a, b): return round(100 * a / b, 1) if b else None
+
+# ---- artifact counts: unit tests & Postman assertions ----
+def changed_paths(repo, mode, ref):
+    res = git(repo, "diff", "--name-only", "HEAD") if mode == "working" \
+          else git(repo, "diff", "--name-only", f"{ref}~1..{ref}")
+    return [p.strip().replace("\\", "/") for p in res.stdout.splitlines() if p.strip()]
+
+def file_versions(repo, rel, mode, ref):
+    """(base_src, final_src); base is '' for a newly added/unavailable file."""
+    if mode == "working":
+        b = git(repo, "show", f"HEAD:{rel}")
+        base = b.stdout if b.returncode == 0 else ""
+        p = os.path.join(repo, rel)
+        final = open(p, encoding="utf-8", errors="replace").read() if os.path.isfile(p) else ""
+    else:
+        b = git(repo, "show", f"{ref}~1:{rel}");  base  = b.stdout if b.returncode == 0 else ""
+        f = git(repo, "show", f"{ref}:{rel}");     final = f.stdout if f.returncode == 0 else ""
+    return base, final
+
+_TEST_NAME = re.compile(r'\b([A-Za-z_]\w*)\s*\(')
+def extract_test_methods(src):
+    """Map each @Test method name -> its normalized body. Heuristic brace matching;
+    good enough to tell added-vs-modified test methods apart for an estimate."""
+    methods, lines = {}, src.splitlines()
+    n, i = len(lines), 0
+    while i < n:
+        if re.search(r'@Test\b', lines[i]):
+            j = i + 1
+            while j < n and j - i <= 8 and '(' not in lines[j]:  # skip further annotations/modifiers
+                j += 1
+            if j < n and '(' in lines[j]:
+                mm = _TEST_NAME.search(lines[j])
+                name = mm.group(1) if mm else f"test@{j}"
+                depth, started, body, k = 0, False, [], j
+                while k < n:
+                    body.append(lines[k])
+                    depth += lines[k].count('{') - lines[k].count('}')
+                    if '{' in lines[k]: started = True
+                    if started and depth <= 0: break
+                    k += 1
+                while name in methods: name += "_"   # de-dup overloads
+                methods[name] = "\n".join(norm(x) for x in body if norm(x) and not triv(norm(x)))
+                i = k + 1
+                continue
+        i += 1
+    return methods
+
+def java_test_stats(repo, mode, ref, changed):
+    files = [p for p in changed if category(p) == "tests"]
+    added = modified = total = 0
+    for rel in files:
+        base_src, final_src = file_versions(repo, rel, mode, ref)
+        base_m, final_m = extract_test_methods(base_src), extract_test_methods(final_src)
+        total += len(final_m)
+        for name, body in final_m.items():
+            if name not in base_m: added += 1
+            elif base_m[name] != body: modified += 1
+    return {"files": len(files), "methods_total": total, "added": added, "modified": modified}
+
+_PM_ASSERT = re.compile(r'pm\.test\s*\(|pm\.expect\s*\(|pm\.response\.to\b|\btests\s*\[')
+def _pm_requests(items):
+    for it in items or []:
+        if not isinstance(it, dict): continue
+        if it.get("item") is not None:
+            yield from _pm_requests(it.get("item"))
+        elif it.get("request") is not None:
+            yield it
+
+def _pm_has_assertion(item):
+    for ev in item.get("event", []) or []:
+        if ev.get("listen") == "test":
+            ex = (ev.get("script") or {}).get("exec") or []
+            script = "\n".join(ex) if isinstance(ex, list) else str(ex)
+            if _PM_ASSERT.search(script): return True
+    return False
+
+def postman_stats(repo, mode, ref, changed):
+    files = [p for p in changed if category(p) == "postman"]
+    total = assertion = added = added_assertion = 0
+    for rel in files:
+        base_src, final_src = file_versions(repo, rel, mode, ref)
+        try: final = json.loads(final_src) if final_src else {}
+        except json.JSONDecodeError: final = {}
+        try: base = json.loads(base_src) if base_src else {}
+        except json.JSONDecodeError: base = {}
+        base_names = {r.get("name", "") for r in _pm_requests(base.get("item"))}
+        for r in _pm_requests(final.get("item")):
+            total += 1
+            has = _pm_has_assertion(r)
+            if has: assertion += 1
+            if r.get("name", "") not in base_names:
+                added += 1
+                if has: added_assertion += 1
+    return {"files": len(files), "requests_total": total, "assertion_requests": assertion,
+            "setup_requests": total - assertion, "added_requests": added,
+            "added_assertion_requests": added_assertion}
 
 # ---- planning / analysis effort axis (non-code) ----
 def _words(s): return len((s or "").split())
@@ -497,6 +610,16 @@ def main():
         warnings.append(f"{len(no_retention_files)} sub-agent file(s) counted for contribution but not "
                         f"retention (no captured line content): e.g. {no_retention_files[:3]}")
 
+    # artifact counts (unit tests, Postman assertions) — from the commit, independent of AI attribution
+    changed = changed_paths(repo, a.mode, a.commit)
+    tests = java_test_stats(repo, a.mode, a.commit, changed)
+    postman = postman_stats(repo, a.mode, a.commit, changed)
+
+    # suggested tags: code work vs newly-added test work (both may apply)
+    has_code = any(agg[c]["added"] for c in ("production", "migration", "other"))
+    has_new_tests = tests["added"] > 0 or postman["added_requests"] > 0
+    suggested_tags = (["ai_Dev_back"] if has_code else []) + (["ai_test_back_dev"] if has_new_tests else [])
+
     print(json.dumps({
         "mode": a.mode, "commit": a.commit,
         "work_type": work_type,
@@ -514,6 +637,8 @@ def main():
         "provenance": {"agent": tot_agent, "fix": tot_fix, "human": tot_human,
                        "fix_burden_pct": round5(pct(tot_fix, tot_agent + tot_fix)) if (tot_agent + tot_fix) else None},
         "by_category": by_cat,
+        "artifacts": {"tests": tests, "postman": postman},
+        "suggested_tags": suggested_tags,
         "sources": {"manifest_files": len(manifest_files),
                     "transcript_files": len(main_lines),
                     "file_history_files": len(fh_lines)},
@@ -538,27 +663,31 @@ Work type: code                      # or: planning-dominant / minimal-change
 Sources:   manifests <n> · transcript <n> files · file-history <n> files
 
 Planning/analysis effort: High  (source: manifest)
-  6 revision rounds · 38 analysis calls · ~1400-word plan · ~120 min · 44 turns
+  6 plan iteration(s) · 38 code/ticket lookups · ~1400-word plan · ~120 min planning
 
-Category         added   AI-contrib   retention
-production         980       100%         85%     ← headline
-migration         210       100%         98%
-tests             340       100%         95%
-postman         2,600       100%        100%
-docs/other          0         —           —
-────────────────────────────────────────────
-ALL             4,130       100%         96%     (context only)
+Breakdown by artifact (lines · AI-contribution · retention):
+  • Production code   980 lines   100%   85%     ← headline
+  • DB migration      210 lines   100%   98%
+  • Unit tests        340 lines   100%   95%    (17 tests added, 11 modified)
+  • Postman         2,600 lines   100%    —     (56 assertion reqs added, of 80 added; 47 setup/cleanup)
+  • docs/other          0 lines     —     —
+  ────────────────────────────────────────────
+  ALL             4,130 lines   100%   96%     (context only)
 
 Provenance (all added lines):
   agent first-pass:   3,700
   main-context fix:      430     → fix burden 10%
   hand-written (you):     0
 
+Suggested tags: ai_Dev_back, ai_test_back_dev
+
 Headline → AI contribution: 100%   AI retention: 85%
 
 Warnings:
   - <any warnings from the analyzer>
 ```
+
+Pull the line counts from `by_category[c].added`; the test/postman detail from `artifacts.tests` (`added`, `modified`, `methods_total`) and `artifacts.postman` (`added_assertion_requests`, `added_requests`, `assertion_requests`, `setup_requests`). Postman retention is `—` (generated JSON, not line-matched).
 
 Explain briefly, in one line each: contribution counts sub-agent + main-context code; retention below 100% is normal iteration churn (AI reworking its own drafts); a non-zero "hand-written" count means some final lines were in no AI source.
 
@@ -573,12 +702,15 @@ Then ask the developer to confirm or correct, using `AskUserQuestion`:
 - For code tickets — the **two headline numbers** (production contribution, production retention), one question each: offer the computed value first, marked *(Recommended)*, a couple of nearby 5% steps, and a free-form override. **Re-round** to the nearest 5% and clamp `0–100`. Store as `[CONTRIBUTION]` and `[RETENTION]`. (If the developer says all code is AI, set contribution to 100% even when the automated figure is lower — the automated number is a floor.)
 - Always — the **planning effort band** (`Low`/`Medium`/`High`) when planning was detected, defaulting to the computed band. Store as `[PLANNING-BAND]`. The band is a judgement call; the developer's choice wins.
 - Optionally, a **1–5 "AI usefulness on this ticket"** rating — the one signal no transcript captures (e.g. AI unblocked a hard design decision in two messages). Store as `[USEFULNESS]` if given.
+- The **tags** to apply (`suggested_tags`): `ai_Dev_back` when there are code changes excluding unit tests, `ai_test_back_dev` when unit tests and/or Postman requests were newly added — both may apply. Show the suggested set and let the developer add/remove. Store as `[TAGS]`.
 
 ---
 
 ## Task 6 — Post to JIRA (confirm first)
 
-Writing to JIRA is outward-facing. **Show exactly what will be posted and set, and ask for confirmation before writing.** Present the comment body, the field change (`customfield_10613` will include `backend_dev`), and the target ticket.
+Writing to JIRA is outward-facing. **Show exactly what will be posted and set, and ask for confirmation before writing.** Present the comment body, the field change (`customfield_10613` will include the tags in `[TAGS]`), and the target ticket.
+
+Include an artifact bullet only for categories that actually changed. Fill line counts from `by_category[c].added`, and the test/Postman counts from `artifacts`.
 
 Comment body (**code** ticket):
 
@@ -586,10 +718,20 @@ Comment body (**code** ticket):
 AI usage (Claude Code) — measured on <last commit HEAD | uncommitted changes>:
 - AI contribution: [CONTRIBUTION]% of the added production code originated from AI.
 - AI retention: [RETENTION]% of the AI-suggested code was preserved (the remainder was superseded by AI's own iterative fixes).
+- Post-review fix burden: <fix>%.
 
-Breakdown by artifact (contribution / retention): production <p>/<p> · migration <m>/<m> · tests <t>/<t> · Postman <pm>/<pm>. Post-review fix burden: <fix>%.
-<if planning detected:> Planning/analysis effort: [PLANNING-BAND] (<rounds> revision rounds, <n> analysis lookups, ~<w>-word plan, ~<min> min).
-<if [USEFULNESS] given:> Developer-rated usefulness: [USEFULNESS]/5.
+Breakdown by artifact:
+- Production code: <p_lines> lines — contribution <pc>%, retention <pr>%
+- DB migration: <m_lines> lines — contribution <mc>%, retention <mr>%
+- Unit tests: <t_lines> lines, <t_added> test(s) added / <t_mod> modified — contribution <tc>%, retention <tr>%
+- Postman: <pm_lines> lines, <pm_add_assert> assertion request(s) added (of <pm_add> added; <pm_setup> setup/cleanup, non-asserting) — contribution <pmc>%
+
+Planning/analysis effort: [PLANNING-BAND]
+- <rounds> plan iteration(s) with the developer
+- <n> code/ticket lookups during planning
+- ~<w>-word design plan
+- ~<min> min in the planning phase
+<if [USEFULNESS] given:>- Developer-rated usefulness: [USEFULNESS]/5
 
 Method: estimated from the oc-be-implement sub-agent manifests, the Claude Code session transcript, and file-history vs. the final code, reviewed and confirmed by the developer. Values rounded to the nearest 5%.
 ```
@@ -598,9 +740,13 @@ Comment body (**planning-dominant** ticket — lead with effort, not code %):
 
 ```
 AI usage (Claude Code) — <TICKET-NUMBER> was planning/analysis-dominant (only <N> code lines changed):
-- Planning/analysis effort: [PLANNING-BAND] — <rounds> plan revision rounds with the developer, <n> analysis lookups, a ~<w>-word design plan, ~<min> min of planning.
+- Planning/analysis effort: [PLANNING-BAND]
+  - <rounds> plan iteration(s) with the developer (times the plan was presented/refined)
+  - <n> code/ticket lookups during planning
+  - ~<w>-word design plan
+  - ~<min> min in the planning phase
 - Code contribution (of the small change): [CONTRIBUTION]%.
-<if [USEFULNESS] given:> Developer-rated usefulness: [USEFULNESS]/5.
+<if [USEFULNESS] given:>- Developer-rated usefulness: [USEFULNESS]/5.
 
 Note: the AI value here was in requirements analysis and solution design (which is not committed to code), not in code volume. Method: planning effort from the oc-be-implement planning manifest (or reconstructed from the session transcript), reviewed and confirmed by the developer.
 ```
@@ -611,24 +757,30 @@ On confirmation, use the **Atlassian MCP tools** (site `opencellsoft.atlassian.n
 
 `addCommentToJiraIssue` with `cloudId`, `issueIdOrKey = [TICKET-NUMBER]`, and the body above.
 
-### 6b. Set the `backend_dev` tag on `customfield_10613`
+### 6b. Set the tags on `customfield_10613`
 
-**Do not overwrite existing values; append `backend_dev` only if not already present.**
+The tag set is `[TAGS]` (from `suggested_tags`, as adjusted by the developer):
+- **`ai_Dev_back`** — code changes excluding unit tests (production / migration / other source).
+- **`ai_test_back_dev`** — newly added unit tests and/or Postman requests.
 
-1. Read the current value first (`getJiraIssue` with `fields: ["customfield_10613"]`). If `backend_dev` is already there, **skip the edit** and note it.
-2. Otherwise learn the field shape (`getJiraIssueTypeMetaWithFields`: array of `option` vs array of strings vs single `option`) and build the matching `editJiraIssue` payload:
-   - Multi-select (array of options): `{ "fields": { "customfield_10613": [ {"value": "backend_dev"}, <existing...> ] } }`
-   - Labels-style (array of strings): `{ "fields": { "customfield_10613": ["backend_dev", <existing...>] } }`
-   - Single-select (option): `{ "fields": { "customfield_10613": {"value": "backend_dev"} } }`
+Both may apply (a commit with production code *and* new tests gets both); a docs-only or planning-only change may get neither.
+
+**Do not overwrite existing values; append each tag in `[TAGS]` only if not already present.**
+
+1. Read the current value first (`getJiraIssue` with `fields: ["customfield_10613"]`). Drop any tag from `[TAGS]` that is already present; if none remain, **skip the edit** and note it.
+2. Otherwise learn the field shape (`getJiraIssueTypeMetaWithFields`: array of `option` vs array of strings vs single `option`) and build the matching `editJiraIssue` payload, merging the new tags with the existing values:
+   - Multi-select (array of options): `{ "fields": { "customfield_10613": [ {"value": "ai_Dev_back"}, {"value": "ai_test_back_dev"}, <existing...> ] } }`
+   - Labels-style (array of strings): `{ "fields": { "customfield_10613": ["ai_Dev_back", "ai_test_back_dev", <existing...>] } }`
+   - Single-select (option): only one value is allowed — apply the primary tag (`ai_Dev_back` if present, else `ai_test_back_dev`) and warn that the field cannot hold both.
 3. Call `editJiraIssue` with `cloudId`, `issueIdOrKey = [TICKET-NUMBER]`, and the payload.
-   - If rejected because `backend_dev` is not an allowed option, report the error verbatim and do not retry blindly.
+   - If rejected because a tag is not an allowed option, report the error verbatim (the option may need creating in the field config) and do not retry blindly.
 
 ### 6c. Confirm
 
 ```
 Posted to [TICKET-NUMBER]:
   ✓ Comment added (contribution [CONTRIBUTION]% · retention [RETENTION]% · planning [PLANNING-BAND])
-  ✓ Tagged backend_dev on customfield_10613   (or: already present — no change)
+  ✓ Tagged [TAGS] on customfield_10613   (or: already present — no change)
 ```
 
 If the developer declines, print the comment body and intended field change so they can apply them manually, and stop without writing.
@@ -654,6 +806,8 @@ If the developer declines, print the comment body and intended field change so t
 - **Contribution vs. retention.** Contribution is complete with manifests; retention is content-based and only defined for files whose line content was captured (transcript or file-history). Manifest-only files are counted for contribution and reported as retention-unknown.
 - **Attribution.** A final line is `fix` if it appears in a main-context edit, else `agent` if the file is in a manifest or the line is in file-history, else `human`. Whitespace-normalized, pure-punctuation lines ignored, distinct-line based per file (heavy rewrites de-duplicated).
 - **Squashed / cross-branch commits.** When many sessions/branches are squashed into one commit, file-history alone under-covers it; manifests restore coverage for the parts built via `/oc-be-implement`.
+- **Artifact counts are commit-derived, not AI-attributed.** Unit-test add/modify counts come from a heuristic `@Test` method-body diff (base vs final); overloaded names and unusual formatting can be miscounted slightly. Postman assertion detection keys off `test`-event scripts; a request whose assertions live elsewhere (or a pure `console.log` test script) may be misclassified. `added_*` compares request **names** against the base collection, so a renamed request reads as added. Good enough for the ticket record; the developer can correct.
+- **Tag semantics.** `ai_test_back_dev` triggers on newly *added* tests/Postman requests (not modifications). A commit that only edits existing tests gets `ai_Dev_back` (if it also touches code) but not `ai_test_back_dev` — adjust in review if that is not what you want.
 - **Planning effort is effort, not a percentage.** The requirements-gathering and architecture-plan work produces no committed artifact, so it can only be quantified as activity (rounds, lookups, plan size, time) rolled into a Low/Medium/High band. The band thresholds are seed values in `planning_band()` — tune them against your real runs. Reconstruction from the transcript is a fallback; the `/oc-be-implement` planning manifest is authoritative for revision rounds and plan size.
 - Always defer to the developer's adjusted numbers — the automatic figures are a starting point, not an audit.
 ```
