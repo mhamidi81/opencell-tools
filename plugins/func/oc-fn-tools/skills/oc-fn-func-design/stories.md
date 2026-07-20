@@ -61,6 +61,8 @@ lane rather than quietly converting it yourself.
 
 When a Story belongs to an Epic, its summary **must** follow the `[<epic-suffix>] (<n>) <story name>` pattern defined in [`epics.md` § Child Story naming](epics.md#child-story-naming). The suffix is chosen at Epic level and must be copied verbatim to every child Story — do not vary casing or spelling.
 
+> **The `(<n>)` is not a stable identifier.** It is a **delivery-order label** — renumbered (sometimes **retroactively**) to match the actual development order (lower = further along), and a Story can move to another Epic and be renumbered under that Epic's scheme. **Always identify a Story by its Jira key (`INTRD-#####`)**, never by its `(<n>)`, in cross-references, docs, and links. See [`epics.md` § Child Story naming](epics.md#child-story-naming).
+
 ## Field mapping
 
 User Stories use four custom fields **instead of** the standard `description` field:
@@ -197,6 +199,38 @@ Mirror the template's own structure (e.g. frontend Story template **INTRD-42554*
   ]
 }
 ```
+
+### Clickable links (ADF `link` mark)
+
+Jira ADF does **not** auto-linkify a raw URL in a text node — a pasted URL renders as **plain, unclickable text**. Make it clickable with a real `link` mark on the text:
+
+```json
+{ "type": "text", "text": "Open the mockup in Figma",
+  "marks": [{ "type": "link", "attrs": { "href": "https://www.figma.com/design/…?node-id=7648-3" } }] }
+```
+
+Applies to every URL the lane writes into any field (a Figma link in *GUI*, a spec/reference URL in *Requirement*, etc.). Verify after the write: `GET …?expand=renderedFields` and check the field HTML for `<a href="…">`.
+
+### Inline images (embed an attachment in the field body)
+
+To show an image **in the field body** (not just in the Attachments panel — e.g. a GUI mockup snapshot):
+
+1. **Upload it as a real attachment** — `POST …/issue/<key>/attachments` with header `X-Atlassian-Token: no-check`. The Rovo MCP has **no** attachment-upload tool, so use the `jira` helper / `curl`. Note the returned attachment `id`.
+2. **Embed with a `mediaSingle` → `media` node of `type: "external"`** whose `url` is *that attachment's own content URL*:
+
+```json
+{ "type": "mediaSingle", "attrs": { "layout": "center" },
+  "content": [{ "type": "media", "attrs": {
+    "type": "external",
+    "url": "https://<site>.atlassian.net/rest/api/3/attachment/content/<attachmentId>",
+    "width": 1400, "height": 1210 } }] }
+```
+
+- **Do not** use `type: "file"` with the attachment id — Jira rejects it with **`ATTACHMENT_VALIDATION_ERROR`** (a `type:"file"` media node needs a Media Services **UUID + collection**, which the attachments REST API does not expose).
+- The image **must remain a real attachment** — the external node only *renders* it; the attachment is the store. Keeping both means it survives export/mobile **and** satisfies `SKILL.md` § *Destructive edits on fields containing inline media* (nothing is orphaned). Renders inline for authenticated Jira users.
+- Verify: `expand=renderedFields` → the field HTML contains `<img … src="…/attachment/content/<id>">`.
+
+> The whole PO field set (`customfield_10134`–`10137`) is written as ADF; the two-step create (§ *Known automation quirk*) can PUT all four at once via the `jira` helper (`jira raw PUT /issue/<key> @fields.json`) or `editJiraIssue` — build the ADF (headings/rules/tables/links/media above) with a small script rather than by hand.
 
 ## Limits & volumes (story-level)
 

@@ -44,7 +44,7 @@ Every Story that belongs to an Epic **must** follow this naming pattern:
 ```
 
 - **`<epic-suffix>`** — a short, lowercase, hyphenated token that identifies the Epic, chosen when the Epic is created and used consistently across all its children (e.g. `e-reporting`, `payment-v2`, `usage-rating`).
-- **`(<n>)`** — a sequential integer reflecting the intended order of delivery within the Epic, starting at 1. Numbers are stable once assigned; do not renumber when stories are reordered — add a note in the Epic instead.
+- **`(<n>)`** — an integer indicating the intended **order of delivery** within the Epic (starting at 1). It is a **delivery-order label, not a stable identifier**: it is renumbered — sometimes **retroactively** — to match the actual development order (lower `(<n>)` = further along / done first), and a Story can **move to another Epic** and be renumbered under that Epic's suffix / scheme (e.g. a step-4 story moving to a step-5 `5NN` range). **Always identify a Story by its Jira key (`INTRD-#####`)** — the `(<n>)` reflects current state only; never rely on it as an identifier in docs, links, or cross-references. Renumber in Jira as the order changes (and refresh any dated snapshot table in a design doc); key-anchored references stay valid.
 - **`<story name>`** — the story's own title, written as a short imperative phrase.
 
 **Example:** `[e-reporting] (1) Generate e-reporting XML`
