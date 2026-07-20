@@ -81,13 +81,29 @@ response**. It is an **ADF rich-text field** — write it like a `description` (
 `editJiraIssue` with `contentFormat: "adf"`, or raw REST with an ADF document value; **never** a
 plain string for structured content).
 
-- **Structure:** prefix a bold **`DRAFT`** marker while the response is not yet final, then the
-  ruling and its rationale — scope summary, what will/won't be done, and links (design-repo folder,
-  the delivery INTRD Epic/Initiative). Remove the `DRAFT` marker when the decision is committed. The
-  Jira field is already labelled *Product response* in the UI, so an internal heading is optional;
-  if you add section headings, use the shared func dark-red `#bf2600` `strong`+`rule` vocabulary
-  (`SKILL.md` § *Templates index*) — the CR template (CR-3) uses it. *(Note: the existing CR-281
-  response used a `#b22222` firebrick variant — a one-off; keep new func content on `#bf2600`.)*
+- **Structure:** the Product response ADF **MUST begin with the template's field-title heading as
+  its first two nodes** — an H1 `Product response` (marks: `strong` + `textColor #bf2600`) followed
+  by a `rule` node, the same scaffold the empty `customfield_10153` and the CR-3 template both ship
+  with. **Do NOT start the ADF at the `DRAFT`/Decision paragraph** — that silently drops the template
+  heading. After the title heading come the (optional) bold **`DRAFT`** marker while the response is
+  not yet final, then the ruling and its rationale — scope summary, what will/won't be done, and
+  links (design-repo folder, the delivery INTRD Epic/Initiative). Remove the `DRAFT` marker when the
+  decision is committed. Any **further** section headings (Analysis, What will be done, Delivery &
+  links, …) are optional and, when used, follow the same shared func dark-red `#bf2600`
+  `strong`+`rule` vocabulary (`SKILL.md` § *Templates index*) — the CR template (CR-3) uses it.
+  *(Note: the existing CR-281 response used a `#b22222` firebrick variant — a one-off; keep new func
+  content on `#bf2600`.)*
+
+  Mandatory opening — copy-pasteable ADF (matches CR-3), the first two nodes of the field value:
+
+  ```json
+  {"type":"heading","attrs":{"level":1},"content":[{"type":"text","text":"Product response",
+    "marks":[{"type":"strong"},{"type":"textColor","attrs":{"color":"#bf2600"}}]}]}
+  {"type":"rule"}
+  ```
+
+  General rule: when overwriting **any** templated ADF field from scratch, reproduce the template's
+  own field-title heading scaffold rather than starting at the body.
 - **Keep it in English** (per `SKILL.md` § *General Rules*) and factual: it is the answer the
   customer/Support will be given, not internal design.
 - **Finalise the response as part of the decision transition** — write/clean up Product response,
