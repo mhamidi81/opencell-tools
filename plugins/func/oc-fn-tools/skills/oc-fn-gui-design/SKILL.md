@@ -1,7 +1,7 @@
 ---
 name: oc-fn-gui-design
-version: 1.1.0
-updated: 2026-07-03T22:00:00+02:00
+version: 1.2.1
+updated: 2026-07-16T14:33:14+02:00
 author: Stéphane Chambrin
 description: >
   Design GUI-impacting Opencell User Stories against the real Opencell Design System in Figma —
@@ -114,23 +114,41 @@ The value of this skill is that its designs are **real**, not plausible-looking 
 The design lands in the Story's *Functional design → GUI* section (`customfield_10135`, owned by
 `oc-fn-func-design`). Deliver **three** artifacts:
 
-1. **Figma link — the source of truth.** A **node-specific** URL to the exact frame (via *Copy link
-   to selection*). Placed as a hyperlink, or a Jira smart-link card if the Figma-for-Jira
-   integration is enabled. The live link is canonical because designs keep evolving in Figma.
-2. **Screenshot — a dated snapshot.** A PNG (`get_screenshot` → download, or `download_assets`),
-   **attached to the Story as a regular attachment**, then referenced from the GUI-section ADF.
-   Caption it `Snapshot — <frame name> — as of <YYYY-MM-DD>` so a stale mockup is never read as
-   current. **Embed via a real attachment, never an orphan inline-media node** — this is exactly
-   `oc-fn-func-design`'s *Destructive edits on fields containing inline media* rule. The Rovo MCP
-   cannot upload attachments, so the PNG is uploaded via the `jira` helper (`~/.local/bin/jira`) or dragged in by
-   the user; this skill produces the file and states the path, func-design does the embedding.
+1. **Figma link — the source of truth, and ALWAYS present.** Every GUI section MUST carry a
+   **node-specific** URL to the exact frame (via *Copy link to selection*), placed as a hyperlink
+   (or a Jira smart-link card if the Figma-for-Jira integration is enabled) so a developer reaches
+   the live design in **one click** — never make them hunt for it. It MUST be a real ADF `link` mark
+   (a `text` node with `marks: [{type:"link", attrs:{href}}]`) — a raw URL pasted as plain text is
+   **not** auto-linkified in Jira ADF custom fields and renders as unclickable plain text. The live
+   link is canonical because designs keep evolving in Figma. A GUI section without a clickable Figma
+   link is incomplete.
+2. **Screenshot — a dated snapshot, ALWAYS inlined in the field body.** Produce a PNG
+   (`get_screenshot` → download, or `download_assets`), **attach it to the Story as a regular
+   attachment**, AND **embed it inline in the GUI-section ADF** — visible in the field body, not
+   merely referenced by filename or left in the Attachments panel. Caption it `Snapshot — <frame
+   name> — as of <YYYY-MM-DD>` so a stale mockup is never read as current. Both are mandatory: a GUI
+   section whose design isn't visible inline is incomplete.
+   - **Inline-embed recipe (REST-reliable).** A `media` node of `type: "file"` needs a Media Services
+     fileId + collection, which the attachments REST API does **not** expose — PUTting the Jira
+     attachment id returns `ATTACHMENT_VALIDATION_ERROR`. So embed via a `mediaSingle` → `media` node
+     of **`type: "external"`** whose `url` is the attachment's content URL
+     (`https://<site>.atlassian.net/rest/api/3/attachment/content/<attachmentId>`); pass the PNG's
+     `width`/`height`. This passes validation and renders inline for authenticated Jira users
+     (verified against INTRD-45279). The image MUST **also** remain a real attachment — the external
+     node is a renderer, not the store, so the design survives even if the inline render is stripped
+     (export/mobile). Because the file is a genuine attachment, this satisfies `oc-fn-func-design`'s
+     *Destructive edits on fields containing inline media* rule (nothing is orphaned).
+   - The Rovo MCP cannot upload attachments, so the PNG is uploaded via the `jira` helper /
+     `curl` (`POST …/issue/<key>/attachments`, header `X-Atlassian-Token: no-check`) — or dragged in
+     by the user. This skill produces the file + states the path; func-design does the upload **and**
+     the inline embed.
 3. **Grounded spec.** The component-by-component breakdown: which DS components, which tokens, the
    layout, the states (default / hover / focus / error / empty / loading), responsive behaviour, and
    the **bilingual (EN + FR) label table** (func-design's mandatory rule — every user-facing label,
    enum value, button, tab, and action in both languages).
 
 **Division of labour:** `oc-fn-gui-design` creates the frame / PNG / spec; `oc-fn-func-design` writes
-them into the Story (ADF, attachment upload, inline-media safety). Keep the boundary clean — do not
+them into the Story (ADF, attachment upload, **inline embed**, inline-media safety). Keep the boundary clean — do not
 edit Jira from this skill. Details in `workflow-read.md` § *Land the design in the Story*.
 
 ## Token discipline — Figma MCP is verbose

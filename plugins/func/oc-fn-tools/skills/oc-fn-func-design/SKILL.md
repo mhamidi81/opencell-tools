@@ -1,28 +1,33 @@
 ---
 name: oc-fn-func-design
-version: 1.21.0
-updated: 2026-07-09T17:30:00+02:00
+version: 1.23.0
+updated: 2026-07-19T11:16:05+02:00
 author: Stéphane Chambrin
 description: >
   Rules and reference data for working with Jira issues in the Opencell INTRD project
-  (opencellsoft.atlassian.net). Use this skill whenever the user mentions Jira, INTRD,
-  User Story, Epic, Bug, Feature, or Initiative — including creating, reading, updating, or writing
-  content for any issue type. Also trigger when the user asks about custom fields,
-  acceptance criteria, functional design, requirements, product-area Components (modules), or issue templates for Opencell —
+  (opencellsoft.atlassian.net) and the CR (Change Requests) project. Use this skill whenever the
+  user mentions Jira, INTRD, User Story, Epic, Bug, Feature, Initiative, or a Change Request / CR —
+  including creating, reading, updating, or writing content for any issue type. Also trigger when
+  the user asks about custom fields, acceptance criteria, functional design, requirements,
+  product-area Components (modules), issue templates for Opencell, or triaging / responding to
+  Change Requests (the CR project, the Product response decision field, To Study / In Study) —
   and for the scaffold/read/review side of a Story's Technical Design (creating the empty
   customfield_10137 template, or reviewing it). Authoring/filling the Technical Design field
   is the architect lane — defer to oc-ar-tech-design for "write the technical design for INTRD-*".
   Always load this skill before any Atlassian Rovo Jira tool call — or direct Jira
-  REST API calls — on the INTRD project.
+  REST API calls — on the INTRD or CR projects.
 ---
 
-# Jira — INTRD Project
+# Jira — INTRD & CR projects
 
 ## Instance
 
 - **URL:** https://opencellsoft.atlassian.net
 - **Cloud ID:** `648ef912-b483-4da2-91af-73ea1e3fdad8`
-- **Main project:** INTRD
+- **Main project:** INTRD — delivery (Initiative → Epic → Story / Enabler, plus Bug).
+- **Change-request project:** CR ("Change Requests") — customer/stakeholder change requests the
+  Product team triages and rules on (the *Product response* decision field); feeds INTRD delivery.
+  See `change-requests.md`.
 
 ## Requirements
 
@@ -71,8 +76,14 @@ The rules below cover **all issue types**. For type-specific conventions (custom
 | Epic          | `epics.md`                             |
 | Bug           | `bugs.md`                              |
 | Initiative    | `initiatives.md`                       |
+| Change Request | `change-requests.md`                  |
 
 Load only the file relevant to the current task — do not pre-read all of them.
+
+> **Change Request** issues live in the **separate `CR` project** (not INTRD). `change-requests.md`
+> covers the CR workflow (To Study / In Study → Accepted / Rejected), the **Product response**
+> decision field, its custom fields (e.g. *Expected by* = the customer), and the **SUPS → CR →
+> INTRD** lifecycle. The INTRD module-Component and altitude-hierarchy rules do **not** apply to CRs.
 
 ## General Rules
 
@@ -286,6 +297,13 @@ the `fields` allowlist and use `responseContentFormat: "adf"`, then for each
 
 A media UUID with no matching attachment is the warning sign.
 
+**Embedding an image inline in the first place** — the positive recipe (upload it as a real
+attachment, then a `mediaSingle` → `media` node of `type: "external"` pointing at *that same issue's*
+attachment content URL; and why `type: "file"` with the attachment id fails
+`ATTACHMENT_VALIDATION_ERROR`) — is in `stories.md` § *ADF recipe → Inline images*. Because the file
+stays a real attachment, that is the **standard, non-fragile** inline-embed path (unlike the
+sibling-issue external reference in point 3 above).
+
 ## Templates index
 
 The INTRD project has a canonical template issue for each issue type. Use these to discover the structure (panels, layout, custom-field mapping) before authoring a new issue of the same type.
@@ -299,6 +317,7 @@ The INTRD project has a canonical template issue for each issue type. Use these 
 | User Story — backend  | INTRD-42531  | `customfield_10134`–`10137` | `stories.md`   |
 | User Story — frontend | INTRD-42554  | `customfield_10134`–`10137` | `stories.md`   |
 | Enabler               | INTRD-42939  | `description`               | `enablers.md`  |
+| Change Request        | CR-3 *(CR project)* | `description`        | `change-requests.md` |
 
 Cache the template structure in the conversation context — do not re-fetch the same template multiple times in a single session.
 
@@ -322,9 +341,12 @@ When writing or rewriting a template (or any issue cloned from one that should k
 
 This recipe supplies the shared ADF heading/rule/panel vocabulary and the EMPTY `customfield_10137` scaffold; the FILLED structure of `customfield_10137` is owned by the architects' `oc-ar-tech-design` (`references/adf-template.md`), where available.
 
-All INTRD templates share the following ADF vocabulary:
+Most Opencell issue templates — Epic, Initiative, Enabler, the Story custom fields, and the CR
+template (CR-3) — share the following ADF vocabulary. **Exception: the Bug template (INTRD-5340)
+uses plain `strong` headings with *no* colour** (still `strong` + `rule` + note panels) — do not add
+`#bf2600` to a Bug; see `bugs.md`.
 
-- **Coloured headings** — real ADF `heading` nodes (`attrs.level`: 1 for the field title, 2 for sections, 3–4 for subsections), their text marked `strong` + `textColor` `#bf2600` (dark red), each followed by a `rule` node. **Not** styled `paragraph` nodes — see the copy-pasteable recipe in `stories.md` § *ADF recipe*. `#bf2600` is the func/brand heading colour; other Opencell skills (e.g. `oc-ar-ai-tech-design`) may emit `#FF0000` — keep func-authored content on `#bf2600` and do not silently normalise to another value.
+- **Coloured headings** — real ADF `heading` nodes (`attrs.level`: 1 for the field title, 2 for sections, 3–4 for subsections), their text marked `strong` + `textColor` `#bf2600` (dark red), each followed by a `rule` node. **Not** styled `paragraph` nodes — see the copy-pasteable recipe in `stories.md` § *ADF recipe*. `#bf2600` is the func/brand heading colour; other Opencell skills (e.g. `oc-ar-ai-tech-design`) may emit `#FF0000` — keep func-authored content on `#bf2600` and do not silently normalise to another value. **The Bug template is the exception** — its headings are plain `strong`, no colour.
 - **Note panels** (purple, `panelType: "note"`, `#eae6ff` background) — wrap author hints. Closing line: italic-grey "You can delete this note" (`em` + `textColor #97a0af`).
 - **Warning panels** (yellow, `panelType: "warning"`, `#fffae6` background) — wrap rules that govern the content being filled in (REST v2 guideline, error-dictionary rules, etc.).
 - **Multi-line table cells** — built with `hardBreak` nodes. Markdown cannot encode line breaks inside table cells and breaks the table on round-trip.
