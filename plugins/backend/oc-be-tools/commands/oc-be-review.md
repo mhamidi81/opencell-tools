@@ -1,5 +1,5 @@
 ---
-description: Evaluate Opencell backend code changes against the project guidelines using the oc-be-pr-reviewer agent. Reviews uncommitted changes, a specific Bitbucket PR, or lets you pick from open PRs, and tags the JIRA ticket ai_code_review_back.
+description: Evaluate Opencell backend code changes against the project guidelines using the oc-be-pr-reviewer agent, augmented with a SonarQube quality-gate summary. Reviews uncommitted changes, a specific Bitbucket PR, or lets you pick from open PRs, and tags the JIRA ticket ai_code_review_back.
 argument-hint: "[PR-number | list]"
 ---
 
@@ -24,8 +24,9 @@ Parse `$ARGUMENTS` to select the mode:
 1. Dispatch the `oc-be-tools:oc-be-pr-reviewer` agent (Task tool, `subagent_type: oc-be-tools:oc-be-pr-reviewer`) with this instruction:
    - "Review the current uncommitted working-tree changes against the Opencell guidelines. Use `git status --short`, `git diff --stat HEAD`, and `git diff HEAD` to obtain the changes. Provide the full review with a score and a final Status."
 2. Display the agent's review report to the user.
-3. **Do not** write anything to Bitbucket in this mode — there is no PR. If there are no uncommitted changes, tell the user and stop.
-4. **Tag the JIRA ticket** (a review was run) — resolve the ticket from the current branch name and apply `ai_code_review_back` per **Tag the JIRA ticket** below.
+3. **SonarQube analysis** — run the **SonarQube analysis (opencell-core)** section against the current branch and append `[SONAR-SUMMARY]` to the displayed report (skip gracefully if `oc-sonar-mcp` is unavailable or the branch has not been analysed).
+4. **Do not** write anything to Bitbucket in this mode — there is no PR. If there are no uncommitted changes, tell the user and stop.
+5. **Tag the JIRA ticket** (a review was run) — resolve the ticket from the current branch name and apply `ai_code_review_back` per **Tag the JIRA ticket** below.
 
 ---
 
@@ -74,16 +75,20 @@ Display the agent's full review report. Extract the decision from its `**Status*
 - `APPROVE` → acceptable.
 - `CHANGES_REQUESTED` → failed.
 
-### 5. Update the PR and tag the ticket (confirm first)
+### 5. SonarQube analysis
+
+Run the **SonarQube analysis (opencell-core)** section against `[PR-SOURCE-BRANCH]` and display `[SONAR-SUMMARY]` alongside the agent's report. Let it influence the verdict: a failing gate or any BLOCKER/CRITICAL issue on the changed files means the review is **failed** (`CHANGES_REQUESTED`) even if the agent said `APPROVE`. Skip gracefully if `oc-sonar-mcp` is unavailable.
+
+### 6. Update the PR and tag the ticket (confirm first)
 
 Posting to a pull request and tagging JIRA are outward-facing actions. **Show the user what will be posted and set, and ask for confirmation before writing.** Present:
-- The review comment body (the report, or a concise summary of it).
+- The review comment body (the report plus `[SONAR-SUMMARY]`, or a concise summary of it).
 - The action: APPROVE (acceptable) or REQUEST CHANGES (failed).
 - The JIRA tag: `ai_code_review_back` on `customfield_10613` of the ticket in `[PR-TITLE]`.
 
 On confirmation:
 
-1. Post the review as a comment:
+1. Post the review as a comment (include `[SONAR-SUMMARY]` in `[REVIEW-MARKDOWN]`):
    - `POST /repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/comments`
    - body: `{ "content": { "raw": "[REVIEW-MARKDOWN]" } }`
 2. Set the verdict:
@@ -141,7 +146,30 @@ Whenever a review runs, record it on the ticket by adding the tag **`ai_code_rev
 3. Call `editJiraIssue` with `cloudId`, `issueIdOrKey = [TICKET]`, and the payload.
    - If rejected because `ai_code_review_back` is not an allowed option, report the error verbatim (the option may need creating in the field config) and do not retry blindly.
 
-> This is the only JIRA write this command makes. In Mode PR/LIST it is confirmed together with the PR update (Step 5); in Mode LOCAL confirm it on its own before writing.
+> This is the only JIRA write this command makes. In Mode PR/LIST it is confirmed together with the PR update (Step 6); in Mode LOCAL confirm it on its own before writing.
+
+---
+
+## SonarQube analysis (opencell-core)
+
+Augment the guideline review with SonarQube's quality gate and issues for the changed code. This needs the **`oc-sonar-mcp`** plugin; if its tools are unavailable, note "SonarQube not available — skipped" and continue (the review still completes without it). It is read-only — no confirmation needed.
+
+Determine `[SONAR-BRANCH]`: the PR source branch (`[PR-SOURCE-BRANCH]`, Mode PR/LIST) or the current branch (`git branch --show-current`, Mode LOCAL). The SonarQube project key for opencell-core is `opencell-core`.
+
+1. **Quality gate** — `mcp__plugin_oc-sonar-mcp_sonarqube__quality_gate_status` with `project_key: "opencell-core"`, `branch: [SONAR-BRANCH]` → `[SONAR-GATE]` (`OK` / `ERROR`). If the branch is unknown to SonarQube, retry without `branch` for the project-level status and note it is not branch-specific.
+2. **Measures** — `mcp__plugin_oc-sonar-mcp_sonarqube__measures_component` with `component: "opencell-core"`, `branch: [SONAR-BRANCH]`, `metric_keys: ["bugs","vulnerabilities","code_smells","coverage","duplicated_lines_density","security_hotspots","sqale_rating","reliability_rating","security_rating"]`.
+3. **Issues on changed files** — `mcp__plugin_oc-sonar-mcp_sonarqube__issues` with `project_key: "opencell-core"`, `branch: [SONAR-BRANCH]`, `files:` the changed paths (`[CHANGED-FILES]` in Mode PR, or `git diff --name-only HEAD` in Mode LOCAL), `statuses: ["OPEN","CONFIRMED","REOPENED"]`, `page_size: "50"`. Group by severity (BLOCKER / CRITICAL / MAJOR / MINOR / INFO).
+
+Compile `[SONAR-SUMMARY]`:
+
+```
+SonarQube — quality gate: [SONAR-GATE]
+  bugs N · vulnerabilities N · code smells N · hotspots N · coverage N% · duplication N%
+  ratings — maintainability A–E / reliability A–E / security A–E
+  open issues on changed files: TOTAL  (BLOCKER n · CRITICAL n · MAJOR n · MINOR n · INFO n)
+```
+
+List any BLOCKER/CRITICAL issues with file path, rule and message. **A failing quality gate or any BLOCKER/CRITICAL issue on the changed files should push the verdict toward `CHANGES_REQUESTED`.** Fold `[SONAR-SUMMARY]` into the displayed review and, in Mode PR, into the PR comment body.
 
 ---
 

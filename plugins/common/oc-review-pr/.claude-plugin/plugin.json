@@ -1,5 +1,5 @@
 {
   "name": "oc-review-pr",
-  "description": "Review a pull request linked to a JIRA ticket — automatically selects oc-fe-reviewer for opencell-portal or oc-be-tools:oc-be-pr-reviewer for opencell-core and generates a detailed report with suggested fixes",
-  "version": "1.1.0"
+  "description": "Review a pull request linked to a JIRA ticket — resolves the ticket's PR, reviews opencell-portal (frontend) here with oc-fe-reviewer and tags the ticket ai_code_review_Front, and delegates opencell-core (backend) to the /oc-be-review command",
+  "version": "1.2.0"
 }
