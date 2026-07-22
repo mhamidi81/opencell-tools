@@ -254,6 +254,57 @@ Cross-cutting rule and strict-answering policy: see `SKILL.md` § *Limits & volu
 
 **Reviewer expectation.** A story whose technical design ends with seven `N/A — ...` lines is suspect: at minimum, latency target, data-volume horizon, and degradation behaviour are almost always applicable for any story that touches a backend flow or a non-trivial UI list.
 
+## Functional design — lead summary (non-normative)
+
+The *Functional design* field (`customfield_10135`) is the one Story field that grows into a wall of
+tables (*Business rules & Permissions*, *Information requirements*, *User-facing messages & Edge
+cases*, …). To give a human reader — the PO validating at sprint review, QA, the Tech Lead,
+stakeholders — a fast on-ramp, **open the field body with a short lead summary**.
+
+**Shape.** A single ADF **`blockquote`**, placed **immediately after the `Functional design` level-1
+heading and its `rule`, before the first section heading** — the first body node of the field.
+
+- **Length & style.** Two to four sentences of plain prose — no tables, no lists. Use `strong` (bold)
+  for the opening label and any load-bearing noun; use `em` (italic) *sparingly*, for one key nuance
+  and for the closing non-normative marker. This is the "quote with bold + italic used wisely" form,
+  not a styled paragraph.
+- **Content.** *What the Story changes and for whom*, in business terms — enough that a reader can
+  restate the intent without reading the tables. Open with a bold `In one line —` (or `What changes:`)
+  and state the **observable outcome**, not the mechanism.
+- **Non-normative — this is the load-bearing rule.** The summary is **orientation only**; the sections
+  below it are the single source of truth. It **must introduce no requirement, rule, message, or data
+  element that is not also stated in the sections below** — everything binding lives in the detail, so
+  the summary can be simplified without ever being "wrong". Close it with an italic marker to that
+  effect (e.g. *"Orientation only — the sections below are the source of truth."*). If the summary and
+  a section ever disagree, the **section wins**.
+- **Where it does NOT go.** *Only* the *Functional design* field carries a lead summary. *Requirement*
+  is already a human on-ramp (the *As a … / I want … / So that …* triplet); *Acceptance* is QA's
+  working table set; *Technical design* is the architect lane and is not authored here. Do not add a
+  summary blockquote to those fields.
+
+**ADF shape** (goes right after the field's `heading`+`rule`, before the first section `heading`):
+
+```json
+{
+  "type": "blockquote",
+  "content": [
+    {
+      "type": "paragraph",
+      "content": [
+        { "type": "text", "text": "In one line — ", "marks": [{ "type": "strong" }] },
+        { "type": "text", "text": "an admin for a GoCardless Seller installs the connector and registers their account as a SEPA Direct Debit gateway, with no Core rebuild; GoCardless then becomes a per-Seller direct-debit payment method. " },
+        { "type": "text", "text": "Orientation only — the sections below are the source of truth.", "marks": [{ "type": "em" }] }
+      ]
+    }
+  ]
+}
+```
+
+**Reviewer expectation.** Reject a *Functional design* that opens straight into a section heading or
+table with no lead summary, or whose summary states a requirement, rule, or message found **nowhere**
+in the sections below — that content must be moved into the appropriate section (the summary is a
+reader's aid, never a home for spec).
+
 ## Information requirements — naming decided model bindings
 
 Cross-cutting principle and the bounded-exception framing: see `SKILL.md` § *Decided model bindings
@@ -312,9 +363,19 @@ This is already mandated by the generic Story template (INTRD-1486 — *"All lab
 
 - **Enums** — the **code stays English** (e.g. `NON_TAXABLE_PERSON`); give **both** display labels — EN "Non-taxable person" / FR "Non-assujetti". The French regulatory term belongs in the FR label, never in English prose.
 - **Proper French regulatory names** (VAT-regime names: *réel normal mensuel*, *franchise en base*, …) are identical in both columns — note that rather than inventing a translation.
+- **Identical FR — mark it, don't duplicate the string.** The **EN + FR structure stays mandatory**,
+  but where the FR value is genuinely identical to the EN (proper regulatory names, product names,
+  enum codes shown verbatim, non-translatable tokens) you may enter it **once** and mark the pair
+  identical — an FR cell of `= EN` (or a single merged note) — rather than copying the string into
+  both columns. Write an **explicit, distinct FR value whenever it differs from EN**, which is the
+  common case for user-facing prose and messages. The point is to cut duplicate noise, **never** to
+  drop a genuine translation. A *blank* FR cell is a hole, not an "identical" shorthand — identity
+  must be **marked**, not implied.
 - **Backend-only Stories** with no Portal surface keep `GUI = N/A — <reason>` and are exempt.
 
-**Reviewer expectation.** Reject a Story whose GUI section lists any user-facing label in only one language.
+**Reviewer expectation.** Reject a Story whose GUI section leaves any user-facing label's FR value
+unaddressed — it must carry either a distinct FR translation or an explicit identical-to-EN marker
+(`= EN`). A blank FR cell is a defect; a single-language label is a defect.
 
 ## Acceptance tests
 
