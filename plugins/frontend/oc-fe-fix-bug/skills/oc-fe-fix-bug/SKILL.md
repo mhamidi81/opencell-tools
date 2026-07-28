@@ -127,15 +127,15 @@ Once the fix is implemented, add test coverage for the changed code **before** t
 
 ### Step 7: Mark the Ticket as Handled by the Frontend AI Dev
 
-Once the bug is fixed, add the tag `frontend_dev` to the JIRA **AI field** (`customfield_10613`) to record that the frontend AI dev addressed the ticket.
+Once the bug is fixed, add the tag `ai_Dev_Front` to the JIRA **AI field** (`customfield_10613`) to record that the frontend AI dev addressed the ticket.
 
 **Never overwrite `customfield_10613` — always append.** It is a **multi-value labels field (an array of strings)** shared with the other AI commands (`ai_code_review_Front`, `ai_code_review_back`, `ai_Dev_back`, `ai_test_back_dev`, …). Sending a single-select `{ "value": … }` object, a bare string, or a one-element array **replaces the whole field and destroys the other tags**.
 
 1. **Read first** — `getJiraIssue` (official `atlassian` plugin) with `fields: ["customfield_10613"]`. Store the existing array as `[CURRENT-TAGS]` (treat `null` / missing as `[]`).
-2. If `frontend_dev` is already in `[CURRENT-TAGS]`, skip the write and note "already tagged".
+2. If `ai_Dev_Front` is already in `[CURRENT-TAGS]`, skip the write and note "already tagged".
 3. Otherwise call `editJiraIssue` with **every** existing value plus the new one:
    - `issueIdOrKey`: [TICKET-NUMBER]
-   - `fields`: `{ "customfield_10613": ["frontend_dev", <...CURRENT-TAGS>] }`
+   - `fields`: `{ "customfield_10613": ["ai_Dev_Front", <...CURRENT-TAGS>] }`
 
    Expand `<...CURRENT-TAGS>` into the actual strings you read — every one of them must survive, including tags you don't recognise. Never drop or rename a tag you did not add.
 4. **If the read fails, do not write** — a blind write would clobber the field. Warn the user and skip the tagging.
