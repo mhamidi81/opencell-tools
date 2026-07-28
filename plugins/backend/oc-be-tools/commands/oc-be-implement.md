@@ -136,6 +136,13 @@ Execute sequentially with review checkpoints between each step:
 **In every agent dispatch below, include this line so the agent records its file manifest:**
 > "Write your file manifest to `.claude/cache/ai-stats/{RUN_ID}/{phase}.json` per your manifest instructions." (phase = `entity`, `service`, `api`, `tests`, `postman`)
 
+**First-pass snapshots.** Each builder writes its own `snapshots/{phase}.diff` (a `git diff HEAD` of the files it produced) as its final action — this preserves the sub-agent's line content, which is lost when its session ends, so `/oc-be-calculate-ai-use` can measure *retention* (how much of the AI's first pass survived) for sub-agent files. **Verify `snapshots/{phase}.diff` exists after each builder returns; if it is missing** (older agent, or it skipped), capture it yourself **immediately, before applying any review fixes**, from the manifest's file list:
+```bash
+mkdir -p .claude/cache/ai-stats/{RUN_ID}/snapshots
+git diff HEAD -- <files from {phase}.json> > .claude/cache/ai-stats/{RUN_ID}/snapshots/{phase}.diff
+```
+It records **added lines vs the branch base** (`HEAD`) — the delta, correct for **modified** files (e.g. an existing Postman collection) as well as new ones. Do the fallback before your own edits so it reflects the AI's initial output, not your fixes. Best-effort and non-blocking.
+
 Your own review fixes are made in this (main) context and are captured by the session transcript — you do **not** write a manifest for those; `/oc-be-calculate-ai-use` reads them separately and reports them as the post-review fix contribution.
 
 **Step 1: Entity + Liquibase**

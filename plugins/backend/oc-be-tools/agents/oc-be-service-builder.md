@@ -68,3 +68,11 @@ Schema:
 - `action`: `create` for a new file, `modify` for an edit to an existing file.
 - Get the timestamp with `date -u +%Y-%m-%dT%H:%M:%SZ` (best-effort; omit the field if unavailable).
 - List every service class you created or modified.
+
+**Then snapshot your first pass** — so `/oc-be-calculate-ai-use` can measure *retention* (how much of your output survives to the commit); your line content is otherwise lost when this session ends. Immediately after the manifest, using the same `<RUN_ID>` directory as your manifest path, capture a `git diff` of exactly the files you listed:
+```bash
+RUN=".claude/cache/ai-stats/<RUN_ID>"        # the directory your manifest path is in
+mkdir -p "$RUN/snapshots"
+git diff HEAD -- <the files in your manifest> > "$RUN/snapshots/service.diff"
+```
+This records your **added lines vs the branch base** (`HEAD`) — the delta, so it is correct for modified files as well as new ones. Best-effort; skip if git or the path is unavailable, and skip entirely if no manifest path was provided.
