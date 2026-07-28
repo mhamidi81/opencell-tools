@@ -8,22 +8,35 @@ argument-hint: JIRA Ticket ID (e.g., INTRD-36922)
 
 Push the current branch to the remote and create a pull request targeting the base branch extracted from the current branch name, using the JIRA ticket information from cache.
 
-## Prerequisites (Bitbucket)
+## Prerequisites
 
-To enable automatic PR creation for Bitbucket repositories:
+**Jira** — no credentials. Install the official Atlassian plugin from Anthropic's marketplace and
+sign in once with OAuth:
 
-1. Create an App Password at: https://bitbucket.org/account/settings/app-passwords/
-   - Required permissions: `pullrequest:write`, `repository:read`
-2. Export the credentials in your shell profile (`.bashrc`, `.zshrc`, etc.):
+```bash
+/plugin install atlassian@claude-plugins-official
+/mcp                 # complete the browser sign-in for the `atlassian` server
+```
 
-   ```bash
-   export BITBUCKET_EMAIL="your-oc-email"
-   export BITBUCKET_ACCESS_TOKEN="your-access_token"
-   ```
+It provides the Rovo tools this command uses (`atlassianUserInfo`).
 
-3. The Bitbucket MCP server is configured in `.mcp.json` and will use these credentials automatically.
+**Bitbucket** — the Rovo MCP server does **not** expose Bitbucket tools over OAuth, so PR creation
+goes through the Bitbucket REST API. Create an **Atlassian API token** at
+https://id.atlassian.com/manage/api-tokens and export it with your Atlassian email:
 
-If credentials are not configured, the command will display a PR creation URL instead.
+```bash
+export BITBUCKET_EMAIL="you@opencellsoft.com"
+export BITBUCKET_ACCESS_TOKEN="your-api-token"     # ATATT…
+```
+
+> **Both variables are required.** An Atlassian API token (`ATATT…`) authenticates with **Basic**
+> auth as `email:token` — `curl -u "$BITBUCKET_EMAIL:$BITBUCKET_ACCESS_TOKEN"`. Sending it as
+> `Authorization: Bearer` returns `401`. (A Bitbucket repository/workspace **Access Token** is the
+> other valid credential type and *does* use `Bearer` without an email — if you use one of those,
+> swap the `-u` flag for `-H "Authorization: Bearer $BITBUCKET_ACCESS_TOKEN"`.) App Passwords were
+> removed 2026-07-28.
+
+If the credentials are not set, the command will display a PR creation URL instead.
 
 ## Context
 
@@ -47,7 +60,7 @@ The [BASE-BRANCH] is extracted from the third segment of the current branch name
 - Get user info from `user` object:
   - Extract `name` and `email` fields
   - Store as [AUTHOR-NAME] and [AUTHOR-EMAIL]
-  - If `user` not found, call `atlassianUserInfo` MCP tool and cache the result
+  - If `user` not found, call the `atlassianUserInfo` tool (official `atlassian` plugin) and cache the result
 - Get ticket data from `tickets` object:
   - Look for [TICKET-NUMBER] in the `tickets` object
   - If found, extract `summary` field and store as [TICKET-SUMMARY]
@@ -197,30 +210,15 @@ Proceed with PR creation? (y/n)
 
 #### For Bitbucket ([REMOTE-TYPE] = `bitbucket`)
 
-**Option 1: Use Bitbucket MCP Server (Preferred)**
+**Option 1: Use the Bitbucket REST API with curl (Preferred)**
 
-If the Bitbucket MCP server is available and configured, use the `bb_pr_create` MCP tool:
-
-- Call `mcp__bitbucket__bb_pr_create` with parameters:
-
-  - `workspace`: [REPO-OWNER]
-  - `repository`: [REPO-NAME]
-  - `title`: [PR-TITLE]
-  - `source_branch`: [CURRENT-BRANCH]
-  - `destination_branch`: [BASE-BRANCH]
-  - `description`: [PR-DESCRIPTION]
-
-- Display the PR URL from the response
-- If error, fall back to Option 2
-
-**Option 2: Use Bitbucket REST API with curl**
-
-If MCP is not available but credentials are set (`BITBUCKET_EMAIL` and `BITBUCKET_ACCESS_TOKEN`):
+Bitbucket has no MCP tools available (see **Prerequisites**), so this is the automated path. Requires
+`BITBUCKET_EMAIL` + `BITBUCKET_ACCESS_TOKEN`:
 
 ```bash
 curl -s -X POST \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}" \
+  -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
   "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests" \
   -d '{
     "title": "[PR-TITLE]",
@@ -242,9 +240,9 @@ curl -s -X POST \
 - Parse the response to extract the PR URL from `links.html.href`
 - Display: "PR created successfully: [PR-URL]"
 
-**Option 3: Manual Fallback**
+**Option 2: Manual Fallback**
 
-If neither MCP nor credentials are available:
+If the Bitbucket credentials are not set or the call returns `401`:
 
 - Generate the Bitbucket PR creation URL:
 
@@ -257,7 +255,7 @@ If neither MCP nor credentials are available:
   ```
   Bitbucket Pull Request (Manual)
   --------------------------------
-  Auto-creation not available. Configure Bitbucket MCP or set BITBUCKET_EMAIL/BITBUCKET_ACCESS_TOKEN.
+  Auto-creation not available. Set BITBUCKET_EMAIL and BITBUCKET_ACCESS_TOKEN to enable it.
 
   URL: [PR-CREATION-URL]
 

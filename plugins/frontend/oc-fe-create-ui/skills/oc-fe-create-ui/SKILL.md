@@ -55,7 +55,7 @@ $ARGUMENTS = "INTRD-36922 dev"
 
 #### Step 2: Fetch from Atlassian (if not cached)
 
-- Connect to JIRA using the Atlassian MCP server
+- Connect to JIRA using the official Atlassian Rovo MCP (`atlassian@claude-plugins-official`) — call `getJiraIssue` with `issueIdOrKey`. Tool names are bare, so they also resolve against the claude.ai Atlassian connector.
 - Get the issue type, summary, and assignee
 - Store them in [TICKET-TYPE], [TICKET-SUMMARY], and [USERNAME]
 
@@ -151,7 +151,7 @@ Once the page is implemented and validated, add test coverage for the changed co
 
 Once the page is implemented and tested, set the JIRA **AI field** (`customfield_10613`) to `frontend_dev` to record that the frontend AI dev developed the ticket.
 
-- Use the Atlassian MCP server (`editJiraIssue`):
+- Use the `editJiraIssue` tool (official `atlassian` plugin, no credentials needed):
   - `issueIdOrKey`: [TICKET-NUMBER]
   - `fields`: `{ "customfield_10613": { "value": "frontend_dev" } }`
 - `customfield_10613` is a single-select field. Always pass the option in the **value format** — `{ "value": "frontend_dev" }`. Do not substitute an option `id` or a bare string.

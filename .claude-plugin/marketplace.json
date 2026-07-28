@@ -5,7 +5,7 @@
     "email": "mohamed.hamidi@opencellsoft.com"
   },
   "metadata": {
-    "description": "A collection of Claude Code plugins that streamline the OpenCell developer workflow — from Jira ticket management and UI scaffolding to automated commits, pull requests, and code review, with built-in integrations for Atlassian, Bitbucket, Figma, and Playwright."
+    "description": "A collection of Claude Code plugins that streamline the OpenCell developer workflow — from Jira ticket management and UI scaffolding to automated commits, pull requests, and code review. Jira and Confluence come from the official Atlassian plugin in Anthropic's claude-plugins-official marketplace; Figma, Playwright, Opencell, SonarQube and PostgreSQL ship here."
   },
   "plugins": [
     {
@@ -92,11 +92,6 @@
       "name": "oc-figma-mcp",
       "source": "./plugins/mcp/oc-figma-mcp",
       "description": "Connect to Figma MCP server to extract design context, generate code from designs, and retrieve design tokens"
-    },
-    {
-      "name": "oc-bitbucket-mcp",
-      "source": "./plugins/mcp/oc-bitbucket-mcp",
-      "description": "Connect to Bitbucket MCP server to create pull requests, manage repositories, and review code"
     },
     {
       "name": "oc-playwright-mcp",

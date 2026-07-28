@@ -38,7 +38,7 @@ Parse the $ARGUMENTS to get:
 
 For each ticket ID:
 
-- Connect to JIRA using the Atlassian MCP server
+- Connect to JIRA using the official Atlassian Rovo MCP (`atlassian@claude-plugins-official`) — call `getJiraIssue` with `issueIdOrKey`. Tool names are bare, so they also resolve against the claude.ai Atlassian connector.
 - Fetch the issue data including:
   - `key`: Ticket ID
   - `summary`: Ticket summary/title
@@ -167,7 +167,7 @@ When your command needs JIRA data, follow this pattern:
    - If older, optionally refresh from Atlassian
 
 3. **If not in cache:**
-   - Fetch from Atlassian MCP server
+   - Fetch from the official Atlassian Rovo MCP (`getJiraIssue`)
    - Store in cache for future use
    - Continue with the fetched data
 

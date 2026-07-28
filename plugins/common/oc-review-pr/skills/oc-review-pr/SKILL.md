@@ -65,7 +65,7 @@ When the repository is **opencell-core**, this command does not review backend c
 Search for a PR related to `[TICKET-NUMBER]` (see **Bitbucket Access**):
 
 ```bash
-curl -s -H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}" \
+curl -s -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
   "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests?q=title~%22[TICKET-NUMBER]%22&state=OPEN"
 ```
 
@@ -77,10 +77,10 @@ curl -s -H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}" \
 
 ```bash
 # diff
-curl -s -H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}" \
+curl -sL -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
   "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/diff"
 # changed files
-curl -s -H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}" \
+curl -sL -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
   "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/diffstat"
 ```
 
@@ -234,7 +234,7 @@ Once the report is generated, add the tag **`ai_code_review_Front`** to the tick
 
 **`customfield_10613` is a multi-value labels field (an array of strings) — append, never overwrite, and never use the single-select `{ "value": … }` shape.**
 
-1. Read the current value: `getJiraIssue` (Atlassian MCP) with `fields: ["customfield_10613"]`. Store the existing array as `[CURRENT-TAGS]`.
+1. Read the current value: `getJiraIssue` (official `atlassian` plugin — see **Access**) with `fields: ["customfield_10613"]`. Store the existing array as `[CURRENT-TAGS]`.
 2. If `ai_code_review_Front` is already in `[CURRENT-TAGS]`, **skip the edit** and note it.
 3. Otherwise call `editJiraIssue` with the merged array of strings:
    ```json
@@ -253,7 +253,7 @@ Once the report is generated, add the tag **`ai_code_review_Front`** to the tick
   - "The PR looks good! You can approve it directly on Bitbucket: [PR-URL]".
 - Optionally, "Would you like me to post this review as a comment on the PR?" — if yes (confirm first, it is outward-facing):
   ```bash
-  curl -s -X POST -H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}" \
+  curl -s -X POST -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
     -H "Content-Type: application/json" \
     "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/comments" \
     -d '{ "content": { "raw": "[REVIEW-SUMMARY-MARKDOWN]" } }'
@@ -261,9 +261,37 @@ Once the report is generated, add the tag **`ai_code_review_Front`** to the tick
 
 ---
 
-## Bitbucket Access
+## Access
 
-This command talks to Bitbucket over its REST API with `curl`, authenticated by a Bearer access token in `BITBUCKET_ACCESS_TOKEN` (a Bitbucket repository or workspace **Access Token** — App Passwords are deprecated, removed 2026-07-28). See the **Claude code AI assistant** parent page for how to create and set the token. If `BITBUCKET_ACCESS_TOKEN` is missing or a call returns `401`, tell the user and stop (frontend path) or fall back to `/oc-be-review list` (backend path).
+This command talks to two different systems:
+
+| System | How | Credential |
+|--------|-----|------------|
+| **Jira** (`getJiraIssue`, `editJiraIssue`) | Official Atlassian Rovo MCP — install `atlassian@claude-plugins-official`, sign in via `/mcp` (OAuth) | none |
+| **Bitbucket** (find PR, diff, comment) | Bitbucket REST API with `curl` | `BITBUCKET_EMAIL` + `BITBUCKET_ACCESS_TOKEN` |
+
+Jira tool names are written **bare** so they resolve against whichever Atlassian MCP the environment
+registers — the official plugin, or the claude.ai Atlassian connector (`mcp__…Atlassian_Rovo__<tool>`).
+
+Bitbucket is **not** reachable over MCP: the Rovo server serves Bitbucket only under API-token auth,
+never over the OAuth flow the official plugin uses.
+
+`BITBUCKET_ACCESS_TOKEN` is an **Atlassian API token** (`ATATT…`, created at
+https://id.atlassian.com/manage/api-tokens). It authenticates with **Basic** auth as `email:token`, so
+`BITBUCKET_EMAIL` is required too — every call below uses
+`curl -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}"`. Sending an `ATATT…` token as
+`Authorization: Bearer` returns `401`. (A Bitbucket repository/workspace **Access Token** is the other
+valid credential type and does use `Bearer` with no email — substitute
+`-H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}"` if you use one.) App Passwords were removed
+2026-07-28.
+
+Note that `GET …/pullrequests/[PR-ID]/diff` and `…/diffstat` both answer **302** to a signed URL, so
+they must be called with `curl -sL` — without `-L` the body comes back empty and the review would run on
+nothing. The `pullrequests`, `…/[PR-ID]` and `…/comments` endpoints return `200` directly.
+
+See the **Claude code AI assistant** parent page for how to create and set the credentials. If they are
+missing or a call returns `401`, tell the user and stop (frontend path) or fall back to
+`/oc-be-review list` (backend path).
 
 ## Examples
 
