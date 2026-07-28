@@ -6,7 +6,7 @@ argument-hint: <PR-ID | TICKET-ID> (e.g., 123 or INTRD-36922)
 
 ## Purpose
 
-Address the reviewer feedback on a pull request. Given a PR id (or a JIRA ticket whose PR can be found on Bitbucket), this skill reads the **unresolved** review comments from the Bitbucket REST API (see **Access** at the end), checks out the **same branch** used by the PR, fixes each remark with the `oc-fe-engineer` agent, adds test coverage, commits and pushes to the PR branch, sets the JIRA AI field (`customfield_10613`) to `frontend_dev`, then replies to and resolves each addressed comment on Bitbucket.
+Address the reviewer feedback on a pull request. Given a PR id (or a JIRA ticket whose PR can be found on Bitbucket), this skill reads the **unresolved** review comments from the Bitbucket REST API (see **Access** at the end), checks out the **same branch** used by the PR, fixes each remark with the `oc-fe-engineer` agent, adds test coverage, commits and pushes to the PR branch, appends `frontend_dev` to the JIRA AI field (`customfield_10613`), then replies to and resolves each addressed comment on Bitbucket.
 
 This is a **frontend** skill targeting the `opencell-portal` repository.
 
@@ -180,14 +180,17 @@ Once at least one remark was `Fixed` in Step 7 and the changes are pushed, set t
 - Skip if no remark was actually `Fixed` in Step 7 (nothing was changed).
 - Skip if no ticket id could be resolved.
 
-**Set the field** with the `editJiraIssue` tool (official `atlassian` plugin — see **Access**):
+**Append the tag** `frontend_dev` — **never overwrite `customfield_10613`.** It is a **multi-value labels field (an array of strings)** shared with the other AI commands (`ai_code_review_Front`, `ai_code_review_back`, `ai_Dev_back`, `ai_test_back_dev`, …). Sending a single-select `{ "value": … }` object, a bare string, or a one-element array **replaces the whole field and destroys the other tags**.
 
-- `issueIdOrKey`: [TICKET-NUMBER]
-- `fields`: `{ "customfield_10613": { "value": "frontend_dev" } }`
+1. **Read first** — `getJiraIssue` (official `atlassian` plugin — see **Access**) with `fields: ["customfield_10613"]`. Store the existing array as `[CURRENT-TAGS]` (treat `null` / missing as `[]`).
+2. If `frontend_dev` is already in `[CURRENT-TAGS]`, skip the write and note "already tagged".
+3. Otherwise call `editJiraIssue` with **every** existing value plus the new one:
+   - `issueIdOrKey`: [TICKET-NUMBER]
+   - `fields`: `{ "customfield_10613": ["frontend_dev", <...CURRENT-TAGS>] }`
 
-`customfield_10613` is a single-select field. Always pass the option in the **value format** — `{ "value": "frontend_dev" }`. Do not substitute an option `id` or a bare string.
-
-If the update fails, warn the user but continue (do not abort the reply/resolve steps).
+   Expand `<...CURRENT-TAGS>` into the actual strings you read — every one of them must survive, including tags you don't recognise. Never drop or rename a tag you did not add.
+4. **If the read fails, do not write** — a blind write would clobber the field. Warn the user and skip the tagging.
+5. If the update fails, warn the user but continue (do not abort the reply/resolve steps).
 
 ### Step 11: Reply To and Resolve Each Addressed Comment
 
@@ -230,7 +233,7 @@ Present a summary:
 
 **Tests:** [oc-fe-test-writer result — files + pass/fail]
 **Commit:** [commit hash / message]
-**JIRA AI field:** [customfield_10613 set to `frontend_dev` on TICKET-NUMBER / skipped — reason]
+**JIRA AI field:** [`frontend_dev` appended on TICKET-NUMBER / already tagged / skipped — reason]
 **Comments:** [N replied & resolved], [M left open]
 
 The PR has been updated. Review the remaining open remarks (if any) at [PR-URL].
@@ -283,6 +286,6 @@ review comments cannot be read.
 # 5. Fix each remark with the oc-fe-engineer agent
 # 6. Write Vitest tests for the changes (oc-fe-test-writer)
 # 7. Commit and push to the PR branch
-# 8. Set the JIRA AI field (customfield_10613) to frontend_dev
+# 8. Append frontend_dev to the JIRA AI field (customfield_10613)
 # 9. Reply to and resolve each addressed comment on Bitbucket
 ```
