@@ -64,7 +64,8 @@ claude
 | Skills | `oc-fn-portal` | Drive the Opencell Portal via Playwright for design/docs screenshots (not testing); ships the headless `oc-fn-playwright` MCP server |
 | Skills | `oc-fn-project-management` | Design-first phased delivery methodology — phase gates, ADRs, repo/CI conventions |
 
-Requires the Atlassian (Rovo) connector for the Jira/Confluence skills (not bundled).
+Requires an Atlassian Rovo MCP connection for the Jira/Confluence skills — see
+[Atlassian and Bitbucket access](#atlassian-and-bitbucket-access).
 
 ### Sub-agents (frontend)
 
@@ -81,9 +82,39 @@ Requires the Atlassian (Rovo) connector for the Jira/Confluence skills (not bund
 
 | Plugin | Command | Description |
 |--------|---------|-------------|
-| **oc-bitbucket-mcp** | `/oc-bitbucket` | Create pull requests, manage repositories, and review code on Bitbucket |
 | **oc-figma-mcp** | `/oc-figma` | Extract design context, generate code from Figma designs, and retrieve design tokens |
 | **oc-playwright-mcp** | `/oc-playwright` | Automate browser interactions, take screenshots, and test web applications |
 | **oc-opencell-mcp** | `/oc-opencell` | Query and manage the Opencell billing system — invoices, quotes, customers, payments, subscriptions, and more |
 | **oc-sonar-mcp** | — | Access SonarQube code quality metrics, issues, and analysis results |
 | **oc-postgres-mcp** | — | Database health analysis, index tuning, query optimization, and safe SQL execution via PostgreSQL |
+
+## Atlassian and Bitbucket access
+
+The Jira-driven workflow (`/oc-cache-jira` → `/oc-commit` → `/oc-pull-request` → `/oc-review-pr` →
+`/oc-fe-fix-pr`) touches two systems, reached two different ways.
+
+**Jira / Confluence — official Atlassian plugin, no credentials.** Install it from Anthropic's
+marketplace (available by default) and sign in once:
+
+```bash
+/plugin install atlassian@claude-plugins-official
+/mcp                 # complete the browser sign-in for the `atlassian` server
+```
+
+**Bitbucket — email + API token.** The Rovo MCP server exposes its Bitbucket tools *only* under
+API-token auth, never over the OAuth flow the official plugin uses, so an OAuth Rovo connection
+provides no `bitbucket*` tools. Every Bitbucket operation therefore goes through the REST API. Create
+an **Atlassian API token** at <https://id.atlassian.com/manage/api-tokens> and export both values:
+
+```bash
+export BITBUCKET_EMAIL="you@opencellsoft.com"
+export BITBUCKET_ACCESS_TOKEN="your-api-token"     # ATATT…
+```
+
+Both are required: an Atlassian API token authenticates with **Basic** auth as `email:token`
+(`curl -u "$BITBUCKET_EMAIL:$BITBUCKET_ACCESS_TOKEN"`). Sending it as `Authorization: Bearer` returns
+`401`. A Bitbucket repository/workspace **Access Token** is the other valid credential type and does
+use `Bearer` without an email. App Passwords were removed on 2026-07-28.
+
+Without working credentials, `/oc-pull-request` falls back to printing a PR-creation URL, and
+`/oc-review-pr` / `/oc-fe-fix-pr` cannot reach the PR.

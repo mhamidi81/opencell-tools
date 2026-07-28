@@ -36,7 +36,7 @@ Parse the $ARGUMENTS to get:
 - Get user info from `user` object:
   - Extract `name` and `email` fields
   - Store as [AUTHOR-NAME] and [AUTHOR-EMAIL]
-  - If `user` not found, call `atlassianUserInfo` MCP tool and cache the result
+  - If `user` not found, call the `atlassianUserInfo` tool (official `atlassian` plugin) and cache the result
 - Get ticket data from `tickets` object:
   - Look for [TICKET-NUMBER] in the `tickets` object
 - If found, extract `summary` field

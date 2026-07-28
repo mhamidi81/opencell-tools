@@ -41,9 +41,9 @@ skill/agent name (e.g. plugin `oc-fe-engineer` holds agent `oc-fe-engineer`).
 
 There are three kinds of plugins:
 
-1. **Skills & commands** — Slash commands users invoke directly: `/oc-cache-jira`, `/oc-commit`, `/oc-pull-request`, `/oc-review-pr`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr`, `/oc-fe-create-ui`, `/oc-fe-write-tests`, `/oc-fe-create-e2e-test`, `/oc-ar-tech-design`, `/oc-be-implement`, `/oc-be-review`, the backend guide skills (`/oc-be-api-guide`, `/oc-be-db-guide`, `/oc-be-entity-guide`, `/oc-be-service-guide`), and the MCP skills (`/oc-figma`, `/oc-bitbucket`, `/oc-playwright`, `/oc-opencell`). Defined in `SKILL.md` files (or `commands/*.md` for `oc-be-tools`).
+1. **Skills & commands** — Slash commands users invoke directly: `/oc-cache-jira`, `/oc-commit`, `/oc-pull-request`, `/oc-review-pr`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr`, `/oc-fe-create-ui`, `/oc-fe-write-tests`, `/oc-fe-create-e2e-test`, `/oc-ar-tech-design`, `/oc-be-implement`, `/oc-be-review`, the backend guide skills (`/oc-be-api-guide`, `/oc-be-db-guide`, `/oc-be-entity-guide`, `/oc-be-service-guide`), and the MCP skills (`/oc-figma`, `/oc-playwright`, `/oc-opencell`). Defined in `SKILL.md` files (or `commands/*.md` for `oc-be-tools`).
 2. **Sub-agents** — Specialized AI personas spawned by skills or the main agent: `oc-fe-engineer`, `oc-fe-reviewer`, `oc-fe-designer`, `oc-fe-test-writer`, `oc-fe-cypress-expert`, `oc-fe-e2e-expert`, and the backend agents `oc-be-entity-builder`, `oc-be-service-builder`, `oc-be-api-builder`, `oc-be-test-generator`, `oc-be-postman-generator`, `oc-be-pr-reviewer`. Defined in `.md` files under `agents/` with YAML frontmatter (`name`, `color`, `model`).
-3. **MCP Servers** — External service integrations configured in `plugin.json` under `mcpServers` (Bitbucket, Figma, Playwright, Opencell, SonarQube, PostgreSQL), all under `plugins/mcp/`.
+3. **MCP Servers** — External service integrations configured in `plugin.json` under `mcpServers` (Figma, Playwright, Opencell, SonarQube, PostgreSQL), all under `plugins/mcp/`. **Atlassian is not one of them** — Jira/Confluence come from the official `atlassian` plugin in Anthropic's `claude-plugins-official` marketplace, which this repo does not vendor.
 
 ## How to Add a New Plugin
 
@@ -77,23 +77,60 @@ The skills chain together into a standard workflow:
 
 ## MCP Servers Requiring Environment Variables
 
-All MCP plugins live under `plugins/mcp/`.
+All MCP plugins bundled here live under `plugins/mcp/`.
 
 | MCP | Required Variables |
 |-----|--------------------|
-| Bitbucket | `BITBUCKET_EMAIL`, `BITBUCKET_ACCESS_TOKEN` |
 | Opencell | `OPENCELL_BASE_URL`, `OPENCELL_API_VERSION`, `KEYCLOAK_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` |
 | SonarQube | `SONARQUBE_URL`, `SONARQUBE_TOKEN` |
 | PostgreSQL | `DATABASE_URI` |
 | Figma | Uses HTTP MCP (auth handled by Figma) |
 | Playwright | No env vars needed |
+| Atlassian (not bundled) | None — `atlassian@claude-plugins-official`, OAuth via `/mcp` |
+
+## Atlassian and Bitbucket Access
+
+Jira and Bitbucket are reached two different ways, and the split is not optional:
+
+| System | How | Credential |
+|--------|-----|------------|
+| **Jira / Confluence** | Official Atlassian Rovo MCP — `/plugin install atlassian@claude-plugins-official`, then `/mcp` to sign in (OAuth 2.1, endpoint `https://mcp.atlassian.com/v1/mcp/authv2`) | none |
+| **Bitbucket** (PRs, diffs, comments) | Bitbucket REST API with `curl` | `BITBUCKET_EMAIL` + `BITBUCKET_ACCESS_TOKEN` |
+
+**Why Bitbucket is not on MCP:** the Rovo server exposes its Bitbucket tools **only under API-token
+auth**, never over the OAuth flow the official plugin uses — an OAuth Rovo connection surfaces
+Jira/Confluence/Compass tools and no `bitbucket*` tools at all. So every Bitbucket operation in
+`/oc-pull-request`, `/oc-review-pr` and `/oc-fe-fix-pr` uses REST `curl`.
+
+**Bitbucket REST auth — use Basic, not Bearer.** `BITBUCKET_ACCESS_TOKEN` holds an **Atlassian API
+token** (`ATATT…`, from https://id.atlassian.com/manage/api-tokens), which authenticates as
+`email:token` over **Basic** auth. Both variables are required:
+
+```bash
+curl -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" …     # correct
+curl -H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}" …  # 401 for ATATT… tokens
+```
+
+Bitbucket repository/workspace **Access Tokens** are the other valid credential type and *do* use
+`Bearer` with no email — but the tokens configured for this workspace are Atlassian API tokens, so the
+skills are written with `-u`. App Passwords were removed 2026-07-28.
+
+**The diff endpoints redirect.** `GET …/pullrequests/[PR-ID]/diff` **and** `…/diffstat` answer **302**
+to a signed URL; call both with `curl -sL`. Without `-L` the body is empty and a reviewer agent
+silently reviews nothing. The `pullrequests` search, `…/[PR-ID]` and `…/comments` endpoints return
+`200` directly.
+
+Skills name Jira tools **bare** (`getJiraIssue`, `editJiraIssue`, `transitionJiraIssue`,
+`atlassianUserInfo`) so they resolve against whichever Atlassian MCP is registered — the official
+plugin, or the claude.ai connector (`mcp__…Atlassian_Rovo__<tool>`).
 
 ## Conventions
 
 - Backend sub-agents use `model: claude-sonnet-4-5`; all other sub-agents use `model: sonnet`.
 - Agent markdown files contain the full system prompt — editing the `.md` changes agent behavior directly.
 - Skills reference agents and MCP tools by their registered names (e.g., `oc-fe-reviewer:oc-fe-reviewer`, `oc-be-tools:oc-be-pr-reviewer`).
-- The PostgreSQL MCP runs via Docker; the Opencell MCP runs via `npx` from a GitHub source.
+- The PostgreSQL MCP runs via Docker; the Opencell MCP runs via `npx` from a GitHub source; the Figma MCP is a remote HTTP server.
+- Never add an Atlassian/Bitbucket MCP server to this repo. Jira comes from the official `atlassian` plugin (see **Atlassian and Bitbucket Access**), and Bitbucket has no usable MCP path — keep it on REST `curl`.
 
 ## Name Migration (old → new)
 
@@ -108,7 +145,7 @@ All MCP plugins live under `plugins/mcp/`.
 | `/implementBackend` | `/oc-be-implement` |
 | `/reviewBackend` | `/oc-be-review` |
 | `/figma-design` | `/oc-figma` |
-| `/bitbucket-pr` | `/oc-bitbucket` |
+| `/bitbucket-pr` | `/oc-bitbucket` → **removed** (no replacement skill; see **Atlassian and Bitbucket Access**) |
 | `/browser-automation` | `/oc-playwright` |
 | `/opencell` | `/oc-opencell` |
 | `/opencell-tech-design` | `/oc-ar-tech-design` |
@@ -120,3 +157,4 @@ All MCP plugins live under `plugins/mcp/`.
 | agent `playwright-e2e-expert` | `oc-fe-e2e-expert` |
 | agent `entity-builder` / `service-builder` / `api-builder` / `test-generator` / `postman-generator` / `pr-reviewer` | `oc-be-entity-builder` / `oc-be-service-builder` / `oc-be-api-builder` / `oc-be-test-generator` / `oc-be-postman-generator` / `oc-be-pr-reviewer` |
 | plugins `oc-frontend-*`, `oc-backend-tools`, `oc-archi-tools` | `oc-fe-*`, `oc-be-tools`, `oc-ar-tools` |
+| plugin `oc-bitbucket-mcp` (third-party `@aashari/mcp-server-atlassian-bitbucket`, tools `bb_get`/`bb_post`, vars `BITBUCKET_EMAIL` + `BITBUCKET_ACCESS_TOKEN`) | **deleted** — Jira via `atlassian@claude-plugins-official` (OAuth, no vars); Bitbucket via REST `curl` with `BITBUCKET_ACCESS_TOKEN` only |

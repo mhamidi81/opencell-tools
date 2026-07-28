@@ -100,7 +100,7 @@ After the tests are written and verified, set the JIRA **AI field** (`customfiel
 - Skip if the agent reported no meaningfully testable change (no tests were written).
 - Skip if no ticket id could be resolved from the branch.
 
-**Set the field** using the Atlassian MCP server (`editJiraIssue`):
+**Set the field** with the `editJiraIssue` tool (official `atlassian` plugin, no credentials needed):
 
 - `issueIdOrKey`: [TICKET-NUMBER]
 - `fields`: `{ "customfield_10613": { "value": "frontend_test" } }`
