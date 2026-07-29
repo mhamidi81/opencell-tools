@@ -14,12 +14,12 @@ Reference implementation (copy from these):
 For a piece of work (a commit, or the uncommitted working tree), the command writes **three things** to the Jira ticket, after showing them and getting confirmation:
 
 1. A **human comment** — prose breakdown.
-2. A **machine-readable JSON record** in the **"AI metrics"** field (`customfield_10712`) — for reporting.
+2. A **machine-readable JSON record** in the **"AI metrics"** field (`customfield_10745`) — for reporting.
 3. **Tags** on the **"AI"** field (`customfield_10613`).
 
 **All three are shared across teams.** Only the `domain` value, the tag names, and the artifact categories differ. Frontend and QA must write the **same JSON schema and the same field**, so one reporting tool reads every team's data from one place.
 
-### 1a. The JSON field — `customfield_10712` ("AI metrics")
+### 1a. The JSON field — `customfield_10745` ("AI metrics")
 
 - Must be a **Text Field (multi-line)** — a single-line field is capped at **255 chars** and cannot hold the JSON. Capacity of a multi-line field is ~32k; we treat 4000 as the working budget.
 - **Renderer caveat (learned the hard way):** on this Jira instance a multi-line text field is often configured with the **wiki / rich-text (ADF) renderer**, which **rejects a raw string** on write. Two options: (a) set the field's renderer to **Default Text Renderer** (plain) and write a plain string; or (b) leave it rich-text and **wrap the JSON in a minimal ADF `codeBlock`**. Make your command **renderer-agnostic**: write a plain string first, and on rejection retry with the ADF wrapper `{"type":"doc","version":1,"content":[{"type":"codeBlock","content":[{"type":"text","text":"<json>"}]}]}`; on read, accept either a plain string or an ADF doc (recover the JSON from the code-block text node). The backend command does exactly this.
@@ -201,7 +201,7 @@ Also swap the domain-specific **artifact counts** (backend counts JUnit `@Test` 
 | `cat` keys | prod/mig/test/postman | comp/i18n/test/e2e/style | e2e/postman/fixtures |
 | Test counts | JUnit `@Test`, Postman `pm.test` | Vitest, Cypress/Playwright | Playwright/Cypress, Postman |
 | Tags (§1b) | `ai_Dev_back`, `ai_test_back_dev` | `ai_Dev_front`, `ai_test_front_dev` | `ai_test_case_QA`, … |
-| JSON field | `customfield_10712` — **same** | **same** | **same** |
+| JSON field | `customfield_10745` — **same** | **same** | **same** |
 | Schema | `opencell.ai-usage/v1` — **same** | **same** | **same** |
 
 Everything in the "same" rows must stay identical so reporting works across teams.
@@ -214,7 +214,7 @@ Run this in your repo (opencell-portal for FE), with the `oc-be-tools` command o
 
 > Build a `/oc-fe-calculate-ai-use` command for this repo, modelled exactly on `oc-be-tools`' `/oc-be-calculate-ai-use` (see `plugins/backend/oc-be-tools/commands/oc-be-calculate-ai-use.md`). Requirements:
 > 1. Reuse the embedded Python analyzer as-is, but rewrite `category(rel)` for frontend paths (components, i18n, unit tests, e2e, styles) and swap the test-count functions for Vitest + Cypress/Playwright instead of JUnit/Postman.
-> 2. Write the **same** JSON schema `opencell.ai-usage/v1` to the **same** field `customfield_10712`, with the record key `"frontend/<accountId>/<name>"` and read-merge-upsert by the `frontend/<accountId>/` prefix (latest-only). Keep it lean (<~450 chars/record). Make the write renderer-agnostic (plain string, then ADF `codeBlock` fallback) — see §1a.
+> 2. Write the **same** JSON schema `opencell.ai-usage/v1` to the **same** field `customfield_10745`, with the record key `"frontend/<accountId>/<name>"` and read-merge-upsert by the `frontend/<accountId>/` prefix (latest-only). Keep it lean (<~450 chars/record). Make the write renderer-agnostic (plain string, then ADF `codeBlock` fallback) — see §1a.
 > 3. Tag `customfield_10613` with `ai_Dev_front` / `ai_test_front_dev` (append, never overwrite).
 > 4. Also instrument the frontend sub-agents (`oc-fe-engineer`, `oc-fe-designer`, `oc-fe-test-writer`, …) and the frontend orchestrator to write, per run: a manifest (`<phase>.json`), a first-pass snapshot (`git diff HEAD -- <files>` → `snapshots/<phase>.diff`), and a `_planning.json` at plan approval — exactly like the backend. **This is essential; without it, sub-agent work has no retention and is undercounted.**
 > 5. Keep the confirm-before-write flow (comment + JSON + tags shown first) and the developer-adjust step.
@@ -225,7 +225,7 @@ QA: same prompt with `qa` domain, QA sub-agents/orchestrator, QA categories, and
 
 ## 7. Gotchas learned on the backend
 
-- **`customfield_10712` must be multi-line** — a single-line text field caps at 255 chars and cannot hold even one record. Keep records lean (compact keys, `cat` as `{l,c,r}` maps, drop `r` when unmeasurable) and add a size guard that drops the oldest record if the doc would overflow the ~4000-char budget.
+- **`customfield_10745` must be multi-line** — a single-line text field caps at 255 chars and cannot hold even one record. Keep records lean (compact keys, `cat` as `{l,c,r}` maps, drop `r` when unmeasurable) and add a size guard that drops the oldest record if the doc would overflow the ~4000-char budget.
 - **Rich-text renderer rejects raw strings** — if the field uses the wiki/ADF renderer, `editJiraIssue` refuses a plain string. Write plain first, fall back to an ADF `codeBlock` wrapper, and read back either form (recover the JSON from the code-block text node). Or set the field's renderer to Default Text (plain) and skip the wrapper.
 - **`customfield_10613` is a labels array** — append, never overwrite; both dev and test tags may apply.
 - **Neither AI field is on the create screen** — you can't find their IDs via create-meta; read a live issue with `getJiraIssue fields:["*all"] expand:names`.
