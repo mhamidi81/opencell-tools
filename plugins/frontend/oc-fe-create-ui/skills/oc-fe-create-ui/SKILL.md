@@ -55,7 +55,7 @@ $ARGUMENTS = "INTRD-36922 dev"
 
 #### Step 2: Fetch from Atlassian (if not cached)
 
-- Connect to JIRA using the Atlassian MCP server
+- Connect to JIRA using the official Atlassian Rovo MCP (`atlassian@claude-plugins-official`) — call `getJiraIssue` with `issueIdOrKey`. Tool names are bare, so they also resolve against the claude.ai Atlassian connector.
 - Get the issue type, summary, and assignee
 - Store them in [TICKET-TYPE], [TICKET-SUMMARY], and [USERNAME]
 
@@ -149,13 +149,19 @@ Once the page is implemented and validated, add test coverage for the changed co
 
 #### Step 8: Mark the Ticket as Handled by the Frontend AI Dev
 
-Once the page is implemented and tested, set the JIRA **AI field** (`customfield_10613`) to `frontend_dev` to record that the frontend AI dev developed the ticket.
+Once the page is implemented and tested, add the tag `ai_Dev_Front` to the JIRA **AI field** (`customfield_10613`) to record that the frontend AI dev developed the ticket.
 
-- Use the Atlassian MCP server (`editJiraIssue`):
-  - `issueIdOrKey`: [TICKET-NUMBER]
-  - `fields`: `{ "customfield_10613": { "value": "frontend_dev" } }`
-- `customfield_10613` is a single-select field. Always pass the option in the **value format** — `{ "value": "frontend_dev" }`. Do not substitute an option `id` or a bare string.
-- If the update fails, warn the user but continue.
+**Never overwrite `customfield_10613` — always append.** It is a **multi-value labels field (an array of strings)** shared with the other AI commands (`ai_code_review_Front`, `ai_code_review_back`, `ai_Dev_back`, `ai_test_back_dev`, …). Sending a single-select `{ "value": … }` object, a bare string, or a one-element array **replaces the whole field and destroys the other tags**.
+
+1. **Read first** — `getJiraIssue` (official `atlassian` plugin) with `fields: ["customfield_10613"]`. Store the existing array as `[CURRENT-TAGS]` (treat `null` / missing as `[]`).
+2. If `ai_Dev_Front` is already in `[CURRENT-TAGS]`, skip the write and note "already tagged".
+3. Otherwise call `editJiraIssue` with **every** existing value plus the new one:
+   - `issueIdOrKey`: [TICKET-NUMBER]
+   - `fields`: `{ "customfield_10613": ["ai_Dev_Front", <...CURRENT-TAGS>] }`
+
+   Expand `<...CURRENT-TAGS>` into the actual strings you read — every one of them must survive, including tags you don't recognise. Never drop or rename a tag you did not add.
+4. **If the read fails, do not write** — a blind write would clobber the field. Warn the user and skip the tagging.
+5. If the update fails, warn the user but continue.
 
 ## Examples
 

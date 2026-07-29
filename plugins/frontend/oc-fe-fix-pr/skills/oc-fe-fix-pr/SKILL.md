@@ -6,7 +6,7 @@ argument-hint: <PR-ID | TICKET-ID> (e.g., 123 or INTRD-36922)
 
 ## Purpose
 
-Address the reviewer feedback on a pull request. Given a PR id (or a JIRA ticket whose PR can be found on Bitbucket), this skill reads the **unresolved** review comments via the Bitbucket MCP, checks out the **same branch** used by the PR, fixes each remark with the `oc-fe-engineer` agent, adds test coverage, commits and pushes to the PR branch, sets the JIRA AI field (`customfield_10613`) to `frontend_dev`, then replies to and resolves each addressed comment on Bitbucket.
+Address the reviewer feedback on a pull request. Given a PR id (or a JIRA ticket whose PR can be found on Bitbucket), this skill reads the **unresolved** review comments from the Bitbucket REST API (see **Access** at the end), checks out the **same branch** used by the PR, fixes each remark with the `oc-fe-engineer` agent, adds test coverage, commits and pushes to the PR branch, appends `ai_Dev_Front` to the JIRA AI field (`customfield_10613`), then replies to and resolves each addressed comment on Bitbucket.
 
 This is a **frontend** skill targeting the `opencell-portal` repository.
 
@@ -45,38 +45,25 @@ Skip this step entirely if `$ARGUMENTS` was a numeric [PR-ID].
 
 ### Step 3: Resolve the Pull Request
 
-Fetch the PR metadata from Bitbucket. Prefer the MCP server; fall back to curl.
+Fetch the PR metadata from the Bitbucket REST API (see **Access**).
 
 **Option A — PR id was given directly**
 
-- Use `mcp__plugin_oc-bitbucket-mcp_bitbucket__bb_get` to fetch the PR:
-
-  ```
-  endpoint: /repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]
-  ```
+```bash
+curl -s -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
+  "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]"
+```
 
 **Option B — A ticket was given (find its PR)**
 
-- Search for a pull request whose title references the ticket:
-
-  ```
-  endpoint: /repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests?q=title~"[TICKET-NUMBER]"&state=OPEN
-  ```
-
-- If no open PR is found, also try `state=MERGED` and `state=DECLINED`.
-- Use the first matching result and set [PR-ID] from its `id` field.
-
-**Fallback with curl** (when MCP is unavailable but `BITBUCKET_ACCESS_TOKEN` is set):
-
 ```bash
-# By PR id
-curl -s -H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}" \
-  "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]"
-
-# By ticket
-curl -s -H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}" \
+curl -s -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
   "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests?q=title~%22[TICKET-NUMBER]%22&state=OPEN"
 ```
+
+- If no open PR is found, also try `state=MERGED` and `state=DECLINED`, then a source-branch search
+  (`q=source.branch.name~"[TICKET-NUMBER]"`).
+- Use the first matching result and set [PR-ID] from its `id` field.
 
 Extract and store from the PR object:
 
@@ -102,10 +89,11 @@ Work happens on the **same branch** used by the PR — never a new branch.
 
 ### Step 5: Fetch Unresolved Review Comments
 
-- Use `mcp__plugin_oc-bitbucket-mcp_bitbucket__bb_get` to list the PR comments:
+- List the PR comments:
 
-  ```
-  endpoint: /repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/comments?pagelen=100
+  ```bash
+  curl -s -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
+    "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/comments?pagelen=100"
   ```
 
 - Page through all results if `next` is present.
@@ -119,13 +107,6 @@ Work happens on the **same branch** used by the PR — never a new branch.
   - [COMMENT-FILE]: `inline.path` (if present — inline/code comment)
   - [COMMENT-LINE]: `inline.to` or `inline.from` (if present)
   - [COMMENT-TEXT]: `content.raw`
-
-**Fallback with curl:**
-
-```bash
-curl -s -H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}" \
-  "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/comments?pagelen=100"
-```
 
 If there are no unresolved comments, inform the user ("No unresolved review comments on PR #[PR-ID] — nothing to fix.") and stop.
 
@@ -186,7 +167,7 @@ Commit the fixes to [PR-SOURCE-BRANCH] and push so the PR updates.
 
 ### Step 10: Mark the Ticket as Handled by the Frontend AI Dev
 
-Once at least one remark was `Fixed` in Step 7 and the changes are pushed, set the JIRA **AI field** (`customfield_10613`) to `frontend_dev` to record that the frontend AI dev addressed the review.
+Once at least one remark was `Fixed` in Step 7 and the changes are pushed, set the JIRA **AI field** (`customfield_10613`) to `ai_Dev_Front` to record that the frontend AI dev addressed the review.
 
 **Resolve the ticket id first:**
 
@@ -199,50 +180,41 @@ Once at least one remark was `Fixed` in Step 7 and the changes are pushed, set t
 - Skip if no remark was actually `Fixed` in Step 7 (nothing was changed).
 - Skip if no ticket id could be resolved.
 
-**Set the field** using the Atlassian MCP server (`editJiraIssue`):
+**Append the tag** `ai_Dev_Front` — **never overwrite `customfield_10613`.** It is a **multi-value labels field (an array of strings)** shared with the other AI commands (`ai_code_review_Front`, `ai_code_review_back`, `ai_Dev_back`, `ai_test_back_dev`, …). Sending a single-select `{ "value": … }` object, a bare string, or a one-element array **replaces the whole field and destroys the other tags**.
 
-- `issueIdOrKey`: [TICKET-NUMBER]
-- `fields`: `{ "customfield_10613": { "value": "frontend_dev" } }`
+1. **Read first** — `getJiraIssue` (official `atlassian` plugin — see **Access**) with `fields: ["customfield_10613"]`. Store the existing array as `[CURRENT-TAGS]` (treat `null` / missing as `[]`).
+2. If `ai_Dev_Front` is already in `[CURRENT-TAGS]`, skip the write and note "already tagged".
+3. Otherwise call `editJiraIssue` with **every** existing value plus the new one:
+   - `issueIdOrKey`: [TICKET-NUMBER]
+   - `fields`: `{ "customfield_10613": ["ai_Dev_Front", <...CURRENT-TAGS>] }`
 
-`customfield_10613` is a single-select field. Always pass the option in the **value format** — `{ "value": "frontend_dev" }`. Do not substitute an option `id` or a bare string.
-
-If the update fails, warn the user but continue (do not abort the reply/resolve steps).
+   Expand `<...CURRENT-TAGS>` into the actual strings you read — every one of them must survive, including tags you don't recognise. Never drop or rename a tag you did not add.
+4. **If the read fails, do not write** — a blind write would clobber the field. Warn the user and skip the tagging.
+5. If the update fails, warn the user but continue (do not abort the reply/resolve steps).
 
 ### Step 11: Reply To and Resolve Each Addressed Comment
 
 For every remark marked `Fixed` in Step 7:
 
-1. **Reply** under the original comment using `mcp__plugin_oc-bitbucket-mcp_bitbucket__bb_post`:
+1. **Reply** under the original comment — `parent.id` threads it under the remark:
 
-   ```
-   endpoint: /repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/comments
-   body: {
-     "content": { "raw": "Fixed in the latest push: [short summary of the change]." },
-     "parent": { "id": [COMMENT-ID] }
-   }
+   ```bash
+   curl -s -X POST -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
+     -H "Content-Type: application/json" \
+     -d '{"content":{"raw":"Fixed in the latest push: [short summary of the change]."},"parent":{"id":[COMMENT-ID]}}' \
+     "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/comments"
    ```
 
-2. **Resolve** the comment thread using `mcp__plugin_oc-bitbucket-mcp_bitbucket__bb_post`:
+2. **Resolve** the comment thread:
 
+   ```bash
+   curl -s -X POST -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
+     "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/comments/[COMMENT-ID]/resolve"
    ```
-   endpoint: /repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/comments/[COMMENT-ID]/resolve
-   ```
+
+Both calls are outward-facing writes — confirm with the user before the first one.
 
 For remarks marked `Skipped`, reply with the explanation instead and **do not** resolve them (leave them open for the reviewer).
-
-**Fallback with curl:**
-
-```bash
-# Reply
-curl -s -X POST -H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"content":{"raw":"Fixed in the latest push: ..."},"parent":{"id":[COMMENT-ID]}}' \
-  "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/comments"
-
-# Resolve
-curl -s -X POST -H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}" \
-  "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/comments/[COMMENT-ID]/resolve"
-```
 
 ### Step 12: Final Report
 
@@ -261,11 +233,41 @@ Present a summary:
 
 **Tests:** [oc-fe-test-writer result — files + pass/fail]
 **Commit:** [commit hash / message]
-**JIRA AI field:** [customfield_10613 set to `frontend_dev` on TICKET-NUMBER / skipped — reason]
+**JIRA AI field:** [`ai_Dev_Front` appended on TICKET-NUMBER / already tagged / skipped — reason]
 **Comments:** [N replied & resolved], [M left open]
 
 The PR has been updated. Review the remaining open remarks (if any) at [PR-URL].
 ```
+
+---
+
+## Access
+
+This skill talks to two different systems:
+
+| System | How | Credential |
+|--------|-----|------------|
+| **Jira** (`editJiraIssue`) | Official Atlassian Rovo MCP — install `atlassian@claude-plugins-official`, sign in via `/mcp` (OAuth) | none |
+| **Bitbucket** (PR, comments, reply, resolve) | Bitbucket REST API with `curl` | `BITBUCKET_EMAIL` + `BITBUCKET_ACCESS_TOKEN` |
+
+Jira tool names are written **bare** (`editJiraIssue`) so they resolve against whichever Atlassian MCP
+the environment registers — the official plugin, or the claude.ai Atlassian connector
+(`mcp__…Atlassian_Rovo__<tool>`).
+
+Bitbucket is **not** reachable over MCP: the Rovo server serves Bitbucket only under API-token auth,
+never over the OAuth flow the official plugin uses.
+
+`BITBUCKET_ACCESS_TOKEN` is an **Atlassian API token** (`ATATT…`, created at
+https://id.atlassian.com/manage/api-tokens). It authenticates with **Basic** auth as `email:token`, so
+`BITBUCKET_EMAIL` is required too — every call above uses
+`curl -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}"`. Sending an `ATATT…` token as
+`Authorization: Bearer` returns `401`. (A Bitbucket repository/workspace **Access Token** is the other
+valid credential type and does use `Bearer` with no email — substitute
+`-H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}"` if you use one.) App Passwords were removed
+2026-07-28.
+
+If the credentials are missing or a call returns `401`, tell the user and stop — without them the
+review comments cannot be read.
 
 ## Examples
 
@@ -284,6 +286,6 @@ The PR has been updated. Review the remaining open remarks (if any) at [PR-URL].
 # 5. Fix each remark with the oc-fe-engineer agent
 # 6. Write Vitest tests for the changes (oc-fe-test-writer)
 # 7. Commit and push to the PR branch
-# 8. Set the JIRA AI field (customfield_10613) to frontend_dev
+# 8. Append ai_Dev_Front to the JIRA AI field (customfield_10613)
 # 9. Reply to and resolve each addressed comment on Bitbucket
 ```

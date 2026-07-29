@@ -88,7 +88,7 @@ If the agent surfaced a real defect rather than a test bug, highlight it so the 
 
 ### Step 5: Mark the Ticket as Tested by the Frontend AI Test Writer
 
-After the tests are written and verified, set the JIRA **AI field** (`customfield_10613`) to `frontend_test` to record that the frontend AI test writer added coverage.
+After the tests are written and verified, set the JIRA **AI field** (`customfield_10613`) to `ai_test_front_dev` to record that the frontend AI test writer added coverage.
 
 **Resolve the ticket id first:**
 
@@ -100,14 +100,17 @@ After the tests are written and verified, set the JIRA **AI field** (`customfiel
 - Skip if the agent reported no meaningfully testable change (no tests were written).
 - Skip if no ticket id could be resolved from the branch.
 
-**Set the field** using the Atlassian MCP server (`editJiraIssue`):
+**Append the tag** `ai_test_front_dev` — **never overwrite `customfield_10613`.** It is a **multi-value labels field (an array of strings)** shared with the other AI commands (`ai_code_review_Front`, `ai_code_review_back`, `ai_Dev_back`, `ai_test_back_dev`, …). Sending a single-select `{ "value": … }` object, a bare string, or a one-element array **replaces the whole field and destroys the other tags**.
 
-- `issueIdOrKey`: [TICKET-NUMBER]
-- `fields`: `{ "customfield_10613": { "value": "frontend_test" } }`
+1. **Read first** — `getJiraIssue` (official `atlassian` plugin) with `fields: ["customfield_10613"]`. Store the existing array as `[CURRENT-TAGS]` (treat `null` / missing as `[]`).
+2. If `ai_test_front_dev` is already in `[CURRENT-TAGS]`, skip the write and note "already tagged".
+3. Otherwise call `editJiraIssue` with **every** existing value plus the new one:
+   - `issueIdOrKey`: [TICKET-NUMBER]
+   - `fields`: `{ "customfield_10613": ["ai_test_front_dev", <...CURRENT-TAGS>] }`
 
-`customfield_10613` is a single-select field. Always pass the option in the **value format** — `{ "value": "frontend_test" }`. Do not substitute an option `id` or a bare string.
-
-If the update fails, warn the user but continue.
+   Expand `<...CURRENT-TAGS>` into the actual strings you read — every one of them must survive, including tags you don't recognise. Never drop or rename a tag you did not add.
+4. **If the read fails, do not write** — a blind write would clobber the field. Warn the user and skip the tagging.
+5. If the update fails, warn the user but continue.
 
 ## Examples
 

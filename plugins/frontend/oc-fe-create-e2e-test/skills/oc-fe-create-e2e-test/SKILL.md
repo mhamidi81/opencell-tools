@@ -53,7 +53,7 @@ $ARGUMENTS = "INTRD-36922 dev"
 
 #### Step 2: Fetch from Atlassian (if not cached)
 
-- Connect to JIRA using the Atlassian MCP server
+- Connect to JIRA using the official Atlassian Rovo MCP (`atlassian@claude-plugins-official`) — call `getJiraIssue` with `issueIdOrKey`. Tool names are bare, so they also resolve against the claude.ai Atlassian connector.
 - Get the issue type, summary, assignee, and acceptance criteria
 - Store them in [TICKET-TYPE], [TICKET-SUMMARY], [USERNAME], and [ACCEPTANCE-CRITERIA]
 
