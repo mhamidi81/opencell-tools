@@ -885,11 +885,11 @@ Both may apply (a commit with production code *and* new tests gets both); a docs
 
 Write the machine-readable record to the **"AI metrics"** custom field (**`customfield_10679`**) so a reporting tool can aggregate across tickets without parsing comments. It is a **multi-line text field** that holds one JSON document per ticket. If the field ever returns an error (renamed/removed/not on this project), skip this step with a note — the comment and tags still post.
 
-1. **Identity** — call `atlassianUserInfo` for the developer's `accountId`; the record is keyed `backend/<accountId>` (domain + user live in the key, not the record body).
+1. **Identity** — call `atlassianUserInfo` for the developer's `accountId` **and display name**; the record is keyed `backend/<accountId>/<name>` (domain + user id + readable name all live in the key, not the record body).
 2. **Build the lean `[RECORD]`** per the **AI-usage record schema (v1)** below — the compact keys, from the analyzer output plus the developer-confirmed values: `at` (`date -u +%Y-%m-%d`), `ver` (tool version from `plugin.json`), `scope` (`[COMMIT-REF]` short, or `working`), `work`, `contrib`/`retain` (the confirmed production headline), `rework`, `lines`, `cat` (per-category `{l: added lines, c: contribution%, r: retention%}`, omitting `r` when retention is not measurable, e.g. Postman), the test counts, the planning fields, `turns`/`sessions`, `useful` (`[USEFULNESS]` or `null`), `adj` (`true` if the developer changed any number). Keep the **rich detail (per-category %, planning notes) in the comment, not the field**.
-3. **Read-merge-upsert** (latest-only):
+3. **Read-merge-upsert** (latest-only, keyed by `backend/<accountId>/<name>`):
    - `getJiraIssue` with `fields: ["customfield_10679"]`; parse the JSON string. If empty or unparseable, start from `{ "schema": "opencell.ai-usage/v1", "records": {} }`.
-   - Set `records["backend/<accountId>"] = [RECORD]` — replacing only *this* developer's backend record, leaving every other key intact (other developers, and the `frontend/<accountId>` records the future `/oc-fe-calculate-ai-use` writes).
+   - **First delete any existing key that starts with `backend/<accountId>/`** (same developer under an old display name), then set `records["backend/<accountId>/<name>"] = [RECORD]`. Matching the id-prefix — not the full key — keeps it latest-only even if the developer's display name changed between runs (no duplicate record). Every other key stays intact (other developers, and the `frontend/<accountId>/<name>` records the future `/oc-fe-calculate-ai-use` writes).
    - Read immediately before writing to minimise the (rare) two-writers race; last write wins.
 4. **Size guard** — if the resulting document exceeds ~3900 chars (the field caps at 4000), drop the record with the oldest `at` until it fits, and warn the developer (the comment keeps the full history). This is a rare safety net — latest-only keying caps growth at one record per domain×developer (~10 fit).
 5. **Write** — `editJiraIssue` with `{ "fields": { "customfield_10679": "<compact JSON of the whole document>" } }`. The field is a `textarea` (schema `type: string`), so pass the JSON as a **plain string** — no ADF wrapping.
@@ -909,15 +909,15 @@ If the developer declines, print the comment body, the intended tag change, and 
 
 ## AI-usage record schema (v1)
 
-The "AI metrics" field (`customfield_10679`) is a **4000-character** text field, so the payload is deliberately **lean** — reporting-essential scalars with compact keys. Per-category metrics use a small map (`{l,c,r}`) with keys omitted when not measurable; the prose breakdown and planning notes live in the **human comment**, so the field and the comment are *not* duplicates. Each record ≈ **410 chars**, so **~9 records fit** — enough for backend + frontend × several developers on one ticket.
+The "AI metrics" field (`customfield_10679`) is a **4000-character** text field, so the payload is deliberately **lean** — reporting-essential scalars with compact keys. Per-category metrics use a small map (`{l,c,r}`) with keys omitted when not measurable; the prose breakdown and planning notes live in the **human comment**, so the field and the comment are *not* duplicates. Each record ≈ **430 chars** (including the `domain/accountId/name` key), so **~9 records fit** — enough for backend + frontend × several developers on one ticket.
 
-The field holds one JSON document per ticket: an envelope with a `records` **map keyed by `"<domain>/<accountId>"`**. The key encodes domain + user, so the record body does **not** repeat them. Backend and the future frontend command emit the **identical** record shape under `"backend/…"` vs `"frontend/…"` keys, so a reporting tool reads one field per ticket and flattens `records` into rows.
+The field holds one JSON document per ticket: an envelope with a `records` **map keyed by `"<domain>/<accountId>/<name>"`**. The key encodes domain + user id + readable display name, so the record body does **not** repeat them. The **accountId is the stable identity** (upsert matches on the `"<domain>/<accountId>/"` prefix, so a changed display name never creates a duplicate); the name is there purely so the raw JSON is human-readable. Backend and the future frontend command emit the **identical** record shape under `"backend/…"` vs `"frontend/…"` keys, so a reporting tool reads one field per ticket and flattens `records` into rows (split the key: `parts[0]` = domain, `parts[1]` = accountId, `parts[2:]` = name).
 
 ```json
 {
   "schema": "opencell.ai-usage/v1",
   "records": {
-    "backend/5dbb097eb6788b0c37755176": {
+    "backend/5dbb097eb6788b0c37755176/Andrius Karpavičius": {
       "at": "2026-07-28", "ver": "1.7.0", "scope": "6529c39", "work": "code",
       "contrib": 100, "retain": 95, "rework": 20, "lines": 1534,
       "cat": { "prod": {"l":676,"c":100,"r":95}, "mig": {"l":83,"c":100,"r":100}, "test": {"l":397,"c":100,"r":95}, "pm": {"l":378,"c":100} },
@@ -943,7 +943,7 @@ Key legend (all per (domain,user), latest run only):
 | `rework` | reviewer-rework % | `useful` | 1–5 rating (or `null`) |
 | `lines` | total added lines | `adj` | developer adjusted the numbers? |
 
-- **`domain` + user come from the map key** `"<domain>/<accountId>"` — that is what lets multiple developers and both domains coexist on one ticket; the reporting tool splits the key.
+- **`domain` + user id + name come from the map key** `"<domain>/<accountId>/<name>"` — that is what lets multiple developers and both domains coexist on one ticket; the reporting tool splits the key (accountId is the stable id, name is for readability).
 - **Latest-only**: re-running replaces that key's record (new `at`); no history.
 - **Nulls** allowed where unknown. Percentages are the developer-confirmed, 5%-rounded values.
 - **Size guard**: after upsert, if the document would exceed ~3900 chars, warn the developer and drop the **oldest** record (smallest `at`) to stay under 4000; the per-run comment remains the full audit trail. (Latest-only keying already caps growth at one record per domain×developer — ~9 fit — so this is a rare safety net.)
@@ -972,7 +972,7 @@ Key legend (all per (domain,user), latest run only):
 - **Squashed / cross-branch commits.** When many sessions/branches are squashed into one commit, file-history alone under-covers it; manifests restore coverage for the parts built via `/oc-be-implement`.
 - **Artifact counts are commit-derived, not AI-attributed.** Unit-test add/modify counts come from a heuristic `@Test` method-body diff (base vs final); overloaded names and unusual formatting can be miscounted slightly. Postman assertion detection keys off `test`-event scripts; a request whose assertions live elsewhere (or a pure `console.log` test script) may be misclassified. `added_*` compares request **names** against the base collection, so a renamed request reads as added. Good enough for the ticket record; the developer can correct.
 - **Tag semantics.** `ai_test_back_dev` triggers on newly *added* tests/Postman requests (not modifications). A commit that only edits existing tests gets `ai_Dev_back` (if it also touches code) but not `ai_test_back_dev` — adjust in review if that is not what you want.
-- **AI-usage field (reporting).** The canonical machine-readable store is the JSON document in the **"AI metrics"** field (`customfield_10679`, a multi-line text field; payload schema `opencell.ai-usage/v1`), keyed by `domain/accountId` so backend, frontend and multiple developers coexist on one ticket; the comment is only for humans. It is latest-only (no history) and uses read-merge-upsert — if two developers write the same ticket within the same moment, last-write-wins could drop one record; the per-run comment is the audit fallback.
+- **AI-usage field (reporting).** The canonical machine-readable store is the JSON document in the **"AI metrics"** field (`customfield_10679`, a multi-line text field; payload schema `opencell.ai-usage/v1`), keyed by `domain/accountId/name` (accountId is the stable identity, name is for readability) so backend, frontend and multiple developers coexist on one ticket; the comment is only for humans. It is latest-only (no history) and uses read-merge-upsert — if two developers write the same ticket within the same moment, last-write-wins could drop one record; the per-run comment is the audit fallback.
 - **Planning effort is effort, not a percentage.** The requirements-gathering and architecture-plan work produces no committed artifact, so it can only be quantified as activity (rounds, lookups, plan size, time) rolled into a Low/Medium/High band. The band thresholds are seed values in `planning_band()` — tune them against your real runs. Reconstruction from the transcript is a fallback; the `/oc-be-implement` planning manifest is authoritative for revision rounds and plan size.
 - Always defer to the developer's adjusted numbers — the automatic figures are a starting point, not an audit.
 ```

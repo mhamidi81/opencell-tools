@@ -1,5 +1,5 @@
 {
   "name": "oc-be-tools",
   "description": "Backend development toolkit for Opencell Core — agents for building entities, services, APIs, tests, and Postman collections, guideline-loading skills, an implementation orchestrator (/oc-be-implement) whose sub-agents record file manifests, a guideline-based code review command (/oc-be-review) with a SonarQube quality-gate summary that tags the ticket ai_code_review_back, and an AI-usage estimator (/oc-be-calculate-ai-use) with per-category line/contribution/retention breakdowns, unit-test and Postman assertion/test-case counts, reviewer-rework provenance, developer-interaction counts, a planning/analysis effort axis, ai_Dev_back / ai_test_back_dev Jira tagging, and a machine-readable JSON record (per domain/user) stored in a dedicated field for reporting",
-  "version": "1.7.0"
+  "version": "1.8.0"
 }
