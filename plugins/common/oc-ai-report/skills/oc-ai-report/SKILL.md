@@ -1,7 +1,7 @@
 ---
 name: oc-ai-report
 description: Produce a cross-ticket AI-usage report over a period, split by area (backend / frontend / QA) and grouped by date → user → ticket, augmented per ticket with the original estimate, Tempo-logged time, and the number of linked bugs. Reads the "AI metrics" JSON field from Jira; read-only.
-argument-hint: "--since YYYY-MM-DD --until YYYY-MM-DD [--project INTRD]"
+argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD]"
 ---
 
 ## Purpose
@@ -22,11 +22,13 @@ Requires the **Atlassian MCP** (the official `atlassian` / claude.ai Atlassian R
 
 ## Arguments
 
-Parse `$ARGUMENTS`:
+Parse `$ARGUMENTS` — **all optional**. A bare `/oc-ai-report` reports the **last 30 days** for **INTRD**.
 
-- `--since YYYY-MM-DD` (required) — start of the period (inclusive), matched against each record's `at`.
-- `--until YYYY-MM-DD` (required) — end of the period (exclusive).
-- `--project KEY` — Jira project (default `INTRD`).
+- `--since YYYY-MM-DD` — start of the period (inclusive), matched against each record's `at`. **Default: 30 days before `--until`.**
+- `--until YYYY-MM-DD` — end of the period (exclusive). **Default: tomorrow** (so today's records are included).
+- `--project KEY` — Jira project. **Default: `INTRD`.**
+
+Compute any missing date with the shell — `date -u +%Y-%m-%d` (today), `date -u -d 'tomorrow' +%Y-%m-%d`, `date -u -d '30 days ago' +%Y-%m-%d`; if `date -d` is unavailable, use Python `datetime`. Echo the resolved window back to the user (e.g. "Reporting INTRD, 2026-07-04 → 2026-08-03") so the defaults are visible.
 
 ## Task 1 — Build the JQL and fetch the tickets
 
