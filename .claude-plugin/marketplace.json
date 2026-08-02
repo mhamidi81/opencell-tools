@@ -89,6 +89,11 @@
       "description": "Review a pull request linked to a JIRA ticket using the oc-fe-reviewer agent with a detailed report and suggested fixes"
     },
     {
+      "name": "oc-ai-report",
+      "source": "./plugins/common/oc-ai-report",
+      "description": "Cross-ticket AI-usage report over a period — reads the AI-metrics JSON (backend/frontend/QA) from Jira, groups by area → date → user → ticket, and adds each ticket's original estimate, Tempo-logged time, and linked-bug count. Read-only; Atlassian MCP only"
+    },
+    {
       "name": "oc-figma-mcp",
       "source": "./plugins/mcp/oc-figma-mcp",
       "description": "Connect to Figma MCP server to extract design context, generate code from designs, and retrieve design tokens"
