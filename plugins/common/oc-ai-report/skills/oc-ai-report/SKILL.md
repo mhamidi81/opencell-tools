@@ -8,9 +8,8 @@ argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD]"
 
 Aggregate the machine-readable **AI-usage records** that `/oc-be-calculate-ai-use` (and the future frontend / QA equivalents) write to the **"AI metrics"** field (`customfield_10745`), across many tickets over a time window, into one report:
 
-- **Three areas** — `backend`, `frontend`, `qa` (from each record's `domain`).
-- **Grouped by date → user → ticket** within each area.
-- Each ticket row also shows **original estimate**, **time logged in Tempo**, and the **number of bugs** raised against the ticket.
+- A **summary table by user** (one row per developer, aggregated), then **details per user by ticket**, then **totals by the three areas** (`backend`, `frontend`, `qa`, from each record's `domain`).
+- Each row also shows **original estimate**, **time logged in Tempo**, a **time-gain %** (estimate vs. logged), and the **number of bugs** raised against the ticket.
 
 This command is **read-only** — it only queries Jira. It needs **no** Bitbucket token, **no** git, and **no** repo checkout; it can run from any directory.
 
@@ -101,6 +100,13 @@ def worklog_by_user(worklog):
 
 def num(x): return x if isinstance(x, (int, float)) else 0
 
+def gain_pct(est, logged):
+    """Time gain = (estimate - logged) / estimate. Positive = under estimate (time saved)."""
+    return round((est - logged) / est * 100) if est else None
+
+def gain_str(g):
+    return "–" if g is None else (f"+{g}%" if g >= 0 else f"{g}%")
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", required=True)
@@ -111,9 +117,8 @@ def main():
     issues = data.get("issues", data) if isinstance(data, dict) else data
     if isinstance(issues, dict): issues = issues.get("nodes", [])
 
-    tree = {ar: defaultdict(lambda: defaultdict(list)) for ar in AREAS}   # area -> at -> name -> rows
+    rows = []      # one flat row per (ticket, developer) AI record
     warnings = []
-
     for iss in issues:
         key = iss.get("key"); f = iss.get("fields", {}) or {}
         raw = recover_json(f.get("customfield_10745"))
@@ -126,67 +131,80 @@ def main():
         bugs = bug_count(f.get("issuelinks"))
         wl = worklog_by_user(f.get("worklog"))
         summary = (f.get("summary") or "")[:44]
-        if len(f.get("worklog") or {}) and (f.get("worklog") or {}).get("total", 0) > len((f.get("worklog") or {}).get("worklogs") or []):
+        if (f.get("worklog") or {}).get("total", 0) > len((f.get("worklog") or {}).get("worklogs") or []):
             warnings.append(f"{key}: worklog list truncated by Jira — per-user logged time may be partial")
         for rkey, rec in (doc.get("records") or {}).items():
             parts = rkey.split("/", 2)
             if len(parts) < 2: continue
             domain, acc = parts[0], parts[1]
             name = parts[2] if len(parts) > 2 else acc
-            if domain not in tree: continue
+            if domain not in AREAS: continue
             at = rec.get("at", "")
             if a.since and at and at < a.since: continue
             if a.until and at and at >= a.until: continue
-            tree[domain][at][name].append({
-                "key": key, "summary": summary, "rec": rec, "est_h": est_h,
-                "logged_user_h": (hours(wl.get(acc)) if acc in wl else None),
-                "logged_total_h": logged_total_h, "bugs": bugs,
-            })
+            logged = hours(wl.get(acc)) if acc in wl else logged_total_h   # per-user if Jira has it, else ticket total
+            rows.append({"area": domain, "at": at, "acc": acc, "name": name, "key": key, "summary": summary,
+                         "contrib": num(rec.get("contrib")), "retain": num(rec.get("retain")), "rework": num(rec.get("rework")),
+                         "utAdd": num(rec.get("utAdd")), "utMod": num(rec.get("utMod")), "pmTests": num(rec.get("pmTests")),
+                         "turns": num(rec.get("turns")), "est": est_h, "logged": logged, "bugs": bugs})
 
-    out = []
-    P = out.append
+    out = []; P = out.append
     P(f"# AI-usage report — records with `at` in [{a.since or '…'} … {a.until or '…'})\n")
-    grand = {ar: {"tickets": set(), "contrib": [], "retain": [], "utAdd": 0, "utMod": 0,
-                  "pmTests": 0, "turns": 0, "est": 0.0, "logged": 0.0, "bugs": 0,
-                  "counted": set()} for ar in AREAS}
-
-    for area in AREAS:
-        if not tree[area]: continue
-        P(f"## {area.capitalize()}\n")
-        for at in sorted(tree[area]):
-            P(f"### {at or '(no date)'}\n")
-            for name in sorted(tree[area][at]):
-                P(f"**{name}**\n")
-                P("| Ticket | Summary | Contrib | Retain | Rework | Tests +/~ | Cases | Prompts | Est h | Logged h | Bugs |")
-                P("|---|---|--:|--:|--:|:--:|--:|--:|--:|--:|--:|")
-                for r in tree[area][at][name]:
-                    rc = r["rec"]
-                    logged = r["logged_user_h"] if r["logged_user_h"] is not None else r["logged_total_h"]
-                    P(f"| {r['key']} | {r['summary']} | {rc.get('contrib','–')}% | {rc.get('retain','–')}% | "
-                      f"{rc.get('rework','–')}% | {rc.get('utAdd',0)}/{rc.get('utMod',0)} | {rc.get('pmTests',0)} | "
-                      f"{rc.get('turns','–')} | {r['est_h']} | {logged} | {r['bugs']} |")
-                    g = grand[area]
-                    g["tickets"].add(r["key"])
-                    g["contrib"].append(num(rc.get("contrib"))); g["retain"].append(num(rc.get("retain")))
-                    g["utAdd"] += num(rc.get("utAdd")); g["utMod"] += num(rc.get("utMod"))
-                    g["pmTests"] += num(rc.get("pmTests")); g["turns"] += num(rc.get("turns"))
-                    if r["logged_user_h"] is not None: g["logged"] += r["logged_user_h"]
-                    # est/bugs are ticket-wide -> count once per ticket per area
-                    if r["key"] not in g["counted"]:
-                        g["counted"].add(r["key"]); g["est"] += r["est_h"]; g["bugs"] += r["bugs"]
-                        if r["logged_user_h"] is None: g["logged"] += r["logged_total_h"]
-                P("")
-
+    if not rows:
+        P("_No AI-usage records in this window._"); print("\n".join(out)); return
     avg = lambda xs: round(sum(xs) / len(xs)) if xs else "–"
-    P("## Totals by area\n")
-    P("| Area | Tickets | Avg contrib | Avg retain | Tests +/~ | Cases | Prompts | Est h | Logged h | Bugs |")
-    P("|---|--:|--:|--:|:--:|--:|--:|--:|--:|--:|")
-    for area in AREAS:
-        g = grand[area]
+
+    # ---- 1) Summary by user ----
+    users = {}
+    for r in rows:
+        u = users.setdefault(r["acc"], {"name": r["name"], "areas": set(), "tickets": set(),
+             "contrib": [], "retain": [], "rework": [], "utAdd": 0, "utMod": 0, "pmTests": 0,
+             "turns": 0, "est": 0.0, "logged": 0.0, "bugs": 0, "seen": set()})
+        u["name"] = r["name"]; u["areas"].add(r["area"]); u["tickets"].add(r["key"])
+        u["contrib"].append(r["contrib"]); u["retain"].append(r["retain"]); u["rework"].append(r["rework"])
+        u["utAdd"] += r["utAdd"]; u["utMod"] += r["utMod"]; u["pmTests"] += r["pmTests"]; u["turns"] += r["turns"]
+        if r["key"] not in u["seen"]:   # est/logged/bugs are ticket-wide -> once per (user, ticket)
+            u["seen"].add(r["key"]); u["est"] += r["est"]; u["logged"] += r["logged"]; u["bugs"] += r["bugs"]
+
+    P("## Summary by user\n")
+    P("| User | Area | Tickets | Contrib | Retain | Rework | Tests +/~ | Cases | Prompts | Est h | Logged h | Time gain | Bugs |")
+    P("|---|---|--:|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|")
+    for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
+        P(f"| {u['name']} | {'/'.join(sorted(u['areas']))} | {len(u['tickets'])} | {avg(u['contrib'])}% | "
+          f"{avg(u['retain'])}% | {avg(u['rework'])}% | {u['utAdd']}/{u['utMod']} | {u['pmTests']} | {u['turns']} | "
+          f"{round(u['est'],1)} | {round(u['logged'],1)} | {gain_str(gain_pct(u['est'], u['logged']))} | {u['bugs']} |")
+
+    # ---- 2) Detail per user, by ticket ----
+    P("\n## Detail per user")
+    by_user = defaultdict(list)
+    for r in rows: by_user[r["acc"]].append(r)
+    for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
+        P(f"\n### {u['name']} ({'/'.join(sorted(u['areas']))})\n")
+        P("| Ticket | Date | Summary | Contrib | Retain | Rework | Tests +/~ | Cases | Prompts | Est h | Logged h | Time gain | Bugs |")
+        P("|---|---|---|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|")
+        for r in sorted(by_user[acc], key=lambda x: (x["at"], x["key"])):
+            P(f"| {r['key']} | {r['at']} | {r['summary']} | {r['contrib']}% | {r['retain']}% | {r['rework']}% | "
+              f"{r['utAdd']}/{r['utMod']} | {r['pmTests']} | {r['turns']} | {r['est']} | {r['logged']} | "
+              f"{gain_str(gain_pct(r['est'], r['logged']))} | {r['bugs']} |")
+
+    # ---- 3) Totals by area ----
+    areas = {ar: {"tickets": set(), "contrib": [], "retain": [], "utAdd": 0, "utMod": 0, "pmTests": 0,
+                  "turns": 0, "est": 0.0, "logged": 0.0, "bugs": 0, "seen": set()} for ar in AREAS}
+    for r in rows:
+        g = areas[r["area"]]
+        g["tickets"].add(r["key"]); g["contrib"].append(r["contrib"]); g["retain"].append(r["retain"])
+        g["utAdd"] += r["utAdd"]; g["utMod"] += r["utMod"]; g["pmTests"] += r["pmTests"]; g["turns"] += r["turns"]
+        if r["key"] not in g["seen"]:
+            g["seen"].add(r["key"]); g["est"] += r["est"]; g["logged"] += r["logged"]; g["bugs"] += r["bugs"]
+    P("\n## Totals by area\n")
+    P("| Area | Tickets | Avg contrib | Avg retain | Tests +/~ | Cases | Prompts | Est h | Logged h | Time gain | Bugs |")
+    P("|---|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|")
+    for ar in AREAS:
+        g = areas[ar]
         if not g["tickets"]: continue
-        P(f"| {area.capitalize()} | {len(g['tickets'])} | {avg(g['contrib'])}% | {avg(g['retain'])}% | "
+        P(f"| {ar.capitalize()} | {len(g['tickets'])} | {avg(g['contrib'])}% | {avg(g['retain'])}% | "
           f"{g['utAdd']}/{g['utMod']} | {g['pmTests']} | {g['turns']} | {round(g['est'],1)} | "
-          f"{round(g['logged'],1)} | {g['bugs']} |")
+          f"{round(g['logged'],1)} | {gain_str(gain_pct(g['est'], g['logged']))} | {g['bugs']} |")
     if warnings:
         P("\n## Notes")
         for w in warnings[:20]: P(f"- {w}")
@@ -205,7 +223,8 @@ if __name__ == "__main__":
 
 - **Areas come from the record `domain`** (`backend`/`frontend`/`qa`). A ticket worked by more than one area appears under each — that is intended (each area's contribution is separate). In **Totals**, a ticket's *estimate* and *bug count* are counted **once per area** (they are ticket-wide), while *logged time* is attributed **per user** from worklog authors where available.
 - **Date = the AI record's `at`** (the day the metric was measured/confirmed). The JQL `updated >=` window is only a pre-filter; precise period membership is decided by `at` in the aggregator.
-- **Original estimate** = Jira `timeoriginalestimate`; **logged time** = Jira/Tempo worklogs (`worklog` per author, else the `timespent` aggregate) — shown in **hours** (Jira's own d/h view uses 8h/day). If the `worklog` list is truncated (Jira returns a capped number inline), per-user time may be partial — flagged in Notes; use the worklog endpoint or Tempo API for exhaustive per-user logs.
+- **Original estimate** = Jira `timeoriginalestimate`; **logged time** = Jira/Tempo worklogs, shown in **hours** (Jira's own d/h view uses 8h/day). **Time gain** = `(estimate − logged) / estimate` — positive means the ticket took **less** than estimated (time saved); `–` when there is no estimate.
+- **Tempo caveat (important):** Tempo Timesheets writes its worklogs with **author = the Tempo app account**, *not* the developer. So per-user attribution from Jira worklog authors usually fails, and the report falls back to the **ticket-total** `timespent` for "Logged h" (accurate per ticket, but not split per developer). For true per-user logged time, use the **Tempo REST API** (`api.tempo.io`, a Tempo token). If the inline `worklog` list is truncated, per-user time may also be partial — flagged in Notes.
 - **Bugs** = linked issues whose type is `Bug` (either link direction). This counts *linked* bugs; if your team relates bugs by a specific link type (e.g. "is caused by") or via subtasks, adjust `bug_count()` accordingly.
 - **Read-only** — this command never writes to Jira, Bitbucket, or git.
 - The AI records are **latest-only per developer×domain**, so the report reflects the most recent measurement per person per ticket, not a full history.

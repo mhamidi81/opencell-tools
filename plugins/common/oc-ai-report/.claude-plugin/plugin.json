@@ -1,5 +1,5 @@
 {
   "name": "oc-ai-report",
   "description": "Cross-ticket AI-usage report over a period — reads the AI-metrics JSON records (backend / frontend / QA) from Jira, groups them by area → date → user → ticket, and adds each ticket's original estimate, Tempo-logged time, and linked-bug count. Read-only; needs only the Atlassian (Jira) MCP.",
-  "version": "1.0.1"
+  "version": "1.1.0"
 }
