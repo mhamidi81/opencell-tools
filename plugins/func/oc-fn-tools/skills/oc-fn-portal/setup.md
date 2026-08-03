@@ -125,5 +125,15 @@ use `--secrets` for any shared or sensitive tenant.
   a time, or run a throwaway `--isolated` session (no persistence) for the one-off.
 - **Logged out unexpectedly:** the persisted session expired — just log in again; the profile
   re-captures it.
+- **Clicks are accepted but nothing happens:** `browser_click` returns success and the generated
+  Playwright locator line looks correct (e.g. `getByRole('button', { name: 'Edit' }).click()`), yet
+  the app does not react — no re-render, no state change, no network request. React synthetic events
+  are not firing; most likely a Chromium / `@playwright/mcp` version mismatch against the Portal's
+  React build. **Confirm with `browser_network_requests`:** no new request after the click. What
+  marks it as environmental rather than one broken control is that it repeats on unrelated controls
+  — observed in a single session on a button, a tab strip and a data-grid row. When it happens, the
+  session **cannot drive this app**: fall back to read-only screenshots and tell the user. **Never
+  report it as a Portal bug** — see `SKILL.md` § *What you observe is not evidence about the
+  product*.
 - **Server flag rejected after a package update:** re-check `npx @playwright/mcp@latest --help`
   and update the args in the `claude mcp add` command in §3 above.

@@ -1,7 +1,7 @@
 ---
 name: oc-fn-func-design
-version: 1.25.0
-updated: 2026-07-22T10:02:15+02:00
+version: 1.27.2
+updated: 2026-08-03T22:10:00+02:00
 author: Stéphane Chambrin
 description: >
   Rules and reference data for working with Jira issues in the Opencell INTRD project
@@ -14,6 +14,9 @@ description: >
   and for the scaffold/read/review side of a Story's Technical Design (creating the empty
   customfield_10137 template, or reviewing it). Authoring/filling the Technical Design field
   is the architect lane — defer to oc-ar-tech-design for "write the technical design for INTRD-*".
+  Also trigger on the PO review lane: reviewing, validating or rejecting a delivered Story,
+  a PO verdict, the To Review by PO / Validated by PO / Rejected by PO / PO can't test yet
+  transitions, INTRD workflow transitions generally, and the Sub-bug issue type.
   Always load this skill before any Atlassian Rovo Jira tool call — or direct Jira
   REST API calls — on the INTRD or CR projects.
 ---
@@ -40,7 +43,7 @@ resolve against whatever Atlassian MCP your environment registers (the claude.ai
 as `mcp__…Atlassian_Rovo__<verb>`; a self-hosted Atlassian MCP may use a different prefix).
 
 Check at session start: call `atlassianUserInfo` (or `getVisibleJiraProjects`); if it errors, the
-connector is not enabled. Without it, reads/search/transitions/plain edits still work via the optional `jira`/curl helper, but ADF-only Story custom fields (10134–10137) and template clones cannot be written.
+connector is not enabled. That is not blocking: the optional `jira`/curl helper covers reads, search, transitions, plain edits **and** ADF writes — including the Story custom fields (10134–10137) and template clones — by posting an ADF document object from a file. Only edits guarded by the inline-media safety rule need the connector.
 
 ## Transport — Rovo MCP (baseline) vs the optional `jira` helper
 
@@ -53,11 +56,14 @@ The Atlassian **Rovo MCP** is the **baseline transport that always works** — i
 | List or apply a transition | `jira`/curl if the helper is installed, else `getTransitionsForJiraIssue` / `transitionJiraIssue` (Rovo MCP) |
 | Plain-text comment | `jira`/curl if the helper is installed, else `addCommentToJiraIssue` (Rovo MCP) |
 | Simple plain-field edit (summary, labels, plain description) | `jira`/curl if the helper is installed, else `editJiraIssue` (Rovo MCP) |
-| Story rich-text fields `customfield_10134`–`10137` (ADF-only) | **Rovo MCP** (`editJiraIssue`) |
-| Create / rewrite from a template (panels, dark-red headings, rules) | **Rovo MCP** |
+| Story rich-text fields `customfield_10134`–`10137` (ADF-only) | Rovo MCP (`createJiraIssue`) **or** direct REST with an ADF document object (`jira raw POST /issue @payload.json`) — **prefer REST for bulk**; the four fields must be set **inside the create call**, see `stories.md` § *Template-seeding automation* |
+| Create / rewrite from a template (panels, dark-red headings, rules) | **Rovo MCP**, or `jira raw` with an `@file` ADF payload |
+| ADF `description` at creation, or a rich ADF comment | **Rovo MCP**, or `jira raw` with an `@file` ADF payload |
 | Edits guarded by the inline-media safety rule (below) | **Rovo MCP** |
 
 **Default to the `jira` helper when it is installed; otherwise use the Rovo MCP for every row.**
+
+**A rich ADF body does not force you onto the MCP.** `jira raw` posts one from a file, so the blob never enters the context at all — recipe in `rest-api.md`. This holds for `customfield_10134`–`10137` too: direct REST writes ADF to all four correctly (verified across nine Stories plus a template rewrite, with formatting confirmed via `expand=renderedFields`). Because these payloads are large — ~330 KB of ADF across seven Stories — **REST is the preferred transport for bulk Story creation**: the MCP injects whole responses into context, while a generated `@file` payload never enters it. Only **edits guarded by the inline-media safety rule** stay on the MCP.
 
 When the helper is installed, common reads have shortcuts: `jira mine`, `jira open`, `jira recent`, `jira unassigned`, `jira new`, and `jira children KEY` (an Epic's Stories / an issue's subtasks) — run `jira aliases` to list them.
 
@@ -67,7 +73,7 @@ One-time auth setup and the full recipe + endpoint catalog — including the JQL
 
 ## Issue-type-specific rules — read on demand
 
-The rules below cover **all issue types**. For type-specific conventions (custom fields, workflows, templates, creation quirks), also read the matching reference file:
+The rules below cover **all issue types**. For type-specific conventions (custom fields, workflows, templates, creation quirks) — and for the PO-review lane, a task rather than a type — also read the matching reference file:
 
 | Working on…   | Also read                              |
 |---------------|----------------------------------------|
@@ -75,8 +81,10 @@ The rules below cover **all issue types**. For type-specific conventions (custom
 | Enabler       | `enablers.md`                          |
 | Epic          | `epics.md`                             |
 | Bug           | `bugs.md`                              |
+| Sub-bug       | `bugs.md`                              |
 | Initiative    | `initiatives.md`                       |
 | Change Request | `change-requests.md`                  |
+| Reviewing a delivered Story (PO verdict) | `po-review.md`      |
 
 Load only the file relevant to the current task — do not pre-read all of them.
 
@@ -88,6 +96,7 @@ Load only the file relevant to the current task — do not pre-read all of them.
 ## General Rules
 
 - All Jira issues must be written in **English**.
+- **Check the create screen before the first create of an issue type you have not created this session** — required fields differ per type and are not guessable. Run `jira meta <issuetypeId>` (or `getJiraIssueTypeMetaWithFields`). Notably a **`Bug`** requires *Issue location (URL)* (`customfield_10359`, a URL-typed string field — send a full URL) and *Affects versions* (`versions`) at creation, while a **`Sub-bug`** requires neither — see `bugs.md` § *Required fields at creation — Bug vs Sub-bug*.
 - Minimise token usage on every call. First pick the cheapest transport (see [Transport](#transport--rovo-mcp-baseline-vs-the-optional-jira-helper) — default to the `jira` helper when it is installed; otherwise use the Rovo MCP for every operation). Then, on whichever transport, pass an explicit `fields` allowlist (see [Reading efficiency](#reading-efficiency--field-selection)) and prefer `markdown` over ADF on MCP calls whenever possible (see [Content format policy](#content-format-policy--adf-vs-markdown)).
 
 ## Product area — set the module Component
@@ -311,6 +320,7 @@ The INTRD project has a canonical template issue for each issue type. Use these 
 | Type                  | Template key | Rich-text field(s)          | Reference file |
 |-----------------------|--------------|-----------------------------|----------------|
 | Bug                   | INTRD-5340   | `description`               | `bugs.md`      |
+| Sub-bug               | INTRD-5340 *(the Bug template — there is no separate Sub-bug template)* | `description` | `bugs.md` |
 | Initiative            | INTRD-42501  | `description`               | `initiatives.md` |
 | Epic                  | INTRD-1949   | `description`               | `epics.md`     |
 | User Story — generic  | INTRD-1486   | `customfield_10134`–`10137` | `stories.md`   |
@@ -342,9 +352,9 @@ When writing or rewriting a template (or any issue cloned from one that should k
 This recipe supplies the shared ADF heading/rule/panel vocabulary and the EMPTY `customfield_10137` scaffold; the FILLED structure of `customfield_10137` is owned by the architects' `oc-ar-tech-design` (`references/adf-template.md`), where available.
 
 Most Opencell issue templates — Epic, Initiative, Enabler, the Story custom fields, and the CR
-template (CR-3) — share the following ADF vocabulary. **Exception: the Bug template (INTRD-5340)
-uses plain `strong` headings with *no* colour** (still `strong` + `rule` + note panels) — do not add
-`#bf2600` to a Bug; see `bugs.md`.
+template (CR-3) — share the following ADF vocabulary. **Exception: the Bug template (INTRD-5340),
+which `Sub-bug` also follows, uses plain `strong` headings with *no* colour** (still `strong` +
+`rule` + note panels) — do not add `#bf2600` to a Bug or a Sub-bug; see `bugs.md`.
 
 - **Coloured headings** — real ADF `heading` nodes (`attrs.level`: 1 for the field title, 2 for sections, 3–4 for subsections), their text marked `strong` + `textColor` `#bf2600` (dark red), each followed by a `rule` node. **Not** styled `paragraph` nodes — see the copy-pasteable recipe in `stories.md` § *ADF recipe*. `#bf2600` is the func/brand heading colour; other Opencell skills (e.g. `oc-ar-ai-tech-design`) may emit `#FF0000` — keep func-authored content on `#bf2600` and do not silently normalise to another value. **The Bug template is the exception** — its headings are plain `strong`, no colour.
 - **Note panels** (purple, `panelType: "note"`, `#eae6ff` background) — wrap author hints. Closing line: italic-grey "You can delete this note" (`em` + `textColor #97a0af`).
