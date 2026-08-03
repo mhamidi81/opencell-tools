@@ -6,9 +6,9 @@ Functional / product-design plugins, on the `oc-fn-<name>` naming convention.
 
 Bundle plugin (`plugins/func/oc-fn-tools`) with seven skills:
 
-- **oc-fn-func-design** — author Jira INTRD issues (Epic / User Story / Enabler / Bug / Feature): templates, ADF custom fields, acceptance criteria. Functional lane; defers Technical-design authoring to `oc-ar-tech-design`.
+- **oc-fn-func-design** — author Jira INTRD issues (Initiative / Epic / User Story / Enabler / Bug / Sub-bug): templates, ADF custom fields, acceptance criteria. Functional lane; defers Technical-design authoring to `oc-ar-tech-design`.
 - **oc-fn-documentation** — create/update Confluence pages in the Opencell docs space (Concepts + User Manuals).
-- **oc-fn-portal** — drive the Opencell Portal via Playwright for design/docs screenshots (not testing). Ships the headless `oc-fn-playwright` MCP server.
+- **oc-fn-portal** — drive the Opencell Portal via Playwright for design/docs screenshots (not testing), plus the API-replay lane for diagnosing a Portal action that fails server-side. Ships the headless `oc-fn-playwright` MCP server.
 - **oc-fn-project-management** — the design-first phased delivery methodology (gates, ADRs, repo/CI conventions).
 - **oc-fn-decks** — author & render Opencell-branded slide decks with the Marp theme (Charte Graphique 2023): theme, authoring conventions, `marp-cli` rendering, overflow + locale checks.
 - **oc-fn-briefs** — author & render branded Opencell documents (one-pagers / notes / briefs / memos): markdown-first (a `.md` source → Pandoc → self-contained branded HTML → headless-Chromium PDF), with a hand-authored HTML escape hatch for bespoke layouts, on the document brand theme (Charte Graphique 2023). The non-slide sibling of `oc-fn-decks`.

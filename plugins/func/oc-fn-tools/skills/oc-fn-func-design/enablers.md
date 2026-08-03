@@ -42,17 +42,23 @@ Field preset for full read:
 ["summary", "status", "issuetype", "priority", "assignee", "parent", "labels", "components", "description"]
 ```
 
-## Creation pattern — mandatory two-step
+## Creation pattern — set `description` IN the create call
 
 > Applies only once the func/PO lane has explicit user consent to author an Enabler — otherwise
 > flag the technical need for the architect lane (see § *Ownership — architect-initiated*).
 
-A Jira automation on INTRD will overwrite fields at Enabler creation once a template is configured. Use the same two-step pattern as User Stories:
+INTRD's **"Issue created (one automation to rule them all)"** rule seeds the Enabler template a few
+seconds after creation, guarded by **`description is not empty`** — but that guard reads the issue as
+it stood at *trigger* time. A `description` written in a follow-up call is invisible to it and gets
+overwritten.
 
-1. `createJiraIssue` — create the issue with summary and issue type only.
-2. Immediately follow with `editJiraIssue` — set `description` (and any other fields) in this second call.
+**So: create the Enabler with its `description` already populated, in the single `createJiraIssue` /
+`POST /issue` call.** The content is then in the trigger snapshot, the guard fires, and the override
+is skipped. Do **not** create bare and edit afterwards — that is exactly what loses the content.
 
-Never attempt to set `description` inside `createJiraIssue` — it will be lost once the automation is active.
+The mechanism, the measured timings, and the post-create verification recipe are documented once in
+`stories.md` § *Template-seeding automation — set all four fields IN the create call*; they apply
+identically here, with `description` in place of the four Story custom fields.
 
 ## Content format
 

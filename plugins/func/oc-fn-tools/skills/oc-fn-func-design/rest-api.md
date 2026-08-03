@@ -6,11 +6,13 @@
 > so they cost fewer tokens than the MCP, which injects every response into context in full.
 
 Load this file whenever the current INTRD task is a **read, JQL search,
-metadata lookup, transition, plain-text comment, or simple plain-field edit**
-**and** you have the optional direct path set up.
+metadata lookup, transition, plain-text comment, simple plain-field edit, or an ADF write you intend to
+post from a file** **and** you have the optional direct path set up.
 Per the transport policy in `SKILL.md`, these can go through the `jira` helper (or
-raw `curl`) when installed, otherwise through the Rovo MCP. Complex ADF writes stay on the MCP — see
-[What stays on the MCP](#what-stays-on-the-mcp).
+raw `curl`) when installed, otherwise through the Rovo MCP. **A rich ADF body does not force you onto
+the MCP** — it posts from a file through `jira raw`, see
+[Writing ADF through `jira raw`](#writing-adf-through-jira-raw--the-cheap-path); only the narrow set in
+[What stays on the MCP](#what-stays-on-the-mcp) is MCP-only.
 
 ## Why this is cheaper
 
@@ -54,7 +56,7 @@ covers the same operations, and the Rovo MCP covers them with no setup at all. D
 | `jira transition KEY ID` | Apply a transition | `ok: …` (API returns 204) |
 | `jira comment KEY 'TEXT'` | Add a plain-text comment | `ok: comment #…` |
 | `jira meta ISSUETYPE_ID` | Create-fields for an issue type | `fieldId ⇥ name ⇥ required=…` |
-| `jira raw METHOD PATH [DATA\|@file.json]` | Escape hatch | raw response |
+| `jira raw METHOD PATH [DATA\|@file.json]` | Escape hatch — **`PATH` is relative to `/rest/api/3`** | raw response |
 | `jira aliases` | List the built-in JQL aliases | `name ⇥ expansion` lines |
 
 Examples:
@@ -68,6 +70,18 @@ jira count 'project = INTRD AND created >= -7d'
 jira meta 10001                                        # find customfield_* IDs for an issue type
 jira raw GET '/issue/INTRD-1486?expand=renderedFields&fields=description'
 ```
+
+**`raw` takes a path relative to `/rest/api/3` — the helper prepends the base itself**
+(`BASE="https://$SITE/rest/api/3"`). Passing the full path doubles the prefix and fails with a 404
+whose body names the doubling:
+
+```console
+$ jira raw GET "/rest/api/3/project/INTRD"
+No endpoint GET /rest/api/3/rest/api/3/project/INTRD
+```
+
+Correct form: `jira raw GET "/project/INTRD"`. Every path in the [endpoint
+catalog](#endpoint-catalog-raw-curl-for-what-the-helper-doesnt-cover) below is already written that way.
 
 ### JQL aliases
 
@@ -103,6 +117,16 @@ helper: keep `get`'s `fields` and `jql`'s `--fields` tight, raise `--max` only
 when needed. The helper's defaults are deliberately small. Reach for `--json`
 only when you truly need raw ADF (e.g. copying a template's structure verbatim).
 
+**One exception: when a field's value must be relied on, read it with `--json` and `jq` rather than
+trusting the default projection.** The default projection filters through `map(select(.value != null))`
+(`bin/jira:150`), so it **drops any field whose value is `null`** — `jira get INTRD-45541 resolution`
+prints the key and nothing else, while `jira raw GET '/issue/INTRD-45541?fields=resolution'` returns
+`{"resolution":null}`. Read a near-empty result as `null`, not as an error or a mistyped field name:
+
+```sh
+jira get INTRD-26660 status --json | jq -r .fields.status.name
+```
+
 ## Endpoint catalog (raw `curl`, for what the helper doesn't cover)
 
 Base: `https://opencellsoft.atlassian.net/rest/api/3`. All calls take `curl -n`.
@@ -128,6 +152,13 @@ Base: `https://opencellsoft.atlassian.net/rest/api/3`. All calls take `curl -n`.
   get counts from `/search/approximate-count`.
 - **`createmeta` without a project is deprecated.** Use the per-issuetype path
   `…/createmeta/{project}/issuetypes/{id}` (the `jira meta` subcommand).
+- **`createmeta` is authoritative for *required* fields, not for what `POST /issue` accepts.** It
+  reports the issue type's **create screen**, and a field absent from that screen can still be set at
+  creation. `description` does **not** appear in `createmeta` for `Bug` (`10004`) or `Sub-bug`
+  (`10071`), yet `POST /issue` accepts an ADF `description` on both — verified on INTRD-45541, created
+  with a 33-node ADF description whose changelog holds no `description` entry. So read `createmeta` to
+  learn what you *must* send, never to conclude what you *may* send. Required fields differ by issue
+  type; `bugs.md` carries the Bug-vs-`Sub-bug` breakdown.
 - **Edits and transitions return `204` with no body** — success is the status
   code, not JSON. (`PUT /issue/{key}?returnIssue=true` returns the issue if you
   need it, at a token cost.)
@@ -142,7 +173,8 @@ Base: `https://opencellsoft.atlassian.net/rest/api/3`. All calls take `curl -n`.
 flattened Markdown. **Direct REST v3 has no such quirk** — `GET /issue/{key}`
 returns `description` (and all rich fields) as true ADF. To inspect a template's
 real structure cheaply: `jira get KEY <richfield> --json`. This is the
-recommended way to read a template's ADF before authoring its MCP write.
+recommended way to read a template's ADF before authoring the write that clones it — on either
+transport.
 
 ## Writes via `curl` (the simple ones)
 
@@ -161,26 +193,68 @@ jira comment INTRD-1486 'Confirmed with QA — proceeding.'
 jira transition INTRD-1486 31
 ```
 
-For a create/edit whose payload is **plain** (no rich panels/colours), raw curl
-with an `@adf.json` file works too — but if the field is one of the ADF-mandated
-ones below, prefer the MCP.
+Rich payloads are not excluded from this path — see the next section.
+
+## Writing ADF through `jira raw` — the cheap path
+
+A full ADF body posts perfectly well through the direct path. `jira raw` hands its third argument
+straight to `curl --data` (`bin/jira:232`), so `@file.json` sends the file's contents with newlines
+stripped — harmless for JSON, where they are only inter-token whitespace (`--data-binary` is the
+byte-verbatim form, for payloads where they are not):
+
+```sh
+jira raw POST /issue @payload.json                    # create with an ADF description
+jira raw POST /issue/<KEY>/comment @comment.json      # ADF comment
+```
+
+**For anything large, generate the ADF with a throwaway script rather than writing it inline.** A small
+Python file with `heading()` / `rule()` / `panel()` / `table()` helpers, dumped to `payload.json`, then
+posted by `@file`. The point is not the script — it is that **the ADF never enters the model context**:
+you author the generator, not the blob. The INTRD-26660 review produced four issues and a ~20 KB comment
+this way with no ADF in context at all.
+
+```sh
+python3 mk_payload.py > payload.json                                          # your generator
+jq -e '.fields.description | .type == "doc" and .version == 1' payload.json   # validate, then post
+jira raw POST /issue @payload.json
+```
+
+| Situation | Path |
+|---|---|
+| Large, repetitive or generated body — long tables, many panels, a full template clone | `jira raw` + `@file` |
+| A batch of issues sharing one structure | `jira raw` + `@file` — one generator, one file per issue |
+| One short rich comment or panel, hand-written | either; the MCP needs no generator, so it usually wins |
+| Story fields `customfield_10134`–`10137` — all four, inside `POST /issue` | `jira raw` + `@file` **preferred**; MCP `createJiraIssue` also works |
+| An edit under the inline-media safety rule | **Rovo MCP** — see below |
+
+**With `raw` you own ADF correctness.** The MCP validates the document it builds for you; `curl` does
+not. Jira rejects some malformed documents with a `400`, but a *structurally valid* document carrying
+the wrong marks or nesting posts silently and renders wrong. Validate the structure before posting:
+confirm the top-level `{"type":"doc","version":1}` envelope, and for a template clone diff your
+generated structure against the template's own ADF (`jira get <TEMPLATE-KEY> description --json`, per
+[Reading ADF](#reading-adf--better-here-than-via-the-mcp) above).
 
 ## What stays on the MCP
 
-Per the hybrid policy, keep these on the Rovo MCP, where ADF construction and
-validation lower the risk:
+One thing is MCP-only:
 
-- **Story rich-text custom fields** `customfield_10134`–`10137` (the ADF-only
-  fields — see `SKILL.md` § *Content format policy* and `stories.md`).
-- **Issues created or rewritten from a template** that must reproduce the
-  dark-red `#bf2600` headings, `rule` nodes, and note/warning panels
-  (`SKILL.md` § *Templates index § Writing templates*).
 - Any edit covered by the **inline-media safety rule** in `SKILL.md`
   § *Destructive edits on fields containing inline media* — that check and its
   `attachment[]` cross-reference assume the MCP read/edit flow.
 
-You *can* do these via raw curl + `@adf.json`, but only do so on explicit
-request; the default for rich ADF writes is the MCP.
+**Story rich-text custom fields `customfield_10134`–`10137` are *not* MCP-only.** Direct REST writes
+ADF to all four correctly — verified across nine Stories plus a template rewrite, with dark-red
+headings, rules, panels, tables and links confirmed intact via `expand=renderedFields`. Since these
+payloads are large (~330 KB of ADF for seven Stories) and the MCP injects whole responses into
+context, **`jira raw` with a generated `@file` payload is the preferred path for bulk Story
+creation** — the ADF never enters the context at all. Note the four fields must be sent **inside the
+create call**, not a follow-up edit — see `stories.md` § *Template-seeding automation*.
+
+Everything else may go either way. **Issues created or rewritten from a template** — the ones that must
+reproduce the dark-red `#bf2600` headings, `rule` nodes and note/warning panels (`SKILL.md`
+§ *Templates index § Writing templates*) — are a judgement call, not an MCP mandate: the MCP is fine,
+and `jira raw` with an `@file` payload is the preferred path once the body is large or repetitive. The
+trade is the validation risk above — on `raw`, ADF correctness is yours.
 
 ## Troubleshooting
 
@@ -188,5 +262,8 @@ request; the default for rich ADF writes is the MCP.
 |---|---|
 | `401 Unauthorized` | Missing or wrong `~/.netrc` entry, or token revoked. Re-check the `machine` host and recreate the token. |
 | `410 Gone` on search | You hit the removed `/search` endpoint — use `POST /search/jql`. |
+| `404` whose body reads `No endpoint <METHOD> /rest/api/3/rest/api/3/…` | You passed a full path to `jira raw`, which prepends `/rest/api/3` itself. Drop the prefix: `jira raw GET "/project/INTRD"`. |
+| `jira get KEY <fields>` prints the key and nothing else, or omits a field you asked for | The default projection drops `null`-valued fields (`bin/jira:150`). The value is `null`, not an error — re-read with `--json` + `jq` (or `jira raw GET '/issue/KEY?fields=<field>'`) whenever the value must be relied on. |
+| `createmeta` lists no `description` for `Bug` / `Sub-bug` | Expected — `description` is not on their create screen. `POST /issue` accepts an ADF `description` at creation anyway; send it. |
 | `400` on a write with `"…must be an Atlassian Document…"` | The field needs ADF, not a string — build a `{"type":"doc",…}` object (or route the write to the MCP). |
 | Empty body on a successful edit/transition | Expected — `204 No Content`. |

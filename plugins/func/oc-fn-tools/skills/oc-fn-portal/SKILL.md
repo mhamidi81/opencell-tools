@@ -1,17 +1,22 @@
 ---
 name: oc-fn-portal
-version: 1.1.0
-updated: 2026-06-27T12:00:00+02:00
+version: 1.3.0
+updated: 2026-08-03T22:10:00+02:00
 author: Stéphane Chambrin
 description: >
   Drive the Opencell Portal (React SPA) through the Playwright MCP server to navigate
   pages, explore the UI, and capture screenshots — in support of design assistance and
-  Confluence/Jira documentation, NOT automated testing. Load this skill whenever the user
+  Confluence/Jira documentation, NOT automated testing. Also the lane for diagnosing a
+  Portal action that fails server-side: replaying the failing call against the API rather
+  than fighting the UI. Load this skill whenever the user
   asks to open / navigate / log in to the portal or the sandbox, to take or capture a
   screenshot of a portal page, to see "what a page looks like", to explore the portal UI,
-  or whenever a Playwright `browser_*` tool is about to be used against the Opencell Portal.
-  Carries the token-discipline rules for using Playwright frugally and the persistent-login
-  / screenshot conventions.
+  or whenever a Playwright `browser_*` tool is about to be used against the Opencell Portal
+  — and whenever a Portal request fails: "why did this save fail", a 400 or a 500 from the
+  Portal, a "Server communication error" toast, replaying an API call, getting a Keycloak
+  token to reproduce a request, or reproducing a reported Portal defect. Carries the
+  token-discipline rules for using Playwright frugally, the persistent-login / screenshot
+  conventions, and the API-replay lane (`api-replay.md`).
 ---
 
 # Opencell Portal — navigate, explore, screenshot
@@ -26,6 +31,7 @@ Load whenever any of the following is true:
 - The user asks to open, navigate, log in to, or explore the Opencell Portal / the sandbox.
 - The user asks to take, capture, or look at a screenshot of a portal page, or "what does *X* look like".
 - A Playwright `browser_*` tool is about to run against the portal.
+- A Portal action fails server-side and someone needs to know *why* — a 400/500, a "Server communication error", a save that silently doesn't stick (see *When a Portal action fails server-side*).
 
 ## Scope & boundaries
 
@@ -34,6 +40,15 @@ Load whenever any of the following is true:
 - **Read-mostly.** Navigate, observe, screenshot. Treat the portal as read-only by default.
 - **Confirm before mutating.** Submitting a form, creating/editing/deleting a record, running a billing/rating job, or any state-changing action requires an explicit go-ahead from the user first — even on the sandbox. Logging in is the one routine exception.
 - **Companion lanes.** For generic, ad-hoc browser automation against arbitrary sites, the marketplace ships a separate slash command (`/oc-playwright`); for Playwright/Cypress end-to-end *tests*, use the frontend E2E plugins (`oc-fe-*`). This skill is the Opencell-Portal-specific, token-frugal lane for design/docs screenshots — not generic automation, not test authoring.
+
+### What you observe is not evidence about the product
+
+This skill drives a **headless** Chromium through an MCP server. That is not the environment your
+users are in, and it fails in ways the real Portal does not.
+
+- **A control that does not react, a page that renders blank, a grid with no rows, a tab that does not switch — all of these are more likely artefacts of this environment than defects in the Portal.** Observed for real: in one session *every* React `onClick` handler was inert — an Edit button, the tab strip and the data-grid rows all did nothing, no state change and no network call — while the page itself rendered correctly and the same actions worked fine in the user's own browser.
+- **Never report a UI behaviour as a product defect on the strength of a headless observation alone.** Say what you observed, label it **unconfirmed**, and ask the user to repeat the same action in their own browser. Nothing goes near a Jira ticket, a Confluence page or a defect write-up before that confirmation comes back.
+- **The asymmetry is the point.** A headless session can confirm that something **works** — a render, a saved record, a returned row are positive evidence. It cannot establish that something is **broken**: a missing reaction here says nothing about the reaction there. When the task is *"is this feature working?"*, "yes" is a conclusion you may reach on your own; "no" is not.
 
 ## Prerequisites
 
@@ -92,6 +107,34 @@ The persistent profile usually keeps the Keycloak session alive, so **most sessi
 2. **The Keycloak form** has a `Username or email` textbox, a `Password` textbox, and a `Sign In` button — plus an `Opencell Internal` broker link for SSO, which you **ignore** (use the username/password form). `Read` the snapshot `.yml` once to get the field refs, then `browser_fill_form` both fields and click `Sign In`.
 3. **Credentials:** read `OC_PORTAL_USER` from the credentials file (Bash — not sensitive). The password (`OC_PORTAL_PASS`) by default transits the fill/`browser_type` arguments (acceptable for a low-risk sandbox you control; for any shared or sensitive tenant, use the `--secrets` lever in `setup.md` to keep it out of context).
 4. **Settle, then verify.** After the redirect the SPA renders — the page title goes `Opencell | Portal` → `- Opencell` and the home hub appears. Give it a moment (`browser_wait_for`) before screenshotting; a capture can take several seconds on slower hardware (hence `--timeout-action=30000`).
+5. **Probe that clicks land — once, before any interaction sequence that matters.** Click **one** control with an unmistakable observable effect (switch a tab, expand a menu) and confirm the effect actually happened. If it did not, **stop**: this session cannot drive this app. Fall back to read-only navigation + screenshots and tell the user. Skip the probe only for a pure navigate-and-capture errand where you never click anything.
+
+**The failure this probe catches is silent.** `browser_click` reports success and the generated
+Playwright line looks exactly right (`getByRole('button', { name: 'Edit' }).click()`) while nothing
+follows — no re-render, no request. The tell is `browser_network_requests` showing no new request
+after the click. Diagnosis and workarounds are in `setup.md` § Troubleshooting. It is **not** a
+Portal bug — see *What you observe is not evidence about the product* above.
+
+## Navigating the SPA — deep links are unreliable
+
+The Portal is a client-routed React SPA. Pasting a route into `browser_navigate` is not equivalent
+to reaching it in-app, and the difference is not always visible.
+
+- **Prefer in-app navigation** — open the list page, then click through to the row/record — over `browser_navigate` to a deep route. Observed: a deep link to `…/portal/seller/sellers/1/modify` rendered an empty content area, or a card containing only `-`, while the same route rendered fully when reached right after the Keycloak redirect.
+- **Treat the page title as a weaker signal than rendered content.** On those half-rendered deep links the **title updated correctly** while the content area stayed empty. Verify arrival against a snapshot or a screenshot, never against the title alone.
+- **A route missing its trailing action segment may render nothing at all** — `…/sellers/1` came back blank where `…/sellers/1/modify` did not. When a bare record route renders empty, suspect the route before the record.
+- **Retry a `browser_wait_for` once before concluding anything.** A `browser_wait_for({ text })` timed out at 30 s and then succeeded on the **very next identical call** against the same page. One timeout is not evidence the text is absent.
+- **Expect slow first paint.** Some routes on this Portal take well over 10 s to paint. Budget for that before deciding a page is empty.
+- **An empty `browser_snapshot` is not an empty page.** The `.yml` written to disk can come back empty while the page is still mid-render — re-take it rather than concluding the page has no content.
+
+## When a Portal action fails server-side
+
+The moment a Portal action fails with a server error — a 400 or a 500, a red toast, a
+"Server communication error" — **stop driving the UI.**
+
+→ Load **`api-replay.md`** — token retrieval, reconstructing the payload from the resource's
+provider, confirming which build you are actually reasoning about, and the Opencell-specific traps
+that make server bugs look like client errors.
 
 ## Screenshots — conventions
 
@@ -112,6 +155,7 @@ Create the `catalog/` dir and either file the first time you have something to r
 
 ## Reference files
 
-- `setup.md` — one-time machine setup, the exact MCP registration command + flags, credential file format, token-tuning levers, security hardening (`--secrets`), and troubleshooting. **Load when setting up or when a launch fails.**
+- `setup.md` — one-time machine setup, the exact MCP registration command + flags, credential file format, token-tuning levers, security hardening (`--secrets`), and troubleshooting. **Load when setting up, when a launch fails, or when clicks are accepted but nothing happens.**
+- `api-replay.md` — replaying a failing Portal request straight against the API: getting a Keycloak token, reconstructing the payload from the resource's provider, confirming which Core/Portal build you are reasoning about, and the two Opencell traps that make server bugs look like client errors. **Load when a Portal action fails server-side.**
 - `pages.md` — read-only **seed** catalogue of known portal pages (path → role → selectors). **Read before navigating to a non-trivial page.** Record newly confirmed pages in your user catalog (`~/.local/state/oc-fn-portal/catalog/pages.md`), not here — the shipped file is read-only.
 - `ui-patterns.md` — read-only **seed** catalogue of recurring Opencell Portal UI patterns and how to interact with them. **Read when reasoning about how to drive an unfamiliar control.** Record new observations in `~/.local/state/oc-fn-portal/catalog/ui-patterns.md`.

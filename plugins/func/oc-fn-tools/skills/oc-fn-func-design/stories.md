@@ -111,19 +111,120 @@ remains useful metadata and must still be set on every story — independently o
 template is used. It does not *auto-select* the template; the specialized variant is offered
 by the selection rule above and confirmed with the user.
 
-## Known automation quirk — mandatory two-step creation
+### Template parity — the variants drift, this skill documents only the generic one
 
-A Jira automation on INTRD **silently overwrites custom fields at issue creation**.
+The three variants are maintained by hand and **fall out of sync**. Everything this skill and
+`stories-acceptance.md` document about a Story's structure describes the **generic template
+(INTRD-1486)**; the specialised variants have repeatedly lagged behind it.
 
-**Mandatory two-step process for User Story creation:**
+**The documented structure is canonical, not the variant you happened to open.** When a specialised
+template lacks a section the skill mandates, author to the *skill*, not to the template — emit the
+full four-column *Test cases* table, the `Type` taxonomy, and the *Limits & volumes* sub-section
+regardless — then flag the template gap to the user.
 
-1. `createJiraIssue` — create the issue with summary and issue type only
-2. Immediately follow with `editJiraIssue` — set the custom fields in this second call.
-   **All four fields only accept ADF** (`contentFormat: "adf"`); each value must be a full ADF document object reproducing the template's dark-red-heading + rule styling. Plain Markdown is rejected by the API with `"Operation value must be an Atlassian Document"`.
-   - **Author content** for the three PO-owned fields: `customfield_10134` (Requirement), `customfield_10135` (Functional design), `customfield_10136` (Acceptance).
-   - **`customfield_10137` (Technical design)** — set it to the **empty template scaffold only** (the dark-red headings, author-hint panels, and the *Limits & volumes* placeholder, with no technical-solution content filled in). Authoring this field is the architect lane's job (the `oc-ar-tech-design` skill, where available) — see `SKILL.md` § *Authoring boundary — Technical design belongs to the architect lane*. Fill it here only when the user explicitly asked you to write the technical design; otherwise defer to `oc-ar-tech-design`.
+**Parity check** — one call per variant, before authoring from a specialised one for the first time in
+a session:
 
-Never attempt to set custom fields inside `createJiraIssue` — they will be lost.
+```sh
+for K in INTRD-1486 INTRD-42531 INTRD-42554; do
+  jira raw GET "/issue/$K?fields=customfield_10136,customfield_10137" | jq -r --arg k "$K" '
+    $k + "  headers=" + ([.fields.customfield_10136|..|select(type=="object" and .type=="tableHeader")
+      | [..|.text? // empty]|join("")] | "(\(length)) " + join(" | "))
+    + "  limits=" + (if ([.fields.customfield_10137|..|.text? // empty]|join(" ")|test("Limits & volumes"))
+      then "yes" else "NO" end)'
+done
+```
+
+Expect four headers — `Type | Context (given) | Actions (when) | Expected outcome (then)` — and
+`limits=yes` on all three. Repair a drifted variant by grafting the missing nodes **verbatim from
+INTRD-1486**, keeping the variant's own discipline-specific hint text.
+
+> **Status 2026-08-03 — all three variants at parity.** Both specialised templates were found
+> drifted in exactly the same way (three columns, no `Type` taxonomy, no *Limits & volumes*) and were
+> grafted back from `INTRD-1486`: `INTRD-42531` (backend) and `INTRD-42554` (frontend). The graft
+> keeps each variant's own discipline-specific content — 42554 retains its *Visual & Accessibility
+> acceptance*, *Component tree*, *Design system compliance* sections and its frontend hint text.
+>
+> That **both** variants drifted the same way is the reason this check exists: the specialised
+> templates are hand-maintained copies, so every addition to `INTRD-1486` has to be replayed into
+> them by hand, and it silently isn't. Re-run the check rather than assuming parity holds.
+
+## Template-seeding automation — set all four fields IN the create call
+
+INTRD runs one automation rule, **"Issue created (one automation to rule them all)"**, that seeds
+the issue template a few seconds after creation. It is guarded — for a Story the guard is
+**`requirement is not empty`** (other types guard on `description is not empty`) — but **the guard
+reads the issue as it stood at trigger time**, not as it stands when the override runs. Anything
+written in a *follow-up* call is invisible to that guard and gets overwritten.
+
+**So: create the Story with all four custom fields already populated, in the single
+`createJiraIssue` / `POST /issue` call.** The content is then present in the trigger snapshot, the
+guard fires, and the override is skipped.
+
+- **All four fields only accept ADF.** Each value must be a full ADF document object reproducing the
+  template's dark-red-heading + rule styling. Plain Markdown is rejected with
+  `"Operation value must be an Atlassian Document"`.
+- **Author content** for the three PO-owned fields: `customfield_10134` (Requirement),
+  `customfield_10135` (Functional design), `customfield_10136` (Acceptance).
+- **`customfield_10137` (Technical design)** — set it to the **empty template scaffold only** (the
+  dark-red headings, author-hint panels, and the *Limits & volumes* placeholder, with no
+  technical-solution content filled in). Authoring this field is the architect lane's job (the
+  `oc-ar-tech-design` skill, where available) — see `SKILL.md` § *Authoring boundary — Technical
+  design belongs to the architect lane*. Fill it here only when the user explicitly asked you to
+  write the technical design; otherwise defer to `oc-ar-tech-design`.
+
+> **Send all four, always — the guard is all-or-nothing.** Because the Story guard tests only
+> `requirement`, a create that fills *Requirement* but leaves the other three empty still skips the
+> whole override: the remaining fields stay **empty, with no scaffold**. Supplying `10137`'s empty
+> scaffold at creation is therefore mandatory, not optional.
+
+The fields do **not** appear in `createmeta` for a Story — they are not on its create screen — yet
+`POST /issue` accepts them. Do not conclude from `createmeta` that they must be set in a second call
+(same trap as `description` on a Bug; see `bugs.md`).
+
+### Why the old two-step recipe lost content
+
+Earlier versions of this skill mandated *create bare, then immediately `editJiraIssue`*. **That
+instruction was the cause of the data loss it claimed to avoid** — it guarantees the write lands
+inside the snapshot window. Measured on INTRD, 2026-08-03:
+
+| Offset | Event |
+|---|---|
+| `+0.0 s` | `POST /issue` — Requirement empty. **Rule triggers and snapshots the issue here.** |
+| `+1.1 s` | follow-up `PUT` writes the four fields |
+| `+3.0 s` → `+3.3 s` | rule sets `Architect`, then `Account` |
+| `+3.8–4.0 s` | rule re-evaluates its guard **against the `+0.0 s` snapshot**, sees Requirement empty, and overwrites all four fields with template boilerplate |
+
+Both calls return success (`201`, then `204` with an empty body), so **status codes carry no
+information** about whether the content survived. Five of six Stories written back-to-back in one
+loop were silently replaced by boilerplate; the one survivor had simply been written ~11 s after
+creation, past the window.
+
+Verified by controlled test: an identical Story created with the four fields **inside** `POST /issue`
+was left untouched (the rule wrote only `Account`), while the control — bare create, `PUT` at
+`+1 s` — was clobbered.
+
+### Verify after creating (cheap, and it catches the whole failure class)
+
+The failure is silent and each damaged Story is *individually well-formed* — full of the template's
+own headings and hint panels — so "is the field non-empty" passes. Two checks that do work:
+
+1. **Marker check.** Re-read past the automation window (`> 10 s` after creation) and assert a
+   story-specific string you authored is still present:
+   ```sh
+   jira raw GET "/issue/$K?fields=customfield_10134" | jq -e --arg m "<a phrase unique to this Story>" \
+     '(.fields.customfield_10134|tostring)|contains($m)' >/dev/null || echo "CLOBBERED: $K"
+   ```
+2. **Cross-issue check, for batches.** Compare rendered field lengths *across* the created set —
+   boilerplate makes them byte-identical, and genuinely different Stories cannot be:
+   ```sh
+   for K in "$@"; do jira raw GET "/issue/$K?fields=customfield_10134,customfield_10135,customfield_10136,customfield_10137" \
+     | jq -r --arg k "$K" '[$k] + [.fields|to_entries[]|(.value|tostring|length)|tostring] | join(" ")'; done
+   ```
+   Identical rows mean identical content — i.e. the template, not your Stories.
+
+If a Story was clobbered, a plain re-`PUT` of the same payload repairs it — nothing about the payload
+is wrong, only its timing. Wait past the window first.
 
 ### ADF recipe — dark-red heading + rule (copy-pasteable)
 
@@ -230,7 +331,7 @@ To show an image **in the field body** (not just in the Attachments panel — e.
 - The image **must remain a real attachment** — the external node only *renders* it; the attachment is the store. Keeping both means it survives export/mobile **and** satisfies `SKILL.md` § *Destructive edits on fields containing inline media* (nothing is orphaned). Renders inline for authenticated Jira users.
 - Verify: `expand=renderedFields` → the field HTML contains `<img … src="…/attachment/content/<id>">`.
 
-> The whole PO field set (`customfield_10134`–`10137`) is written as ADF; the two-step create (§ *Known automation quirk*) can PUT all four at once via the `jira` helper (`jira raw PUT /issue/<key> @fields.json`) or `editJiraIssue` — build the ADF (headings/rules/tables/links/media above) with a small script rather than by hand.
+> The whole PO field set (`customfield_10134`–`10137`) is written as ADF, all four inside the create call (§ *Template-seeding automation*) — via the `jira` helper (`jira raw POST /issue @payload.json`) or `createJiraIssue`. Build the ADF (headings/rules/tables/links/media above) with a small script rather than by hand.
 
 ## Limits & volumes (story-level)
 
@@ -403,7 +504,7 @@ Jira statuses and has a single accountable role. Roles in use: **PO**, **Tech Le
 | 2 | Functional Design    | To Design - Func → In Design - Func → Review Design - Func                                                    | PO                                   |
 | 3 | Technical Design     | To Design - Tech → In Design - Tech → Review Design - Tech                                                    | Tech Lead                            |
 | 4 | Sprint Ready         | Ready For Sprint Planning                                                                                     | Dev *(Dev Leads evaluate the load)*  |
-| 5 | Development          | Ready for Dev → Need Sync (Before Dev) → In Progress → In Review → Need Sync (After Dev) → Waiting for Fixing | Dev                                  |
+| 5 | Development          | Ready for Dev → Need Sync (Before Dev) → In Progress → In Review → Need Sync (After Dev) → Waiting for fixing | Dev                                  |
 | 6 | QA                   | Ready for Test → In Test → Test Blocked → To Review by PO *(pre-validation before sprint review)*             | QA                                   |
 | 7 | Sprint Review        | Ready for Sprint Review                                                                                       | PO                                   |
 | 8 | Documentation        | Need Documentation *(written after US validation)*                                                            | PO                                   |
@@ -421,6 +522,7 @@ Jira statuses and has a single accountable role. Roles in use: **PO**, **Tech Le
 - **Phase 2 (Functional Design)** does *not* include `To Review by PO`. That status lives at the end of QA, as a pre-validation before the sprint review.
 - **Phase 4 (Sprint Ready)** is owned by Dev — concretely, Dev Leads evaluate the load on each US before sprint planning.
 - **Phase 6 (QA)** ends with `To Review by PO`, a pre-validation of the delivered work before the sprint review.
+- **The PO verdict on a Story in `To Review by PO`** — the available transitions and when each applies — is covered by `po-review.md`.
 - **Phase 8 (Documentation)** runs *after* the PO sprint-review validation, not before.
 - The full Jira workflow diagram (with all valid transitions) is the source of truth — refer to it in Jira when in doubt about a specific transition.
 
@@ -453,7 +555,7 @@ flowchart TD
     subgraph P5 ["Phase 5 — Development · Dev"]
         direction LR
         RFDV["Ready for Dev"] --> IP["In Progress"] --> IR["In Review"]
-        IR -.-> WFF["Waiting for Fixing"]
+        IR -.-> WFF["Waiting for fixing"]
     end
 
     subgraph P6 ["Phase 6 — QA · QA"]
