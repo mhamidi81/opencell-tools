@@ -167,7 +167,7 @@ def main():
             u["seen"].add(r["key"]); u["est"] += r["est"]; u["logged"] += r["logged"]; u["bugs"] += r["bugs"]
 
     P("## Summary by user\n")
-    P("| User | Area | Tickets | Contrib | Retain | Rework | Tests +/~ | Cases | Prompts | Est h | Logged h | Time gain | Bugs |")
+    P("| User | Area | Tickets | Contrib | Retain | Rework | U.tests +/~ | P.tests | Prompts | Est h | Logged h | Time gain | Bugs |")
     P("|---|---|--:|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|")
     for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
         P(f"| {u['name']} | {'/'.join(sorted(u['areas']))} | {len(u['tickets'])} | {avg(u['contrib'])}% | "
@@ -180,7 +180,7 @@ def main():
     for r in rows: by_user[r["acc"]].append(r)
     for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
         P(f"\n### {u['name']} ({'/'.join(sorted(u['areas']))})\n")
-        P("| Ticket | Date | Summary | Contrib | Retain | Rework | Tests +/~ | Cases | Prompts | Est h | Logged h | Time gain | Bugs |")
+        P("| Ticket | Date | Summary | Contrib | Retain | Rework | U.tests +/~ | P.tests | Prompts | Est h | Logged h | Time gain | Bugs |")
         P("|---|---|---|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|")
         for r in sorted(by_user[acc], key=lambda x: (x["at"], x["key"])):
             P(f"| {r['key']} | {r['at']} | {r['summary']} | {r['contrib']}% | {r['retain']}% | {r['rework']}% | "
@@ -197,7 +197,7 @@ def main():
         if r["key"] not in g["seen"]:
             g["seen"].add(r["key"]); g["est"] += r["est"]; g["logged"] += r["logged"]; g["bugs"] += r["bugs"]
     P("\n## Totals by area\n")
-    P("| Area | Tickets | Avg contrib | Avg retain | Tests +/~ | Cases | Prompts | Est h | Logged h | Time gain | Bugs |")
+    P("| Area | Tickets | Avg contrib | Avg retain | U.tests +/~ | P.tests | Prompts | Est h | Logged h | Time gain | Bugs |")
     P("|---|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|")
     for ar in AREAS:
         g = areas[ar]
