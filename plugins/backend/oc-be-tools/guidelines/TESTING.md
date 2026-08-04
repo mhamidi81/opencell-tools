@@ -74,6 +74,32 @@ LocalDate fiscalEnd = fiscalStart.plusMonths(12).minusDays(1);
 
 **Exceptions**: Use absolute dates only when testing entities that are guaranteed to always be in the past (e.g., `LocalDate.of(1900, 1, 1)`) or always in the future (e.g., `today.plusYears(10)`).
 
+### Independence from Ambient State
+
+**Keep tests independent of ambient state — the clock, timezone, locale, and randomness.** A test must produce the same result on any machine, in any timezone, on any day. Two safe strategies:
+
+- **Assert derived results, not the ambient value.** If the code falls back to "today" when no date is given, assert *the effect* (the query ran, a value was resolved) or compute the same fallback in the test — never hardcode a specific date and hope the run lands on it.
+- **Read the ambient value at run time** and derive the expectation from it: `int expectedYear = Calendar.getInstance().get(Calendar.YEAR);` rather than `2026`.
+
+```java
+// ❌ WRONG - depends on the wall clock; breaks on Jan 1 or in another timezone
+assertThat(resolved.getYear()).isEqualTo(2026);
+
+// ✅ CORRECT - derive the expectation from the same ambient value production uses
+int expectedYear = LocalDate.now().getYear();
+assertThat(resolved.getYear()).isEqualTo(expectedYear);
+```
+
+Locale/timezone-sensitive formatting, `Math.random()`, and `UUID.randomUUID()` are the other common offenders — inject or stub the source, or assert a shape/constraint rather than an exact value.
+
+### A Deliberate Behavior Change Obligates a Test Sweep
+
+**When you intentionally change existing behavior, you own every test that asserted the old behavior.** Adding tests for the new behavior is not enough — find and update the existing tests that encoded the old contract, and run the **whole affected suite**, not just your new tests.
+
+- Grep for callers and for tests referencing the changed method/message/field before declaring done.
+- A previously-passing test that now fails is a signal to reconcile (update the assertion *or* reconsider the change), never to skip or delete without understanding why.
+- Example: making a mandatory field optional (a nullable batch date) invalidates every test that assumed it was always present — those must be revisited, not left red or ignored.
+
 ## Mocking
 
 ### When to Mock
@@ -93,6 +119,43 @@ LocalDate fiscalEnd = fiscalStart.plusMonths(12).minusDays(1);
 - Prefer using `@Spy` with `@InjectMocks` annotations over manual spy creation
   - Injects all mocked dependencies automatically
   - Supports partial mocking while maintaining dependency injection
+
+### Build Expected Stub Values the Way Production Builds Them
+
+**CRITICAL: When a mock is stubbed with `eq(value)` for something the code computes internally, construct the expected value identically to production — or match only the meaningful fields with `argThat(...)`.**
+
+Normalized dates (time-of-day zeroed), trimmed/upper-cased strings, and scaled `BigDecimal`s are the usual traps. If the argument the code actually passes differs from your `eq(...)` by even a millisecond or a trailing scale digit, Mockito does **not** match, the stub returns `null`/`0`/default, and the real assertion silently passes against garbage — a green test that proves nothing.
+
+```java
+// Production zeroes the time before querying:
+//   Date target = setTimeToZero(batch.getTargetDate());
+//   indexationValueService.findValueAtDate(index, target);
+
+// ❌ WRONG - raw date won't equal the zeroed date the code passes → stub returns null
+when(indexationValueService.findValueAtDate(eq(index), eq(someDate))).thenReturn(value);
+
+// ✅ CORRECT - build the expected value exactly as production does
+Date expected = setTimeToZero(someDate);
+when(indexationValueService.findValueAtDate(eq(index), eq(expected))).thenReturn(value);
+
+// ✅ ALSO CORRECT - match only the field(s) that matter
+when(indexationValueService.findValueAtDate(eq(index),
+        argThat(d -> DateUtils.isSameDay(d, someDate)))).thenReturn(value);
+```
+
+### Ordering of Overlapping Mock Matchers
+
+**With overlapping matchers on the same mock method, the LAST-defined stub wins.** Define the broad catch-all (`any(...)`) **first**, then the specific cases (`eq(...)`), so the specific stub is not shadowed by the general one.
+
+```java
+// ✅ CORRECT - broad first, specific last (specific wins for INDEX_A)
+doReturn(defaultValue).when(service).resolve(any());
+doReturn(specialValue).when(service).resolve(eq("INDEX_A"));
+
+// ❌ WRONG - the any() defined last overrides the specific stub; INDEX_A gets defaultValue
+doReturn(specialValue).when(service).resolve(eq("INDEX_A"));
+doReturn(defaultValue).when(service).resolve(any());
+```
 
 ### Stubbing Patterns for Spied Objects
 
@@ -518,6 +581,21 @@ public void test_methodName_scenario_expectedResult() {
 ```
 
 # Integration test guidelines
+
+## Authoring and Editing Generated / Large Collection Artifacts
+
+Postman collections are large generated JSON artifacts. A few principles keep them correct and reviewable:
+
+1. **Author against verified real endpoints and shapes — never invent.** Copy URLs, paths, and field names from a known-working request or from the actual route/DTO definitions. This is the same rule enforced in detail by **API Call Verification** below; treat inventing a URL or a field name as a defect, not a guess to be corrected later.
+
+2. **Edit large generated/minified artifacts surgically and byte-preservingly.** Change only the bytes you intend to; do not full-reserialize/pretty-reformat the whole file (it produces a massive unreadable diff and silently drops or reorders fields). After editing, verify that unrelated content is unchanged and that nothing was duplicated:
+   - Confirm request/item counts before vs after (only the delta you intended).
+   - Grep for the edited request's unique name/id to ensure exactly one occurrence (no accidental duplication from a copy-paste insert).
+   - Keep the surrounding formatting (indentation, key order) identical to the neighbouring items.
+
+3. **Respect the framework's assertion conventions for success vs expected-failure.** Follow how the harness marks negative tests so they are not auto-overridden into passes. In Opencell Postman collections this is the `" - fail"` naming rule (see **Error Scenario Tests**): a negative test's name must end in `" - fail"` and assert the specific error status; a name without it must assert success.
+
+4. **Ensure data isolation and idempotency across repeated runs.** Shared environments accumulate state, so every run must use unique keys (the per-domain `iteration_nr` sequence) and fully tear down what it created. See **Test Data Variables**, **Per-folder data isolation**, and **Deletion Best Practices** below for the concrete patterns.
 
 # Postman Collections
 

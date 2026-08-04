@@ -384,6 +384,13 @@ SELECT r FROM RatedTransaction r WHERE r.billingAccount.id=:billingAccountId
 @NamedQuery(name = "Entity.findByCode", query = "SELECT e FROM Entity e WHERE e.code = :code")
 ```
 
+**Prefer JPA named queries over inline/ad-hoc SQL in the service layer.** A named JPQL query on the entity is validated at startup, refactor-safe, multitenancy-aware, and reusable — reach for it before writing an inline query string in a service method.
+
+- **Default**: JPQL named query (`@NamedQuery` on the entity), referenced via `getEntityManager().createNamedQuery("Entity.xxx", Entity.class)`.
+- **Exception — native SQL is legitimately warranted** for set-based bulk updates/inserts, DB-specific operations, or performance-critical paths that JPQL cannot express (see **Write vs Update Performance** and the intermediate-table update pattern). This is a real and accepted convention in Opencell — do **not** ban native SQL.
+- **When native SQL is warranted, still make it a *named native query* (`@NamedNativeQuery`), not an inline concatenated string**, and use the `{h-schema}` prefix for multitenancy (see Database Guidelines). Reserve inline query strings for cases where the query is genuinely dynamic.
+- Never build queries by concatenating user-controlled input (SQL/JPQL injection) — always use bind parameters (`:param`).
+
 **Use lowercase for case-insensitive search:**
 
 ```sql

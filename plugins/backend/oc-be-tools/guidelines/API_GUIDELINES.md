@@ -237,6 +237,11 @@ return Response.ok(message).build();
   - `opencell-admin/web/src/main/resources/messages_en.properties`
   - `opencell-admin/web/src/main/resources/messages_fr.properties`
 
+**CRITICAL: A message/label/config key is not "done" until code actually emits or references it.** Adding a key to `messages_en.properties`/`messages_fr.properties` (or a config property) is only half the work — if no Java (or `.xhtml`) code resolves and returns/logs/displays it, the requirement is **unmet**, not complete. A defined-but-unused key silently satisfies a keyword search while the behaviour it was meant to produce never happens.
+
+- When a requirement says "an informational/error message is shown", wire the key into the code path that produces it (`resourceMessages.getString(key, ...)` returned in the `Response`, logged, or thrown via a `ValidationException` message key) — do not stop at defining the string.
+- Verify by grepping for the key across `*.java` / `*.xhtml`, not just in the `.properties` files. Zero code references = incomplete.
+
 #### REST Resource Update Pattern
 
 **CRITICAL: For entities without code field (extending AuditableCFEntity), set ID from path parameter**
@@ -555,6 +560,16 @@ protected BiFunction<Endpoint, CustomFieldsDto, EndpointDto> getEntityToDtoFunct
 
 - Add Javadoc documentation to all API classes and methods
 - Document parameters, return values, and exceptions
+
+#### Document Non-Obvious Side Effects
+
+**CRITICAL: Document non-obvious side effects — silent drops, filtering, normalization, reordering — in the endpoint/method Javadoc (and `@Operation` description), so callers rely on the RETURNED state rather than assuming their input was applied verbatim.**
+
+When a write endpoint does not persist exactly what the caller sent — e.g. it silently drops entries that are not valid in context, filters or de-duplicates a collection, or normalizes values — the caller cannot know unless it is documented and the response reflects the actual persisted state.
+
+- State the rule explicitly: *"Entries whose index is not a component of the assigned formula are silently dropped."*
+- Ensure the method **returns the resulting state** (the effective, post-filter collection), so callers read what was actually stored instead of trusting their request body.
+- Prefer this over a silent contract that only a maintainer reading the implementation would discover.
 
 ### Swagger Annotations
 

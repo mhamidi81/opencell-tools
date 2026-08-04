@@ -74,6 +74,14 @@ Use these type mappings for consistency:
 | Long/Integer | `bigint` or `integer` | Depending on size requirements |
 | Date/Timestamp | `timestamp` or `date` | Depending on precision needed |
 
+### Choosing a Column Type — Match Semantics and the Nearest Analogous Column
+
+**CRITICAL: Pick a column type from the field's *meaning* and its JPA mapping, mirroring the nearest *semantically* analogous existing column — not one that merely looks similar.**
+
+- `date` vs `timestamp` is a semantic choice, not a stylistic one: a calendar-date value (`@Temporal(TemporalType.DATE)` — e.g. a per-index target *calendar date*) maps to `date`; a moment-in-time business/audit timestamp maps to `timestamp`. A calendar-date audit column is **not** the same as a run-level business timestamp — do not copy the latter's type onto the former.
+- Before adding a column, find the closest existing column that plays the **same role** in a sibling entity and mirror its type, length, nullability and mapping. "Superficially similar name" (any `*_date`) is not "semantically analogous".
+- The Liquibase type must agree with the entity mapping: `@Temporal(TemporalType.DATE)` ↔ `date`, `@Temporal(TemporalType.TIMESTAMP)` ↔ `timestamp`, `BigDecimal` money/factor ↔ `numeric(23,12)`, boolean ↔ `${type.boolean}`.
+
 ---
 
 ## Index Best Practices
