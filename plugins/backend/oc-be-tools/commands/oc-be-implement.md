@@ -35,6 +35,18 @@ These rules apply to ALL generated code:
 - If existing branch: run `git branch --show-current` to confirm, and tell the user which branch they're on
 - Users may have multiple tickets on the same branch
 
+**Rename the session to the ticket.** Name the session so it is findable later, using the ticket number and the same description used for branch creation.
+
+> **Mechanism note:** the model cannot rename the session programmatically — `/rename` is a user-only slash command (the model cannot invoke it), there is no `claude` CLI subcommand for it, and hooks cannot do it either. So the command surfaces the exact line and the **user** runs it.
+
+Show the user this line and ask them to run it now (readable description — spaces, not the branch slug's dashes):
+
+```
+/rename {TICKET} {description}
+```
+
+For example: `/rename INTRD-45279 target date on contract`. This step is **non-blocking** — present the line once and continue to the AI-stats setup and Phase 1 regardless of whether the user runs it.
+
 **Set up the AI-stats run directory** (used later by `/oc-be-calculate-ai-use` to attribute sub-agent work):
 - Define `RUN_ID = {TICKET}-{yyyymmdd-HHMMSS}` (get the timestamp via `date -u +%Y%m%d-%H%M%S`).
 - Create `.claude/cache/ai-stats/{RUN_ID}/`.

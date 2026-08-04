@@ -107,6 +107,11 @@ You will receive file paths of REST resource interfaces.
 
 Write collection to `opencell-tests/US-Tests/` and return the file path.
 
+**Formatting (mandatory): the collection MUST be pretty-printed — one field per line** (`json.dumps(collection, indent=2, ensure_ascii=False)`, which matches Postman's own export format). This is what keeps it diffable, mergeable, and line-countable for the AI-usage metrics.
+- When **adding a folder/request to an existing collection**, splice in your new content **formatted with the same indentation as its neighbours** — NEVER a compact single-line `json.dumps(x)` blob. Inserting a minified blob into an otherwise-formatted file produces unreviewable 50k-char lines and defeats diff/merge/metrics, even though the JSON is valid.
+- Byte-preserving splicing is fine for surgical inserts, but the spliced text must be indented. Re-serializing the whole file at `indent=2` is acceptable **only after verifying** a load→dump of the base version is byte-identical to the base (so the sole real diff is your addition).
+- After writing, sanity-check there are no abnormally long lines (a quick longest-line-length check catches an accidental minified insert), that the request-name set outside your folder is unchanged, and that nothing was duplicated.
+
 ## Report your file manifest (AI-usage stats)
 
 If your dispatch prompt includes an **AI-stats manifest path** (e.g. `.claude/cache/ai-stats/<RUN_ID>/postman.json`), then after the collection is written, write a JSON manifest to that exact path as your **final action**. This lets `/oc-be-calculate-ai-use` attribute sub-agent work that is otherwise invisible in the session transcript. If no manifest path was provided, skip this step.

@@ -791,7 +791,9 @@ Warnings:
   - <any warnings from the analyzer>
 ```
 
-Pull the line counts from `by_category[c].added`; the test/postman detail from `artifacts.tests` (`added`, `modified`, `methods_total`) and `artifacts.postman` (`added_requests`, `added_assertion_requests`, `added_test_cases`, `setup_requests`); the engagement line from `interactions`. Postman retention is `—` (generated JSON, not line-matched).
+Pull the line counts from `by_category[c].added`; the test/postman detail from `artifacts.tests` (`added`, `modified`, `methods_total`) and `artifacts.postman` (`added_requests`, `added_assertion_requests`, `added_test_cases`, `setup_requests`); the engagement line from `interactions`.
+
+**Postman retention is always reported** (never `—`) — but treat it as **low-confidence, developer-adjustable**. Two caveats to state and then have the developer correct: (a) it is only meaningful when the collection is **pretty-printed** (one field per line — see the TESTING guideline; a minified collection makes every "line" a whole-folder blob and the number meaningless); and (b) the metric compares the AI's *captured* lines (final snapshot) to the final file, so on a collection that was **rebuilt several times** the automated figure trends toward ~100% ("matches itself") and *understates* the churn. When the Postman work went through heavy iteration, the developer should set a lower retention that reflects how much of the early drafts survived (a rebuilt-from-scratch collection is often ~40–60%, not 100%). Always surface the computed value **and** invite the developer to adjust it, exactly like the production headline.
 
 Explain briefly, in one line each: contribution counts sub-agent + main-context code; retention below 100% is normal iteration churn (AI reworking its own drafts); a non-zero "hand-written" count means some final lines were in no AI source.
 
@@ -888,7 +890,7 @@ Write the machine-readable record to the **"AI metrics"** custom field (**`custo
 > **Field type.** `customfield_10745` is a **Text Field (multi-line)** (`...:textarea`) — enough capacity for the JSON (a single-line field's 255-char cap would be too small; if the field is ever the wrong type the write is skipped with a warning). On this Jira instance a multi-line text field can be **rich-text (ADF)**, which **rejects a raw string**; the write step below tries a plain string first and, on rejection, retries with the JSON wrapped in a minimal ADF `codeBlock` (the reporting tool recovers the JSON from that text node). The read step accepts either form.
 
 1. **Identity** — call `atlassianUserInfo` for the developer's `accountId` **and display name**; the record is keyed `backend/<accountId>/<name>` (domain + user id + readable name all live in the key, not the record body).
-2. **Build the lean `[RECORD]`** per the **AI-usage record schema (v1)** below — the compact keys, from the analyzer output plus the developer-confirmed values: `at` (`date -u +%Y-%m-%d`), `ver` (tool version from `plugin.json`), `scope` (`[COMMIT-REF]` short, or `working`), `work`, `contrib`/`retain` (the confirmed production headline), `rework`, `lines`, `cat` (per-category `{l: added lines, c: contribution%, r: retention%}`, omitting `r` when retention is not measurable, e.g. Postman), the test counts, the planning fields, `turns`/`sessions`, `useful` (`[USEFULNESS]` or `null`), `adj` (`true` if the developer changed any number). Keep the **rich detail (per-category %, planning notes) in the comment, not the field**.
+2. **Build the lean `[RECORD]`** per the **AI-usage record schema (v1)** below — the compact keys, from the analyzer output plus the developer-confirmed values: `at` (`date -u +%Y-%m-%d`), `ver` (tool version from `plugin.json`), `scope` (`[COMMIT-REF]` short, or `working`), `work`, `contrib`/`retain` (the confirmed production headline), `rework`, `lines`, `cat` (per-category `{l: added lines, c: contribution%, r: retention%}` — **always include `r`, including for Postman** (the developer-confirmed, possibly-adjusted value)), the test counts, the planning fields, `turns`/`sessions`, `useful` (`[USEFULNESS]` or `null`), `adj` (`true` if the developer changed any number). Keep the **rich detail (per-category %, planning notes) in the comment, not the field**.
 3. **Read-merge-upsert** (latest-only, keyed by `backend/<accountId>/<name>`):
    - `getJiraIssue` with `fields: ["customfield_10745"]`. The value may be a **plain string** (plain-renderer field) or an **ADF document** (rich-text field). If it is ADF, recover the JSON from the first `codeBlock`/`paragraph` text node. Parse it; if empty or unparseable, start from `{ "schema": "opencell.ai-usage/v1", "records": {} }`.
    - **First delete any existing key that starts with `backend/<accountId>/`** (same developer under an old display name), then set `records["backend/<accountId>/<name>"] = [RECORD]`. Matching the id-prefix — not the full key — keeps it latest-only even if the developer's display name changed between runs (no duplicate record). Every other key stays intact (other developers, and the `frontend/<accountId>/<name>` records the future `/oc-fe-calculate-ai-use` writes).
@@ -930,7 +932,7 @@ The field holds one JSON document per ticket: an envelope with a `records` **map
     "backend/5dbb097eb6788b0c37755176/Andrius Karpavičius": {
       "at": "2026-07-28", "ver": "1.7.0", "scope": "6529c39", "work": "code",
       "contrib": 100, "retain": 95, "rework": 20, "lines": 1534,
-      "cat": { "prod": {"l":676,"c":100,"r":95}, "mig": {"l":83,"c":100,"r":100}, "test": {"l":397,"c":100,"r":95}, "pm": {"l":378,"c":100} },
+      "cat": { "prod": {"l":676,"c":100,"r":95}, "mig": {"l":83,"c":100,"r":100}, "test": {"l":397,"c":100,"r":95}, "pm": {"l":378,"c":100,"r":50} },
       "utAdd": 17, "utMod": 11, "pmAdd": 80, "pmAssert": 56, "pmTests": 79,
       "plan": "High", "planRounds": 1, "planWords": 520, "planMin": 150,
       "turns": 148, "sessions": 3,
@@ -944,7 +946,7 @@ Key legend (all per (domain,user), latest run only):
 
 | Key | Meaning | Key | Meaning |
 |-----|---------|-----|---------|
-| `at` | measured date (YYYY-MM-DD) | `cat` | per category (`prod`/`mig`/`test`/`pm`): `{l: added lines, c: contribution%, r: retention%}` — `r` omitted when retention is not measurable (e.g. Postman) |
+| `at` | measured date (YYYY-MM-DD) | `cat` | per category (`prod`/`mig`/`test`/`pm`): `{l: added lines, c: contribution%, r: retention%}` — `r` is **always present, including for Postman** (developer-confirmed; low-confidence for Postman, see the retention note in Task 5) |
 | `ver` | tool version | `utAdd`/`utMod` | unit tests added / modified |
 | `scope` | commit ref (or `working`) | `pmAdd`/`pmAssert`/`pmTests` | Postman requests added / of which asserting / test cases added |
 | `work` | `code`/`planning-dominant`/`minimal-change` | `plan` | planning effort band |

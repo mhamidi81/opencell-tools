@@ -40,6 +40,18 @@ Both the **Requirements Conformance** phase and the **JIRA tag** need the ticket
 
 **If no valid key can be resolved from any source (or it is stale), ASK THE USER for the ticket number** before running conformance — do not silently skip it. Only if the user has no ticket to give do you skip the conformance phase, and say so explicitly. The resolved `[TICKET]` is reused by the JIRA-tag step (no second resolution).
 
+**Rename the session for this review.** Once `[TICKET]` (or, in PR mode, `[PR-ID]`) is known, name the session so it is findable later.
+
+> **Mechanism note:** the model cannot rename the session programmatically — `/rename` is a user-only slash command (the model cannot invoke it), there is no `claude` CLI subcommand for it, and hooks cannot do it either. So the command surfaces the exact line and the **user** runs it.
+
+Show the user this line and ask them to run it (append `- review` to the ticket, or the PR number when no ticket resolves):
+
+```
+/rename {TICKET} - review
+```
+
+For example `/rename INTRD-45279 - review`; in PR mode with no resolvable ticket, use `/rename PR {PR-ID} - review`. This step is **non-blocking** — present the line once and continue the review regardless of whether the user runs it.
+
 ---
 
 ## Requirements Conformance review (ticket acceptance criteria)
