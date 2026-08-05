@@ -61,7 +61,7 @@ Alongside line counts, the analyzer reports concrete test counts (independent of
 The analyzer also reports developer↔AI **interactions** — the count of **genuine human prompts** (messages you actually sent the AI) across the sessions that worked on this commit, plus the total and per-session average. A rough gauge of how much back-and-forth the work took, complementing the planning-effort band. (JSON: `interactions = {sessions, total_user_turns, avg_per_session, per_session[]}`.)
 
 Two things make this count meaningful:
-- **What counts as a prompt** (`is_human_prompt`): Claude Code records *many* things as `type:user` entries — tool results (the bulk), harness-injected `meta` notices, sub-agent `sidechain` turns, slash-command wrappers, and local-command output. Only genuine typed human messages are counted; all that plumbing is excluded. (In one real session, 882 `user` entries → 726 tool results, and ~130 genuine prompts, not the ~156 a naïve "user entry with text" count would give.)
+- **What counts as a prompt** (`is_human_prompt`): Claude Code records *many* things as `type:user` entries that are **not** typed requests — tool results (the bulk), harness-injected `meta` notices, **background `<task-notification>` and `<system-reminder>` messages**, **auto-compaction continuation summaries** (`isCompactSummary` / "This session is being continued…"), **interruption markers** (`[Request interrupted by user…]`), sub-agent `sidechain` turns, slash-command wrappers, and local-command output. All of that plumbing is excluded, and so are **bare "continue" / "proceed" / "resume" steering messages** that carry no request. Only genuine typed human requests are counted. (In one real ticket the raw `type:user`-with-text count was 111, of which 31 were `<task-notification>` notices and 5 were bare continue/approval — leaving the genuine requests; the notifications in particular were the dominant over-count.)
 - **Which sessions count**: only those that **edited one of the commit's changed files** — the same anchor the code metrics use — so it is independent of the branch and correct even on a shared branch like `dev`.
 
 ### Tags applied to `customfield_10613`
@@ -464,15 +464,26 @@ def _user_text(o):
                         if isinstance(b, dict) and b.get("type") == "text")
     return ""
 
+_CONTINUE_ONLY = re.compile(
+    r"^(please\s+)?(continue|carry on|go on|go ahead|keep going|proceed|resume|next|go)\s*[.!]*$", re.I)
+
 def is_human_prompt(o):
-    """A genuine human message to the AI — one 'interaction'. Excludes the many other
-    things Claude Code records as type=user: tool results (no text), harness-injected
-    meta, sub-agent sidechain turns, slash-command wrappers, and local-command output."""
+    """A genuine human *request* to the AI — one 'interaction'. Excludes everything Claude
+    Code also records as type=user that is not a typed request: tool results (no text),
+    harness-injected meta, background task-notifications, system-reminders, auto-compaction
+    continuation summaries, interruption markers, sub-agent sidechain turns, slash-command
+    wrappers, local-command output, and bare 'continue'-style steering that carries no request."""
     if o.get("type") != "user" or o.get("isMeta") or o.get("isSidechain"): return False
+    if o.get("isCompactSummary"): return False               # auto-compaction continuation (harness-injected)
     t = _user_text(o).strip()
     if not t: return False                                   # tool-result-only message
     if "<command-name>" in t or "<command-message>" in t: return False   # slash-command wrapper
     if "<local-command-stdout>" in t or "local-command-caveat" in t: return False  # command output/caveat
+    if t.startswith("<task-notification>") or t.startswith("<system-reminder>"): return False  # background-task / harness notice
+    if "This session is being continued from a previous conversation" in t: return False        # compaction summary text
+    if t.startswith("Continue the conversation from where it left off"): return False            # compaction continuation
+    if t.startswith("[Request interrupted by user"): return False                                # interruption marker
+    if _CONTINUE_ONLY.match(t): return False                 # bare "continue"/"proceed"/"resume" — steering, not a request
     return True
 
 def session_relevant(events, repo, changed):
