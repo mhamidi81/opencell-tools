@@ -1,5 +1,5 @@
 {
   "name": "oc-ai-report",
-  "description": "Cross-ticket AI-usage report over a period - reads the AI-metrics JSON records (backend, frontend, QA) from Jira, shows a summary by user then details per user by ticket plus totals by area, and adds each ticket's original estimate, Tempo-logged time, time gain, and linked-bug count. Prints Markdown and writes a self-contained styled HTML file to ./docs/ai-usage-report.html. Read-only; needs only the Atlassian (Jira) MCP.",
-  "version": "1.2.0"
+  "description": "Cross-ticket AI-usage report over a period - AI-metrics JSON records (backend/frontend/QA) grouped by developer domain; per-area estimate hours from the Story's Architect/QA estimate custom fields (else ticket estimate); bug counts and hours-logged-on-bugs per area; logged hours per user & ticket via the Tempo API (fallback Jira worklogs); time gain; Totals = sum of details. Prints Markdown and writes a self-contained styled, date-stamped HTML file to ./docs/ai-usage-report-<date>.html. Reads Jira (Atlassian MCP) + optional Tempo (TEMPO_API_TOKEN).",
+  "version": "1.4.0"
 }
