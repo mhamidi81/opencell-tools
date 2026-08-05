@@ -58,10 +58,11 @@ Alongside line counts, the analyzer reports concrete test counts (independent of
 
 ### Interactions (engagement)
 
-The analyzer also reports developer↔AI **interactions** — the count of **genuine human prompts** (messages you actually sent the AI) across the sessions that worked on this commit, plus the total and per-session average. A rough gauge of how much back-and-forth the work took, complementing the planning-effort band. (JSON: `interactions = {sessions, total_user_turns, avg_per_session, per_session[]}`.)
+The analyzer also reports developer↔AI **interactions**, in two tiers, across the sessions that worked on this commit: **exchanges** (genuine typed messages, minus the noise buckets below) and **substantive requests** (the exchanges that are real requests — ≥ `MIN_SUBSTANTIVE_WORDS` words). The Jira **comment and JSON record carry both**; the **HTML report shows only `substantive`**. A gauge of how much back-and-forth the work took, complementing the planning-effort band. (JSON: `interactions = {sessions, exchanges, substantive, avg_per_session, per_session[]}`.)
 
-Two things make this count meaningful:
-- **What counts as a prompt** (`is_human_prompt`): Claude Code records *many* things as `type:user` entries that are **not** typed requests — tool results (the bulk), harness-injected `meta` notices, **background `<task-notification>` and `<system-reminder>` messages**, **auto-compaction continuation summaries** (`isCompactSummary` / "This session is being continued…"), **interruption markers** (`[Request interrupted by user…]`), sub-agent `sidechain` turns, slash-command wrappers, and local-command output. All of that plumbing is excluded, and so are **bare "continue" / "proceed" / "resume" steering messages** that carry no request. Only genuine typed human requests are counted. (In one real ticket the raw `type:user`-with-text count was 111, of which 31 were `<task-notification>` notices and 5 were bare continue/approval — leaving the genuine requests; the notifications in particular were the dominant over-count.)
+Three things make this count meaningful:
+- **What counts at all** (`is_human_prompt`): Claude Code records *many* things as `type:user` entries that are **not** typed requests — tool results (the bulk), harness-injected `meta` notices, **background `<task-notification>` and `<system-reminder>` messages**, **auto-compaction continuation summaries** (`isCompactSummary` / "This session is being continued…"), **interruption markers** (`[Request interrupted by user…]`), sub-agent `sidechain` turns, slash-command wrappers, and local-command output. All of that plumbing is excluded, and so are **bare "continue" / "proceed" / "resume" steering messages** that carry no request. (In one real ticket the raw `type:user`-with-text count was 111, of which 31 were `<task-notification>` notices — the dominant over-count.)
+- **Two tiers** (`prompt_kind` / `is_substantive`): of the genuine messages that survive the above, the count is split into **exchanges** and **substantive requests**. Dropped from *exchanges* as noise: approvals/acks ("yes", "moved", "got it"), operational status ("server is up", "run tests"), phase-continuation ("lets proceed with api"), ≤3-word fragments, and cross-session duplicates. An exchange is then **substantive** when it has ≥ `MIN_SUBSTANTIVE_WORDS` (default 15) words. Both `MIN_SUBSTANTIVE_WORDS` and the noise patterns are **seeds meant to be tuned** against your real runs. (On the same ticket: 111 raw → ~58 exchanges → 21 substantive at the default 15 (≈31 at 12). It will not mechanically reach a handful, because a session that mixes ticket work with unrelated tooling talk counts both — there is no reliable rule to separate them.)
 - **Which sessions count**: only those that **edited one of the commit's changed files** — the same anchor the code metrics use — so it is independent of the branch and correct even on a shared branch like `dev`.
 
 ### Tags applied to `customfield_10613`
@@ -141,7 +142,7 @@ Every source flag except `--repo` is optional. Planning reconstruction and inter
 - `planning` carries `detected`, `source` (`manifest`/`transcript`), `effort_band` (Low/Medium/High), `revision_rounds`, `analysis_tool_calls`, `plan_word_count`, `duration_minutes`, `assistant_turns`.
 - `by_category[c].added` is the added **line count** per artifact category (production/migration/tests/postman/docs/other).
 - `artifacts.tests` = `{files, methods_total, added, modified}` (unit-test methods, via `@Test` method-body diff of base-vs-final). `artifacts.postman` = `{files, requests_total, assertion_requests, setup_requests, added_requests, added_assertion_requests, test_cases_total, added_test_cases}` — `assertion_requests` are real-test requests; `setup_requests` are non-asserting setup/cleanup calls; `test_cases_total`/`added_test_cases` count the individual `pm.test(...)` tests inside them.
-- `interactions` = `{sessions, total_user_turns, avg_per_session, per_session[]}` — developer↔AI turns on the branch.
+- `interactions` = `{sessions, exchanges, substantive, avg_per_session, per_session[{session, exchanges, substantive}]}` — developer↔AI messages on the commit's sessions (see two-tier definition above).
 - `provenance.reviewer_rework_pct` — share of AI lines from the post-review phase (see Metrics).
 - `suggested_tags` ⊆ `{ai_Dev_back, ai_test_back_dev}` — see Task 6b.
 
@@ -486,6 +487,34 @@ def is_human_prompt(o):
     if _CONTINUE_ONLY.match(t): return False                 # bare "continue"/"proceed"/"resume" — steering, not a request
     return True
 
+# --- second tier: split genuine prompts into 'exchange' (real back-and-forth) vs noise,
+#     then flag the exchanges that are 'substantive requests'. Seeds — tune on real runs.
+MIN_SUBSTANTIVE_WORDS = 15   # an exchange with >= this many words counts as a substantive request (seed; raise to tighten)
+
+_AFFIRM = re.compile(r"^(yes|yep|yeah|ok|okay|sure|good|great|perfect|nice|cool|thanks|thank you|done|correct|right|looks good|lgtm|approved|agree|agreed|do it|fine|got it|moved|noted|k)\b", re.I)
+_OPS = re.compile(r"(server is up|re-?deployed|deployed|restarted)", re.I)
+_RUNCMD = re.compile(r"^(run|rerun|re-run) (all |the )?(unit )?tests?\b|^run all\b|^run newman", re.I)
+_CONT_PHRASE = re.compile(r"^(lets?|let's|let me)?\s*(proceed|continue|go ahead|move on|carry on)\b", re.I)
+_STEER = re.compile(r"^(ask questions again|let me review .*|move on.*|next\b.*)$", re.I)
+
+def _words(t): return len(re.findall(r"\w+", t))
+
+def prompt_kind(t):
+    """Classify a genuine prompt (already passed is_human_prompt) into a noise bucket or
+    'exchange'. Noise = approvals/acks, operational status ('server is up', 'run tests'),
+    phase-continuation ('lets proceed with api'), or <=3-word fragments. 'exchange' is a
+    real message; a subset of exchanges are substantive requests (see is_substantive)."""
+    w = _words(t)
+    if w <= 3: return "short"
+    if _AFFIRM.match(t) and w <= 7: return "approval"
+    if _RUNCMD.match(t): return "operational"
+    if _OPS.search(t) and w <= 10: return "operational"
+    if _CONT_PHRASE.match(t) and w <= 8: return "continuation"
+    if _STEER.match(t): return "continuation"
+    return "exchange"
+
+def is_substantive(t): return _words(t) >= MIN_SUBSTANTIVE_WORDS
+
 def session_relevant(events, repo, changed):
     """True if the session worked on THIS commit — i.e. it edited one of the commit's
     changed files with a main-context Write/Edit/MultiEdit. This ties planning/interactions
@@ -601,11 +630,16 @@ def build_planning(manifest, recon):
     return p
 
 def count_interactions(transcripts, repo, changed):
-    """Developer↔AI interactions: genuine human prompts (is_human_prompt) in the sessions
-    that worked on this commit's files (see session_relevant) — branch-independent."""
+    """Developer↔AI interactions across the sessions that worked on this commit's files
+    (see session_relevant) — branch-independent. Two tiers: `exchanges` = genuine typed
+    messages (is_human_prompt) minus approval/operational/continuation/short noise and
+    cross-session duplicates; `substantive` = the exchanges that are real requests
+    (>= MIN_SUBSTANTIVE_WORDS words). The HTML report shows `substantive`; the Jira
+    comment and JSON record carry both."""
     if not transcripts: return None
     files = sorted(glob.glob(os.path.join(transcripts, "*.jsonl"))) if os.path.isdir(transcripts) else [transcripts]
     per = []
+    seen = set()   # de-duplicate identical prompts across ALL of this commit's sessions
     for jf in files:
         events = []
         try:
@@ -616,15 +650,26 @@ def count_interactions(transcripts, repo, changed):
         except OSError:
             continue
         if not session_relevant(events, repo, changed): continue
-        turns = sum(1 for o in events if is_human_prompt(o))
-        if turns:
-            per.append({"session": os.path.splitext(os.path.basename(jf))[0][:8], "user_turns": turns})
+        ex = sub = 0
+        for o in events:
+            if not is_human_prompt(o): continue
+            t = " ".join(_user_text(o).split()).strip()
+            key = t.lower()
+            if key in seen: continue
+            seen.add(key)
+            if prompt_kind(t) != "exchange": continue
+            ex += 1
+            if is_substantive(t): sub += 1
+        if ex:
+            per.append({"session": os.path.splitext(os.path.basename(jf))[0][:8],
+                        "exchanges": ex, "substantive": sub})
     if not per: return None
-    total = sum(p["user_turns"] for p in per)
+    total_ex = sum(p["exchanges"] for p in per)
+    total_sub = sum(p["substantive"] for p in per)
     sessions = len(per)
-    return {"sessions": sessions, "total_user_turns": total,
-            "avg_per_session": round(total / sessions, 1),
-            "per_session": sorted(per, key=lambda p: -p["user_turns"])}
+    return {"sessions": sessions, "exchanges": total_ex, "substantive": total_sub,
+            "avg_per_session": round(total_ex / sessions, 1),
+            "per_session": sorted(per, key=lambda p: -p["exchanges"])}
 
 def main():
     ap = argparse.ArgumentParser()
@@ -792,7 +837,7 @@ Provenance (all added lines):
   post-review fixes:     430     → reviewer rework 10%
   hand-written (you):     0
 
-Interactions: 130 prompts across 3 sessions (avg 43/session)
+Interactions: 21 substantive requests / 58 exchanges across 3 sessions (avg 19 exchanges/session)
 
 Suggested tags: ai_Dev_back, ai_test_back_dev
 
@@ -849,7 +894,7 @@ Planning/analysis effort: [PLANNING-BAND]
 - ~<w>-word design plan
 - ~<min> min in the planning phase
 
-Developer↔AI interactions: <total> prompts across <sessions> session(s) (avg <avg>/session).
+Developer↔AI interactions: <substantive> substantive requests / <exchanges> exchanges across <sessions> session(s) (avg <avg> exchanges/session).
 <if [USEFULNESS] given:>Developer-rated usefulness: [USEFULNESS]/5
 
 Method: estimated from the oc-be-implement sub-agent manifests, the Claude Code session transcript, and file-history vs. the final code, reviewed and confirmed by the developer. Values rounded to the nearest 5%.
@@ -901,7 +946,7 @@ Write the machine-readable record to the **"AI metrics"** custom field (**`custo
 > **Field type.** `customfield_10745` is a **Text Field (multi-line)** (`...:textarea`) — enough capacity for the JSON (a single-line field's 255-char cap would be too small; if the field is ever the wrong type the write is skipped with a warning). On this Jira instance a multi-line text field can be **rich-text (ADF)**, which **rejects a raw string**; the write step below tries a plain string first and, on rejection, retries with the JSON wrapped in a minimal ADF `codeBlock` (the reporting tool recovers the JSON from that text node). The read step accepts either form.
 
 1. **Identity** — call `atlassianUserInfo` for the developer's `accountId` **and display name**; the record is keyed `backend/<accountId>/<name>` (domain + user id + readable name all live in the key, not the record body).
-2. **Build the lean `[RECORD]`** per the **AI-usage record schema (v1)** below — the compact keys, from the analyzer output plus the developer-confirmed values: `at` (`date -u +%Y-%m-%d`), `ver` (tool version from `plugin.json`), `scope` (`[COMMIT-REF]` short, or `working`), `work`, `contrib`/`retain` (the confirmed production headline), `rework`, `lines`, `cat` (per-category `{l: added lines, c: contribution%, r: retention%}` — **always include `r`, including for Postman** (the developer-confirmed, possibly-adjusted value)), the test counts, the planning fields, `turns`/`sessions`, `useful` (`[USEFULNESS]` or `null`), `adj` (`true` if the developer changed any number). Keep the **rich detail (per-category %, planning notes) in the comment, not the field**.
+2. **Build the lean `[RECORD]`** per the **AI-usage record schema (v1)** below — the compact keys, from the analyzer output plus the developer-confirmed values: `at` (`date -u +%Y-%m-%d`), `ver` (tool version from `plugin.json`), `scope` (`[COMMIT-REF]` short, or `working`), `work`, `contrib`/`retain` (the confirmed production headline), `rework`, `lines`, `cat` (per-category `{l: added lines, c: contribution%, r: retention%}` — **always include `r`, including for Postman** (the developer-confirmed, possibly-adjusted value)), the test counts, the planning fields, `turns` (= `interactions.exchanges`), `subReq` (= `interactions.substantive`), `sessions`, `useful` (`[USEFULNESS]` or `null`), `adj` (`true` if the developer changed any number). Keep the **rich detail (per-category %, planning notes) in the comment, not the field**.
 3. **Read-merge-upsert** (latest-only, keyed by `backend/<accountId>/<name>`):
    - `getJiraIssue` with `fields: ["customfield_10745"]`. The value may be a **plain string** (plain-renderer field) or an **ADF document** (rich-text field). If it is ADF, recover the JSON from the first `codeBlock`/`paragraph` text node. Parse it; if empty or unparseable, start from `{ "schema": "opencell.ai-usage/v1", "records": {} }`.
    - **First delete any existing key that starts with `backend/<accountId>/`** (same developer under an old display name), then set `records["backend/<accountId>/<name>"] = [RECORD]`. Matching the id-prefix — not the full key — keeps it latest-only even if the developer's display name changed between runs (no duplicate record). Every other key stays intact (other developers, and the `frontend/<accountId>/<name>` records the future `/oc-fe-calculate-ai-use` writes).
@@ -946,7 +991,7 @@ The field holds one JSON document per ticket: an envelope with a `records` **map
       "cat": { "prod": {"l":676,"c":100,"r":95}, "mig": {"l":83,"c":100,"r":100}, "test": {"l":397,"c":100,"r":95}, "pm": {"l":378,"c":100,"r":50} },
       "utAdd": 17, "utMod": 11, "pmAdd": 80, "pmAssert": 56, "pmTests": 79,
       "plan": "High", "planRounds": 1, "planWords": 520, "planMin": 150,
-      "turns": 148, "sessions": 3,
+      "turns": 58, "subReq": 21, "sessions": 3,
       "useful": 4, "adj": true
     }
   }
@@ -962,7 +1007,7 @@ Key legend (all per (domain,user), latest run only):
 | `scope` | commit ref (or `working`) | `pmAdd`/`pmAssert`/`pmTests` | Postman requests added / of which asserting / test cases added |
 | `work` | `code`/`planning-dominant`/`minimal-change` | `plan` | planning effort band |
 | `contrib` | AI contribution % (production headline) | `planRounds`/`planWords`/`planMin` | plan iterations / words / minutes |
-| `retain` | AI retention % | `turns`/`sessions` | genuine human prompts / sessions that worked on the commit |
+| `retain` | AI retention % | `turns`/`subReq`/`sessions` | exchanges / substantive requests / sessions that worked on the commit (the report shows `subReq`) |
 | `rework` | reviewer-rework % | `useful` | 1–5 rating (or `null`) |
 | `lines` | total added lines | `adj` | developer adjusted the numbers? |
 
