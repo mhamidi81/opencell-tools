@@ -222,6 +222,9 @@ def bug_logged_h(bug_nodes, acc, tempo):
 
 def gain_pct(est, logged): return round((est - logged) / est * 100) if est else None
 def gain_str(g): return "-" if g is None else (f"+{g}%" if g >= 0 else f"{g}%")
+def gain_two(est, logged, bug):
+    """Time gain without / with bug hours: (est-logged)/est  /  (est-(logged+bug))/est."""
+    return f"{gain_str(gain_pct(est, logged))} / {gain_str(gain_pct(est, logged + bug))}"
 
 def build_rows(parents, children, tempo, since, until):
     ch_by_parent = defaultdict(list); ch_by_key = {}
@@ -311,7 +314,7 @@ def main():
     for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
         P(f"| {u['name']} | {'/'.join(sorted(u['areas']))} | {len(u['tickets'])} | {avg(u['contrib'])}% | "
           f"{avg(u['retain'])}% | {avg(u['rework'])}% | {u['utAdd']}/{u['utMod']} | {u['pmTests']} | {u['turns']} | "
-          f"{round(u['est'],1)} | {round(u['logged'],1)} | {round(u['bugLogged'],1)} | {gain_str(gain_pct(u['est'], u['logged']))} | {u['bugs']} |")
+          f"{round(u['est'],1)} | {round(u['logged'],1)} | {round(u['bugLogged'],1)} | {gain_two(u['est'], u['logged'], u['bugLogged'])} | {u['bugs']} |")
 
     P("\n## Detail per user")
     by_user = defaultdict(list)
@@ -323,7 +326,7 @@ def main():
         for r in sorted(by_user[acc], key=lambda x: (x["at"], x["key"])):
             P(f"| {r['key']} | {r['at']} | {r['area']} | {r['summary']} | {r['contrib']}% | {r['retain']}% | "
               f"{r['utAdd']}/{r['utMod']} | {r['pmTests']} | "
-              f"{r['turns']} | {r['est']} | {r['logged']} | {r['bugLogged']} | {gain_str(gain_pct(r['est'], r['logged']))} | {r['bugs']} |")
+              f"{r['turns']} | {r['est']} | {r['logged']} | {r['bugLogged']} | {gain_two(r['est'], r['logged'], r['bugLogged'])} | {r['bugs']} |")
 
     P("\n## Totals by area (sum of detail rows)\n")
     areas = {ar: {"contrib": [], "retain": [], **{k: 0 for k in SUM}} for ar in AREAS}
@@ -337,7 +340,7 @@ def main():
         if not g["contrib"]: continue
         P(f"| {ar.capitalize()} | {len(g['contrib'])} | {avg(g['contrib'])}% | {avg(g['retain'])}% | "
           f"{g['utAdd']}/{g['utMod']} | {g['pmTests']} | {g['turns']} | {round(g['est'],1)} | "
-          f"{round(g['logged'],1)} | {round(g['bugLogged'],1)} | {gain_str(gain_pct(g['est'], g['logged']))} | {g['bugs']} |")
+          f"{round(g['logged'],1)} | {round(g['bugLogged'],1)} | {gain_two(g['est'], g['logged'], g['bugLogged'])} | {g['bugs']} |")
     print("\n".join(out))
 
 if __name__ == "__main__":
@@ -437,6 +440,8 @@ def bug_logged_h(bug_nodes, acc, tempo):
 
 def gain_pct(est, logged): return round((est - logged) / est * 100) if est else None
 def gain_str(g): return "—" if g is None else (f"+{g}%" if g >= 0 else f"{g}%")
+def gain_two(est, logged, bug):
+    return f"{gain_str(gain_pct(est, logged))} / {gain_str(gain_pct(est, logged + bug))}"
 def gain_cls(g): return "" if g is None else ("pos" if g >= 0 else "neg")
 def e(x): return html.escape(str(x))
 
@@ -538,7 +543,7 @@ def main():
         for label, val in [("Avg contribution", pct(avg(allc))), ("Avg retention", pct(avg(allr))),
                            ("Requests", sum(u["turns"] for u in users.values())),
                            ("Est → Logged h", f"{round(tot_est,1)} → {round(tot_log,1)}"),
-                           ("Time gain", gain_str(gain_pct(tot_est, tot_log)))]:
+                           ("Time gain (w/ bugs)", gain_two(tot_est, tot_log, sum(u["bugLogged"] for u in users.values())))]:
             W(f'<div class="card"><div class="v">{e(val)}</div><div class="l">{e(label)}</div></div>')
         W('</div>')
         W("<h2>Summary by user</h2>")
@@ -553,7 +558,7 @@ def main():
               f'<td class="r">{u["pmTests"]}</td><td class="r">{u["turns"]}</td>'
               f'<td class="r">{round(u["est"],1)}</td><td class="r">{round(u["logged"],1)}</td>'
               f'<td class="r">{round(u["bugLogged"],1)}</td>'
-              f'<td class="r {gain_cls(g)}">{gain_str(g)}</td><td class="r">{u["bugs"]}</td></tr>')
+              f'<td class="r {gain_cls(g)}">{gain_two(u["est"], u["logged"], u["bugLogged"])}</td><td class="r">{u["bugs"]}</td></tr>')
         W("</tbody></table></div>")
         W("<h2>Detail per user</h2>")
         DHEAD = ["Ticket","Date","Area","Summary","AI Contrib","Retain","U.tests +/~","P.tests","Requests","Est h","Logged h","Bug h","Time gain","Bugs"]
@@ -569,7 +574,7 @@ def main():
                   f'<td class="r">{r["utAdd"]}/{r["utMod"]}</td><td class="r">{r["pmTests"]}</td>'
                   f'<td class="r">{r["turns"]}</td><td class="r">{r["est"]}</td><td class="r">{r["logged"]}</td>'
                   f'<td class="r">{r["bugLogged"]}</td>'
-                  f'<td class="r {gain_cls(g)}">{gain_str(g)}</td><td class="r">{r["bugs"]}</td></tr>')
+                  f'<td class="r {gain_cls(g)}">{gain_two(r["est"], r["logged"], r["bugLogged"])}</td><td class="r">{r["bugs"]}</td></tr>')
             W("</tbody></table></div>")
         W("<h2>Totals by area <span class=\"sub\">(sum of detail rows)</span></h2>")
         AH = ["Rows","Avg AI contrib","Avg retain","U.tests +/~","P.tests","Requests","Est h","Logged h","Bug h","Time gain","Bugs"]
@@ -584,12 +589,12 @@ def main():
               f'<td class="r">{g["utAdd"]}/{g["utMod"]}</td><td class="r">{g["pmTests"]}</td>'
               f'<td class="r">{g["turns"]}</td><td class="r">{round(g["est"],1)}</td>'
               f'<td class="r">{round(g["logged"],1)}</td><td class="r">{round(g["bugLogged"],1)}</td>'
-              f'<td class="r {gain_cls(gp)}">{gain_str(gp)}</td><td class="r">{g["bugs"]}</td></tr>')
+              f'<td class="r {gain_cls(gp)}">{gain_two(g["est"], g["logged"], g["bugLogged"])}</td><td class="r">{g["bugs"]}</td></tr>')
         W("</tbody></table></div>")
     W('<p class="foot">AI metrics grouped by record domain. Estimate hours per area from the Architect/QA '
       'estimate custom fields (days &times;8), else the ticket estimate. Bug count &amp; <b>Bug h</b> (logged on '
       'Sub-bugs) per area. Logged hours per user &amp; ticket (Tempo per-user &rarr; Jira worklog &rarr; ticket total). '
-      'Time gain = (est &minus; logged) / est. Generated by <code>/oc-ai-report</code>.</p>')
+      'Time gain shown as <b>without / with bug hours</b>: (est &minus; logged)/est / (est &minus; (logged+Bug h))/est. Generated by <code>/oc-ai-report</code>.</p>')
     body = "\n".join(B)
     doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -647,7 +652,7 @@ if __name__ == "__main__":
 - **Two area sources.** *AI metrics* group by the record `domain` (per developer — a story worked by backend and frontend keeps both). *Estimate hours* come from the Story's **per-area estimate custom fields** — `customfield_10157` (Architect estimate back), `customfield_10158` (front), `customfield_10189` (QA), in **days ×8**; if none are set (e.g. a standalone Bug) the ticket's own `timeoriginalestimate` is used for the area that worked it. Sub-issue estimates are **never summed**. *Bug counts* and *Bug h* are attributed to an area by each Bug/Sub-bug's **Component** (`Backend`/`Frontend`/`Testing` → area), fallback **title tag** (`[back]`/`[front]`/`[test]`), else the parent's area. Only areas that have an AI record show up (the report is record-driven).
 - **Totals = sum of the detail rows** (no independent recompute). A ticket's estimate/bugs land under the area(s) with records; if two developers in the same area worked one ticket, their rows both count (rare).
 - **Date = the AI record's `at`** (the day the metric was measured/confirmed). The JQL `updated >=` window is only a pre-filter; precise period membership is decided by `at` in the aggregator.
-- **Logged hours** (per user & ticket, booked on the parent): **Tempo per-user** (`TEMPO_API_TOKEN`, real author) → **Jira worklog** author → **ticket-total** `timespent`. Shown in **hours** (8h/day). **Time gain** = `(estimate − logged) / estimate`; positive = under estimate. Note the scope mismatch when it falls back: estimate is per-area but a ticket-total logged is whole-ticket, so time gain can read oddly until Tempo per-user data is available.
+- **Logged hours** (per user & ticket, booked on the parent): **Tempo per-user** (`TEMPO_API_TOKEN`, real author) → **Jira worklog** author → **ticket-total** `timespent`. Shown in **hours** (8h/day). **Time gain** is shown as **two numbers, `without / with` bug hours**: `(estimate − logged)/estimate` first, then `(estimate − (logged + Bug h))/estimate` — so you see the gain on the ticket work alone and the gain once the time spent on its bugs is folded in. Positive = under estimate. (When logged falls back to a ticket total rather than Tempo per-user, the estimate is per-area while logged is whole-ticket, so the value can read oddly.)
 - **Bugs & Bug h** = sub-issues / linked issues of type `Bug` or `Sub-bug`, attributed to an area by their own Component/title. **Bug h** is the hours logged on those bugs (Tempo per-user → the bug's `timespent`), shown as a **separate** column from the ticket's Logged h. Adjust the matcher if your team relates defects differently.
 - **Read-only to Jira** — the command never writes to Jira, Bitbucket, or git; the only outbound call is the read-only Tempo worklog fetch (Pass C) when a token is set.
 - The AI records are **latest-only per developer×domain**, so the report reflects the most recent measurement per person per ticket, not a full history.
