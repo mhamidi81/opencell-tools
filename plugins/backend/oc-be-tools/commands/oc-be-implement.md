@@ -26,33 +26,38 @@ These rules apply to ALL generated code:
 
 ### Phase 0: Branch Setup (MUST execute FIRST)
 
-**STOP and ask the user before doing anything else:**
+**HARD GATE — this blocks everything.** Before you create a branch, run `git branch`/`git checkout`, dispatch any builder agent, or write or generate **any** code, you MUST get the branch decision from the user. **This applies in every permission mode, including auto-accept / "auto" mode** — do not treat auto mode as permission to skip it.
 
-"Should I create a new branch for {TICKET}? Or are you working on an existing branch?"
+**Ask with the `AskUserQuestion` tool** (a plain prose question is not reliable in auto mode — the tool forces a real stop):
 
-- Wait for the user's response before proceeding
-- If new branch: create using convention `{username}/feature/{TICKET-NUMBER}-{description}` and ask for a brief description
-- If existing branch: run `git branch --show-current` to confirm, and tell the user which branch they're on
-- Users may have multiple tickets on the same branch
+> "For {TICKET}, create a new branch or use the branch you're already on?"
+> Options: **New branch** / **Use current branch**.
 
-**Rename the session to the ticket.** Name the session so it is findable later, using the ticket number and the same description used for branch creation.
+Then:
+- **Do nothing else until the user answers.** No git commands, no scaffolding, no code.
+- **New branch** → ask for a brief description, then create `{username}/feature/{TICKET-NUMBER}-{description}`.
+- **Use current branch** → run `git branch --show-current` and tell the user which branch they're on (users may keep several tickets on one branch).
+
+**Only after the branch is confirmed**, do the two non-blocking setup steps below, then start Phase 1.
+
+**Rename the session (non-blocking — concerns the rename only, and does NOT relax the branch gate above).** Name the session so it is findable later, using the ticket number and the same description used for the branch.
 
 > **Mechanism note:** the model cannot rename the session programmatically — `/rename` is a user-only slash command (the model cannot invoke it), there is no `claude` CLI subcommand for it, and hooks cannot do it either. So the command surfaces the exact line and the **user** runs it.
 
-Show the user this line and ask them to run it now (readable description — spaces, not the branch slug's dashes):
+Show this line once (readable description — spaces, not the branch slug's dashes) and continue without waiting for the user to run it:
 
 ```
 /rename {TICKET} {description}
 ```
 
-For example: `/rename INTRD-45279 target date on contract`. This step is **non-blocking** — present the line once and continue to the AI-stats setup and Phase 1 regardless of whether the user runs it.
+For example: `/rename INTRD-45279 target date on contract`.
 
 **Set up the AI-stats run directory** (used later by `/oc-be-calculate-ai-use` to attribute sub-agent work):
 - Define `RUN_ID = {TICKET}-{yyyymmdd-HHMMSS}` (get the timestamp via `date -u +%Y%m%d-%H%M%S`).
 - Create `.claude/cache/ai-stats/{RUN_ID}/`.
 - Every builder agent dispatched below is given its manifest path inside this directory. This is cheap and non-blocking — if it fails, continue the implementation normally.
 
-**Only proceed to Phase 1 after branch is confirmed.**
+**Do not start Phase 1 until the branch has been confirmed via the question above.**
 
 ### Phase 1: Requirements Gathering
 
@@ -143,7 +148,9 @@ Wait for user to review and approve the plan.
 
 ### Phase 3: Implementation
 
-Execute sequentially with review checkpoints between each step:
+Execute the steps **sequentially, with a blocking review checkpoint after each one**.
+
+**Every checkpoint is a hard pause — the same rule as the Phase 0 branch gate.** After a builder returns, present the files it created/modified, then **ask with the `AskUserQuestion` tool** whether to proceed (options: **"Looks good — continue"** / **"I have changes"**). **Do not dispatch the next builder, run the compile/test commands, or start the next step until the developer answers — in every permission mode, including auto-accept / "auto" mode.** A prose "Ask …" is not enough; auto mode runs straight through it, so the tool call is mandatory. If the developer picks "I have changes", apply the fixes in this context and re-present before continuing.
 
 **In every agent dispatch below, include this line so the agent records its file manifest:**
 > "Write your file manifest to `.claude/cache/ai-stats/{RUN_ID}/{phase}.json` per your manifest instructions." (phase = `entity`, `service`, `api`, `tests`, `postman`)
@@ -159,17 +166,15 @@ Your own review fixes are made in this (main) context and are captured by the se
 
 **Step 1: Entity + Liquibase**
 - Dispatch the `oc-be-entity-builder` agent with the approved plan (manifest: `entity.json`)
-- Present created files to user for review
-- Ask: "Entity layer complete. Review before proceeding to services?"
+- Present the created files, then **`AskUserQuestion`: "Entity layer complete — continue to the service layer, or changes first?"** Block until answered.
 
 **Step 2: Service Layer**
 - Dispatch the `oc-be-service-builder` agent with the plan + entity file paths (manifest: `service.json`)
-- Present created files to user for review
-- Ask: "Service layer complete. Review before proceeding to API?"
+- Present the created files, then **`AskUserQuestion`: "Service layer complete — continue to the API layer, or changes first?"** Block until answered.
 
 **Step 3: API Layer**
 - Dispatch the `oc-be-api-builder` agent with the plan + entity + service file paths (manifest: `api.json`)
-- Present created files to user for review
+- Present the created files, then **`AskUserQuestion`: "API layer complete — continue to the compile check, or changes first?"** Block until answered.
 
 **Step 4: Compile Check**
 Run Maven compile:
@@ -201,7 +206,7 @@ Present a testing plan:
 - Error scenarios (missing fields, invalid status)
 ```
 
-Wait for user approval, then:
+**`AskUserQuestion`: "Testing plan ready — generate the tests, or adjust the plan?"** Block until answered (auto mode included); only generate tests after approval.
 
 **Step 5: Unit Tests**
 - Dispatch the `oc-be-test-generator` agent with service + API file paths (manifest: `tests.json`)
@@ -209,10 +214,12 @@ Wait for user approval, then:
 ```bash
 cmd.exe /c 'set "JAVA_HOME=C:\andrius\programs\jdk-21" && C:\andrius\programs\apache-maven-3.9.9\bin\mvn.cmd test -Dtest=EntityNameServiceTest,EntityNameApiServiceTest -pl opencell-admin\ejbs'
 ```
+- Present the created tests and the run result, then **`AskUserQuestion`: "Unit tests complete — continue to the Postman collection, or changes first?"** Block until answered.
 
 **Step 6: Postman Collection**
 - Dispatch the `oc-be-postman-generator` agent with REST resource paths (manifest: `postman.json`)
 - Output to `opencell-tests/US-Tests/`
+- Present the created collection, then **`AskUserQuestion`: "Postman collection complete — continue to wrap-up, or changes first?"** Block until answered.
 
 ### Phase 5: Wrap-up
 

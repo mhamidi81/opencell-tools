@@ -897,7 +897,7 @@ Planning/analysis effort: [PLANNING-BAND]
 Developer↔AI interactions: <substantive> substantive requests / <exchanges> exchanges across <sessions> session(s) (avg <avg> exchanges/session).
 <if [USEFULNESS] given:>Developer-rated usefulness: [USEFULNESS]/5
 
-Method: estimated from the oc-be-implement sub-agent manifests, the Claude Code session transcript, and file-history vs. the final code, reviewed and confirmed by the developer. Values rounded to the nearest 5%.
+Method: estimated from the oc-be-implement sub-agent manifests, the Claude Code session transcript, and file-history vs. the final code, reviewed and confirmed by the developer. Values rounded to the nearest 5%. (oc-be-calculate-ai-use v<VER>)
 ```
 
 Comment body (**planning-dominant** ticket — lead with effort, not code %):
@@ -912,8 +912,10 @@ AI usage (Claude Code) — <TICKET-NUMBER> was planning/analysis-dominant (only 
 - Code contribution (of the small change): [CONTRIBUTION]%.
 <if [USEFULNESS] given:>- Developer-rated usefulness: [USEFULNESS]/5.
 
-Note: the AI value here was in requirements analysis and solution design (which is not committed to code), not in code volume. Method: planning effort from the oc-be-implement planning manifest (or reconstructed from the session transcript), reviewed and confirmed by the developer.
+Note: the AI value here was in requirements analysis and solution design (which is not committed to code), not in code volume. Method: planning effort from the oc-be-implement planning manifest (or reconstructed from the session transcript), reviewed and confirmed by the developer. (oc-be-calculate-ai-use v<VER>)
 ```
+
+> `<VER>` in the Method line is the plugin version read from `plugin.json` — the **same value** stored as `ver` in the JSON record, so the human comment and the machine record always agree on which tool version produced the measurement.
 
 On confirmation, use the **Atlassian MCP tools** (site `opencellsoft.atlassian.net`, cloudId `648ef912-b483-4da2-91af-73ea1e3fdad8`; resolve via `getAccessibleAtlassianResources` if unknown).
 
