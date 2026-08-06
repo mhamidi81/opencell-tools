@@ -1,0 +1,5 @@
+{
+  "name": "oc-time-report",
+  "description": "Estimation-vs-logged-hours report over a period (independent of the AI-usage JSON). Tempo-worklog driven: one row per developer x ticket with ticket type, area (from the developer roster), title, Architect estimate, Dev-lead estimate, logged hours, bug hours, time gain (without/with bugs) and child-bug count. Prints Markdown and writes a self-contained styled, date-stamped HTML file and a CSV to ./docs/. Reads Jira (Atlassian MCP) + Tempo (TEMPO_API_TOKEN).",
+  "version": "1.0.0"
+}

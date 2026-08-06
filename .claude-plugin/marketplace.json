@@ -94,6 +94,11 @@
       "description": "Cross-ticket AI-usage report over a period — reads the AI-metrics JSON (backend/frontend/QA) from Jira, groups by area → date → user → ticket, and adds each ticket's original estimate, Tempo-logged time, and linked-bug count. Read-only; Atlassian MCP only"
     },
     {
+      "name": "oc-time-report",
+      "source": "./plugins/common/oc-time-report",
+      "description": "Estimation-vs-logged-hours report over a period (independent of the AI-usage JSON) — Tempo-worklog driven, one row per developer x ticket with type, area (from the developer roster), title, Architect & Dev-lead estimates, logged hours, bug hours, time gain (without/with bugs) and child-bug count. Writes date-stamped HTML + CSV to ./docs/. Atlassian MCP + Tempo (TEMPO_API_TOKEN)"
+    },
+    {
       "name": "oc-figma-mcp",
       "source": "./plugins/mcp/oc-figma-mcp",
       "description": "Connect to Figma MCP server to extract design context, generate code from designs, and retrieve design tokens"
