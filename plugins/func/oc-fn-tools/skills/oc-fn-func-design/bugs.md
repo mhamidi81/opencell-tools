@@ -35,10 +35,8 @@ archaeology below before setting it.
 > **There is no Sub-bug template.** Verified on Jira: `jira jql 'project = INTRD AND summary ~
 > "TEMPLATE" AND (summary ~ "COPY" OR summary ~ "CLONE")'` returns INTRD's seven template issues
 > (Story ×3, Epic, Initiative, Enabler, Bug) — no Sub-bug among them. A Sub-bug follows the
-> **Bug template INTRD-5340** — same seven
-> sections (*Description · Steps to reproduce · Expected results · Actual results · Analysis ·
-> Impact and criticality · Suggested fix*) and the same heading rule: plain `strong`, **no
-> `#bf2600`**, per § *Template* below.
+> **Bug template INTRD-5340** — same eight sections (listed in § *Template* below, with the
+> three-block structure they form) and the same heading rule: plain `strong`, **no `#bf2600`**.
 
 **A Story is not rejected on its own** — the defects go under it as Sub-bugs first. The PO
 review / rejection lane is `po-review.md`.
@@ -67,6 +65,14 @@ Tooling:
   so ask for `%cd` explicitly. The re-apply here was authored 2025-12-31 but committed 2026-05-01;
   author-date ordering hides the sequence entirely.
 
+**Ship the verdict, not the transcript.** The archaeology is a *pre-filing* obligation — it is how you
+establish the regression and earn the `customfield_10228` flag, and it stays mandatory. What belongs
+in the `description` is the **conclusion in one line** — *"Regression of INTRD-36420; the guards were
+lost in `e310f06e574`"* — not the commit table you built to reach it. INTRD-45541 shipped a five-row
+archaeology table (with a parenthetical warning that author dates mislead) for a defect whose fix is
+two null guards: ~140 words that change nothing about the patch, while inviting the reader toward a
+revert or a wholesale cherry-pick of a Story-sized commit.
+
 ## Template
 
 The Bug template is **INTRD-5340**. It uses the standard `description` field with the shared
@@ -80,6 +86,33 @@ note panels, not plain Markdown.
 > templates (dark-red `#bf2600` headings), the Bug template's headings are **plain `strong`
 > with no `textColor`**. Do **not** add `#bf2600` to a Bug's headings — match the template
 > exactly (plain `strong` + `rule` + note panel).
+
+### The eight sections — three blocks
+
+The heading levels are load-bearing: they sort the body into **what was observed**, **what it costs**,
+and **what is inferred**. Keep a sentence in the block matching its epistemic status.
+
+| | Section | Level | Block |
+|---|---|---|---|
+| 1 | *Description* | **H1** | **Observed.** One line — what breaks, for whom, and at which interface (see § *Authoring notes* → *Observed at*). |
+| 2 | *Steps to reproduce* | H2 | ↳ black-box, numbered, with frequency |
+| 3 | *Expected results* | H2 | ↳ |
+| 4 | *Actual results* | H2 | ↳ verbatim error text, status, offending input |
+| 5 | *Impact and criticality* | **H1** | **Cost.** Who is blocked, and whether a workaround exists. |
+| 6 | *Analysis* | **H1** | **Inferred — optional.** Governed by § *Analysis — separate what you observed from what you inferred*. |
+| 7 | *Evidence base* | H2 | ↳ fill only when the Analysis asserts a cause |
+| 8 | *Suggested fix* | H2 | ↳ at most the minimal change for the *observed* symptom |
+
+**Blocks 1 and 5 are the record; block 6 is not.** Everything under *Description* is something a
+reporter saw, and it is what defines the fix as done. Everything under *Analysis* is reasoning that may
+be wrong — which is why it carries its own status markers rather than inheriting the authority of the
+sections above it.
+
+> **Revised 2026-08-06** — *Impact and criticality* was promoted from an H2 under *Analysis* (it is
+> user-POV content, misfiled under the diagnostic heading), *Evidence base* was added, *Description*
+> gained the note panel it never had, and the *Analysis* / *Suggested fix* panels were rewritten.
+> Verified after the edit via `expand: "renderedFields"`: 8 purple `#eae6ff` note panels, 3 `<h1>`,
+> 5 `<h2>`, 8 `<hr>`, and **zero** `#bf2600`.
 
 ## Fields
 
@@ -213,8 +246,26 @@ type, the check is one cheap call, and a `400` on create costs more.
 
 Follow the template's sections. A well-formed Bug makes the defect reproducible and scoped:
 
-- **Reproduction** — exact, numbered steps; **expected vs. actual** result; frequency
-  (always / intermittent).
+- **Observed at** — name the interface where the defect surfaces, on the *Description* line:
+  **Portal GUI**, **REST API**, **batch or file processing**, or a **generated document** (invoice
+  PDF, SEPA `pain` file, e-reporting submission). It routes the fix — with no full-stack developers,
+  a GUI defect and an API defect go to different teams and different repos — and it exposes the case
+  where one defect needs **two** issues (a Core fix plus an additive Portal fix). It is *not* a
+  duplicate of `customfield_10359` (*Issue location (URL)* — one pointer to one page) or of
+  `components` (`Backend`/`Frontend` — the engineering layer, set at triage).
+- **Reproduction** — exact, numbered steps a reader can follow **without reading code**; **expected
+  vs. actual** result; frequency (always / intermittent). A screenshot may *illustrate* a step; it may
+  never *be* the step. INTRD-45655 is the counter-example — twelve words and three PNGs, with no page,
+  no steps and no expected result: the cheapest body to write and among the most expensive to act on.
+- **Verbatim over paraphrase** — quote the exact error text, HTTP status and offending input literal.
+  This is the cheapest content a Bug can carry: `NumberFormatException: For input string: "*invoice*"`
+  (INTRD-45622, a 73-word Bug with no diagnosis at all) is a greppable entry point that needs none.
+  Attach stack traces past ~15 lines and full request/response bodies rather than pasting them inline.
+- **Never paste credentials.** No bearer tokens, cookies, passwords or `Authorization` headers —
+  INTRD-45597 carries ~700 characters of a live bearer token plus fifteen browser headers in its
+  `description`. A Bug body is readable by everyone with tracker access; this is a security defect
+  independent of any formatting question. Redact to `Authorization: Bearer <redacted>` and keep the
+  rest of the call, which is the part with signal.
 - **Environment** — tenant/instance and browser/OS where relevant. The environment URI and the
   Core/Portal build fingerprints go in the **`environment` field**, not here — see § *The
   `environment` field*; don't duplicate them in the `description`.
@@ -224,6 +275,63 @@ Follow the template's sections. A well-formed Bug makes the defect reproducible 
 
 Keep prose factual — a Bug records what is broken, not how to redesign it. Substantial
 solution design belongs in a linked Story or Enabler.
+
+**This binds the *Suggested fix* section specifically.** It may name **at most the minimal change that
+removes the *observed* symptom** — the file(s) and the change itself. Out of lane, and to be routed to
+a linked Story or Enabler instead: ranked alternatives, refactors, relocating logic into a shared
+service, and revert or cherry-pick proposals. INTRD-45633 is the anti-pattern — a defect its own
+*Analysis* says was *"not reproduced on a live instance"*, whose *Suggested fix* nonetheless recommends,
+as the option labelled *"better, since it closes every current and future path at once"*, moving number
+allocation into `CommercialOrderService.create()` and accepting a change to sequence-consumption
+semantics. A reader following the section as written mutates a shared service on an unobserved bug.
+
+## Analysis — separate what you observed from what you inferred
+
+The *Analysis* block is where a Bug stops recording and starts reasoning, and a `description` gives it
+no epistemic vocabulary of its own: **by default every sentence in it reads as the record.** That is
+correct for *Description / Steps / Expected / Actual*, which are observations. It is wrong for a root
+cause, which is a hypothesis until someone has read or replayed it — and a confidently-stated wrong
+hypothesis costs more than none at all, because the reader (increasingly a coding agent working from
+the issue alone) treats it as a constraint and prunes away the search space it rules out.
+
+So keep the analysis. Mark its status.
+
+- **Two voices, inline.** Prefix every causal or generalising claim with **`Established —`** (you read
+  the code, replayed the call, or queried the data *yourself*) or **`Hypothesis —`** (you inferred it).
+  A `Hypothesis —` claim should name what would settle it — *"one read of `X` confirms or kills this"*.
+  An unmarked claim reads as established: do not leave inference unmarked.
+- **Evidence base.** Whenever the *Analysis* asserts a cause, fill the *Evidence base* sub-section:
+  one of **reproduced live** / **established from source only** / **not reproduced**, plus the tenant
+  and the branch or ref actually read. INTRD-45633 already does this — *"Not reproduced on a live
+  instance. The defect is established from source on `origin/18.X`"*, with its negative evidence named
+  (tenant `energie-18`, 56 orders, 0 from a quote). Today that is the exception; it should be the norm.
+- **Caveat locality.** A scope limit binds only where it is written — it must sit in the **same sentence
+  or bullet** as the claim or suggestion it limits, because an upstream hedge does not license a
+  downstream instruction. INTRD-45620 hedges *"not verified field by field… only the two name fields
+  were tested"*, then ~200 words later states that the same treatment applies to five untested fields.
+  Reject that shape on review.
+- **Prefer exclusions to locations.** The cheapest analysis is subtractive: *"the API/data layer also
+  correctly fetches `allowedValues` — this part is not the bug"* (INTRD-45664) is falsifiable in one
+  read and removes a whole layer from the search. Contract statements do the same work — *"Core already
+  treats an explicit `null` as 'clear', so no backend change is needed"* (INTRD-45620) saves a frontend
+  developer from opening Java at all. Exclusions are what make a long *Analysis* cheap; archaeology is not.
+- **Name the symbol, not the line.** `file:line` anchors go stale — the `opencell-core` and
+  `opencell-portal` checkouts commonly lag their branch by weeks, so a quoted line number sends the
+  reader to the wrong block while the surrounding confidence invites them to "confirm" whatever they
+  find there. Name the function, method or component and quote the offending block (≤5 lines). Where
+  the claim is about *deployed* behaviour, anchor it to the deployed artifact as INTRD-45543 does —
+  *"the served lazy chunk `index-D5HSIrO6.js` carries exactly this logic"* — which is checkout-independent.
+- **Re-read the *Description* against the *Analysis* before filing.** INTRD-45590 asserts *"The saved
+  state does reach Keycloak — writing is not the problem"* up top, then prescribes a write-path fix a
+  thousand words later. A reader who believed the first sentence will not look where the fix is.
+- **One actionable statement, findable.** If the *Suggested fix* has a single load-bearing item, say so
+  where it can be seen. INTRD-45590 buries *"This alone fixes the reported symptom"* as item 1 of nine,
+  at roughly word 1,400.
+
+**None of this applies to a Bug that asserts no cause.** A body of pure observation is **complete and
+conformant** with no markers, no *Evidence base* and no *Suggested fix* — INTRD-45622 is 73 words with
+zero diagnosis and the best signal-per-word in the sample. Diagnosis is optional in a Bug; what is not
+optional is being clear about which kind of sentence you are writing.
 
 ## Limits & volumes
 
