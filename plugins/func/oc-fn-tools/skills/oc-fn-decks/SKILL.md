@@ -1,7 +1,7 @@
 ---
 name: oc-fn-decks
-version: 1.3.1
-updated: 2026-07-09T19:05:00+02:00
+version: 1.4.0
+updated: 2026-08-07T23:20:00+02:00
 author: Stéphane Chambrin
 description: >
   Author and render branded slide decks with the Opencell Marp theme (Charte
@@ -13,10 +13,10 @@ description: >
   Carries the theme master (`theme/`), the official-template PPTX lane
   (`pptx/` + `pptx.md`: curated pandoc reference, embedded fonts, deck2pptx
   pipeline), the authoring conventions (lead slides, front-matter, one-way
-  mirror), the `marp-cli` render command, the overflow check, and the
-  24h-time / ISO-date locale non-negotiable. Used for the **Phase-2 approval
-  deck** in `oc-fn-project-management` and for standalone strategy / SteerCo
-  decks.
+  mirror), the `YYYYMMDD_` dated-filename rule, the `marp-cli` render command,
+  the overflow check, and the 24h-time / ISO-date locale non-negotiable. Used
+  for the **Phase-2 approval deck** in `oc-fn-project-management` and for
+  standalone strategy / SteerCo decks.
 ---
 
 # Opencell slide decks — authoring & rendering with the Marp theme
@@ -98,6 +98,32 @@ Defined in `theme/opencell.css` (`/* @theme opencell */`, extends Marp `default`
   a full-red background, white text). Both embedded as data URIs → the rendered HTML is self-contained.
 - Body font is **25px** — decks are for *headlines, not paragraphs*. Keep slides terse (see overflow).
 
+## File naming — `YYYYMMDD_` prefix, always
+
+Every deck this skill produces is named **`YYYYMMDD_<slug>.<ext>`** — an all-numeric date, no
+separators, then an **underscore** (not a hyphen), then a kebab-case slug:
+
+```
+20260807_steerco-module-map.md      ← source
+20260807_steerco-module-map.html    ← render
+20260807_steerco-module-map.pptx    ← render
+```
+
+- **The date is the deck's own date, fixed at creation** — the date on the title slide, not the date
+  of the latest edit and not the date it was last rendered. **A revision does not rename the file:**
+  renaming breaks every link already shared and detaches the file's history. A deck genuinely
+  re-cut for a later session is a new deck and gets that session's date.
+- **The renders inherit it.** `.html` / `.pdf` / `.pptx` share the source's basename, so the prefix
+  propagates for free — never date a render differently from its source.
+- **The underscore is the point.** It separates the date from the slug's own hyphens, so the boundary
+  stays readable (`20260807_steerco-deck`, not `20260807-steerco-deck`). Compact `YYYYMMDD` sorts
+  chronologically in any file listing.
+- **This does not contradict the locale rule below.** That rule governs a date **a viewer reads on a
+  slide** — which must never be ambiguous, hence ISO `YYYY-MM-DD` or a month name. This one governs
+  the **file on disk**, which no audience ever sees. Don't "correct" a filename to hyphenated ISO.
+- **Existing decks keep their names.** This applies to new ones; do not sweep-rename a repo.
+- Throughout this skill, **`<deck>` in a path or a render command means the full dated basename.**
+
 ## Authoring conventions
 
 - **Front-matter:** `marp: true`, `theme: opencell`, `paginate: true`, and a `footer:` (e.g.
@@ -165,6 +191,10 @@ Slideshows must display **24-hour time** (never AM/PM) regardless of the present
 browser/OS locale, and must **never** show a date in an ambiguous all-numeric form (`dd/mm/yyyy`,
 `mm/dd/yyyy`, and the like). Any all-numeric date uses **ISO-8601 (`YYYY-MM-DD`)**; dates written with a
 month name (`16 June 2026`, `Juin 2026`) are unambiguous and fine as-is.
+
+**Scope: dates a viewer reads.** This rule is about the slide surface — title slide, footers, tables,
+the presenter clock. It does **not** reach the *filename*, which uses the compact `YYYYMMDD_` prefix
+above and is never shown to an audience.
 
 The bespoke presenter-view clock calls `toLocaleTimeString()` with no locale (so it inherits the
 browser locale and defaults to AM/PM on en-US), so **force it deck-side**: inject a `<script>` that

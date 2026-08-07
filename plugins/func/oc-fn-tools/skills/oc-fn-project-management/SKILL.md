@@ -1,7 +1,7 @@
 ---
 name: oc-fn-project-management
-version: 1.9.0
-updated: 2026-07-03T07:50:10+02:00
+version: 1.10.0
+updated: 2026-08-07T23:40:00+02:00
 author: Stéphane Chambrin
 description: >
   How to run an Opencell project from kickoff to release: the design-first phased

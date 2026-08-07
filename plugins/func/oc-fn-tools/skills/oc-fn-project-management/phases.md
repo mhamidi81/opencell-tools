@@ -84,8 +84,9 @@ risk sat entirely on the three items above.)*
 
 - **Purpose:** get a formal mandate and resources *before* sinking heavy design effort — and *after*
   enough scoping to be credible. This is the single phase that also yields a non-`.md` artifact (a
-  slide deck), authored as `deck.md` and rendered one-way with the **Opencell Marp theme** — authoring
-  conventions, the render command, and the overflow check live in the **`oc-fn-decks`** skill.
+  slide deck), authored as **markdown** (named `YYYYMMDD_<slug>.md`) and rendered one-way with the
+  **Opencell Marp theme** — authoring conventions, the filename rule, the render command, and the
+  overflow check live in the **`oc-fn-decks`** skill.
 - **Deliverables:** **business case** (problem, qualitative value, **effort in man-days + delay**,
   risks, the "ask"); high-level architecture sketch (reuse the candidate architecture from `PLAN.md`); a
   light **feasibility read** from the architect + infra owner; **slideware** for the approvers.
