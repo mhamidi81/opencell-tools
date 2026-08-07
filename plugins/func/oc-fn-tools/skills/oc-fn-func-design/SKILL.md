@@ -1,7 +1,7 @@
 ---
 name: oc-fn-func-design
-version: 1.29.0
-updated: 2026-08-07T17:20:00+02:00
+version: 1.30.0
+updated: 2026-08-07T21:14:43+02:00
 author: Stéphane Chambrin
 description: >
   Rules and reference data for working with Jira issues in the Opencell INTRD project

@@ -1,7 +1,7 @@
 ---
 name: oc-fn-briefs
-version: 1.1.0
-updated: 2026-07-06T20:25:00+02:00
+version: 1.3.0
+updated: 2026-08-07T23:20:00+02:00
 author: Stéphane Chambrin
 description: >
   Author and render branded Opencell DOCUMENTS — one-pagers, analysis notes,
@@ -15,10 +15,11 @@ description: >
   branded PDF. Carries the document brand theme (`theme/brand.css` + shared
   logos + `theme/oc-brief.lua`), a markdown source template
   (`templates/one-pager.md`) with its Pandoc HTML template, a ready-to-fill
-  hand-authored `templates/one-pager.html`, the render commands, and the
-  screenshot verification step. NOT for slide decks (that is `oc-fn-decks`), NOT
-  for Confluence pages (that is `oc-fn-documentation`), and NOT for Jira
-  functional designs / requirement briefs (that is `oc-fn-func-design`).
+  hand-authored `templates/one-pager.html`, the `YYYYMMDD_` dated-filename
+  rule, the render commands, and the screenshot verification step. NOT for
+  slide decks (that is `oc-fn-decks`), NOT for Confluence pages (that is
+  `oc-fn-documentation`), and NOT for Jira functional designs / requirement
+  briefs (that is `oc-fn-func-design`).
 ---
 
 # Opencell documents — branded one-pagers, notes & briefs (Markdown/HTML → PDF)
@@ -106,6 +107,34 @@ Defined in `theme/brand.css` (the document counterpart to `oc-fn-decks/theme/ope
   `.meta` line · `.kpis`/`.kpi` tiles · `h2`/`.hint` section heads · `table` with `.num`, `.del`/`.why`,
   `.solo`/`.track`/`.val` magnitude bars, `.x` pill badge, `tfoot` total · `.cards`/`.card` framings ·
   `.note` caveats footnote. All tuned for A4 print (`@page`, `break-inside`, repeating table headers).
+- **Links** are branded by an element rule, not a class: a plain `a` is `--oc-red-ink`, no underline
+  (underline on hover). A link **inside a `.x` pill** inherits the pill's colour, so
+  `[[INTRD-1234](url)]{.x}` reads white-on-red like any other pill. Never hand-roll a `<style>` block
+  for this — the theme carries it, in both tiers.
+
+## File naming — `YYYYMMDD_` prefix, always
+
+Every document this skill produces is named **`YYYYMMDD_<slug>.<ext>`** — an all-numeric date, no
+separators, then an **underscore** (not a hyphen), then a kebab-case slug:
+
+```
+20260807_ubl-conformance-brief.md      ← source
+20260807_ubl-conformance-brief.html    ← render
+20260807_ubl-conformance-brief.pdf     ← render
+```
+
+- **The date is the document's own date, fixed at creation** — the same date the front matter shows,
+  not the date of the latest edit and not the date it was last rendered. **A revision does not rename
+  the file:** renaming breaks every link already shared and detaches the file's history. Only a
+  genuinely new document gets a new date.
+- **The renders inherit it.** `.html` and `.pdf` share the source's basename, so the prefix
+  propagates for free — never date a render differently from its source.
+- **The underscore is the point.** It separates the date from the slug's own hyphens, so the boundary
+  stays readable (`20260807_e-invoicing-brief`, not `20260807-e-invoicing-brief`). Compact
+  `YYYYMMDD` sorts chronologically in any file listing. Don't "correct" it to ISO `YYYY-MM-DD` —
+  that convention governs dates a *reader* sees, not the file on disk.
+- **Existing documents keep their names.** This applies to new ones; do not sweep-rename a repo.
+- Throughout this skill, **`<slug>` in a path or a render command means the full dated basename.**
 
 ## Tier 1 — authoring in markdown
 
@@ -128,6 +157,7 @@ express cleanly (KPI tiles, magnitude bars):
 | Row label + detail | `[label]{.del}[grey detail]{.why}` inside a cell | `.del` / `.why` |
 | Magnitude bar | `[value]{.bar pct="0-100" sub="range"}` inside a cell | `.solo`/`.track`/`.val` |
 | Pill badge | `[n]{.x}` or `[n]{.x .ink}` | `.x` |
+| Link | `[text](url)` — including inside a pill, `[[INTRD-1234](url)]{.x}` | branded `a` |
 | Framing cards | `::: cards` → `::: card` → `### label` + `::: big` + prose | `.cards` / `.card` |
 | Caveats footnote | `::: note` (with `**bold**`, `[term]{.k}`) | `.note` |
 

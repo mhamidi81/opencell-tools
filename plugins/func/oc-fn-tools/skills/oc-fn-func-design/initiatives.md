@@ -5,12 +5,17 @@ Read together with the main `SKILL.md`. **Minimal by design** — an Initiative 
 `description`-field issue driven by its template; this file adds only the Initiative-specific
 framing.
 
-> **New type (2026-06-30).** `Initiative` is the above-Epic container. It **supersedes the
-> legacy `Feature` type**, which is being dissolved into **Module** Components during the
-> migration (see `notes/feature-to-initiative/` in the `claude-config` repo). `Initiative` is
-> the **altitude** axis only — the *product area* is captured orthogonally by the **Module**
-> (a Jira Component on the Epics/Stories/Enablers), **not** by the Initiative. Legacy `Feature`
-> issues still exist while the migration runs; all new above-Epic work is an `Initiative`.
+> **`Initiative` replaced `Feature` — migration complete 2026-07-09.** `Initiative` is the
+> above-Epic container, and it is the **altitude** axis *only*: the product area is captured
+> orthogonally by the **Module**, a Jira Component set on Epics/Stories/Enablers — never by the
+> Initiative.
+>
+> **The `Feature` type no longer exists.** All 80 `Feature` issues were deleted and the work type
+> was retired site-wide; the 86 functional areas they encoded became 30 module Components, with 370
+> Epics backfilled. So there are no legacy `Feature` issues left to handle, and a `Feature` cannot
+> be created. If someone asks for one, they mean either an **Initiative** (altitude) or a **Module**
+> Component (product area) — establish which. Note the Component field also carries a pre-existing
+> dev-layer taxonomy (`Backend`, `Frontend`); module and layer tags coexist on it.
 
 ## What is an Initiative
 
@@ -38,7 +43,7 @@ uses the standard `description` field with the shared ADF vocabulary in
 and `expand: "renderedFields"` verification as Epics. **Read the template first**; new
 Initiatives written from it must be ADF with the dark-red (`#bf2600`) `strong` headings each
 followed by a `rule` node. It is typed `Initiative` and follows the **Epic workflow** lifecycle
-(`To Study … Released … Rejected`) — same as Epics/Features.
+(`To Study … Released … Rejected`) — same as Epics.
 
 ## Fields
 
