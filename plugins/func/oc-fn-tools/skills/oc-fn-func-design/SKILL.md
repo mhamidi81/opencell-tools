@@ -1,7 +1,7 @@
 ---
 name: oc-fn-func-design
-version: 1.28.0
-updated: 2026-08-06T18:22:00+02:00
+version: 1.29.0
+updated: 2026-08-07T17:20:00+02:00
 author: Stéphane Chambrin
 description: >
   Rules and reference data for working with Jira issues in the Opencell INTRD project
@@ -16,7 +16,10 @@ description: >
   is the architect lane — defer to oc-ar-tech-design for "write the technical design for INTRD-*".
   Also trigger on the PO review lane: reviewing, validating or rejecting a delivered Story,
   a PO verdict, the To Review by PO / Validated by PO / Rejected by PO / PO can't test yet
-  transitions, INTRD workflow transitions generally, and the Sub-bug issue type.
+  transitions, INTRD workflow transitions generally, and the Sub-bug issue type. The same lane
+  covers retesting a delivered Bug fix ("test this ticket for me", In Test, Test failed) and how
+  to write the result up — the Case / Expected / Actual test-report comment, reassigning a
+  rejection to the developer, and the short thank-you on a pass.
   Always load this skill before any Atlassian Rovo Jira tool call — or direct Jira
   REST API calls — on the INTRD or CR projects.
 ---
@@ -85,6 +88,7 @@ The rules below cover **all issue types**. For type-specific conventions (custom
 | Initiative    | `initiatives.md`                       |
 | Change Request | `change-requests.md`                  |
 | Reviewing a delivered Story (PO verdict) | `po-review.md`      |
+| Retesting a delivered Bug fix (`In Test`) | `po-review.md` + `bugs.md` |
 
 Load only the file relevant to the current task — do not pre-read all of them.
 

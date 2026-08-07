@@ -1,7 +1,7 @@
 ---
 name: oc-fn-documentation
-version: 1.3.0
-updated: 2026-06-27T12:00:00+02:00
+version: 1.4.0
+updated: 2026-08-07T21:30:00+02:00
 author: Stéphane Chambrin
 description: Rules and conventions for creating and updating Confluence documentation pages in the Opencell documentation space (opencellsoft.atlassian.net/wiki/spaces/docs). Use this skill whenever the user mentions Confluence, documentation, a "Concepts" page, a "User Manual" page, or asks to document anything for Opencell. Always load this skill before any Atlassian Rovo Confluence tool call targeting the docs space.
 ---
@@ -19,7 +19,12 @@ resolve against whatever Atlassian MCP your environment registers (the claude.ai
 as `mcp__…Atlassian_Rovo__<verb>`; a self-hosted Atlassian MCP may use a different prefix).
 
 Check at session start: call `atlassianUserInfo` (or `getVisibleJiraProjects`); if it errors, the
-connector is not enabled. There is no fallback: without this connector the skill cannot function.
+connector is not enabled.
+
+The connector is the portable path, but it is **not the only one**: on a machine whose `~/.netrc`
+carries the Atlassian host, the Confluence REST API answers `curl -n` directly (verified on
+`sabretooth`, 2026-08-07) — see § *Page update workflow* for when to prefer it. Everything else in
+this skill — the rules, the audience constraints, the HTML patterns — applies to both transports.
 
 ## Instance
 
@@ -65,6 +70,17 @@ them against the live instance before each create/update.
    `#bf2600` is the func/brand heading colour; other Opencell skills (e.g.
    `oc-ar-ai-tech-design`) may emit `#FF0000` — keep func-authored content on
    `#bf2600` and do not silently normalise to another value.
+6. **Audience: this space is customer-facing — never reference an internal
+   tracker.** No Jira keys (`INTRD-…`, `SUPS-…`, `CR-…`), no sprint or Epic
+   names, no branch or commit identifiers, no internal ticket links — not in the
+   body, not inside a panel, and **not in the `versionMessage`** (page history is
+   readable by anyone with access to the page). This holds even when the ticket
+   is the most precise way to say it, and even when the reference is labelled
+   "internal ref." — labelling it does not make it publishable. State the change
+   and the version instead: *"planned for a future version"*, *"corrected by the
+   same future change"*, *"from 18.0.0 onwards"*. Traceability to the ticket
+   belongs in Jira and in the design repo, both of which the docs owner can
+   reach; the published page cannot.
 
 ## Space Structure — Parent Pages
 
@@ -160,3 +176,29 @@ Use `createConfluencePage` with:
 
 The tool replaces the entire body; sending a partial body silently drops
 existing content and orphans any media nodes it contained.
+
+4. **Verify both revisions afterwards** — that the draft carries the change and
+   still has every media node, *and* that the published page has not moved
+   (same version number, none of the new text). Rule 3 is only honoured if the
+   second check passes.
+
+**Two draft gotchas that cost a failed call each.**
+
+- **A draft revision is always version `1`.** A `PUT` carrying an incremented
+  number is rejected with `DRAFT pages do not support multiple versions.
+  Expected version: [1]` — including on the *second* and later edits of the same
+  draft. Send `version: {number: 1}` every time; the live page keeps its own
+  numbering untouched.
+- **Reading a draft back needs the v1 API.** `GET /wiki/api/v2/pages/{id}?status=draft`
+  answers `404 NOT_FOUND … with any status of [draft]`. Use
+  `GET /wiki/rest/api/content/{id}?status=draft&expand=version,body.atlas_doc_format`.
+
+**Large pages: prefer direct REST over the MCP.** On a machine whose `~/.netrc`
+carries the Atlassian host, `curl -n https://<site>/wiki/api/v2/pages/{id}?body-format=atlas_doc_format`
+works — the same pattern `bin/jira` uses for Jira. That matters because Rule 3's
+full-body reconstruction means a whole page must round-trip: through the MCP it
+lands in context twice (fetch, then re-send), while over REST it can be edited
+**surgically in a file** — locate the node, change it, `PUT` the result — which
+also guarantees media nodes are preserved byte-for-byte rather than re-typed.
+`~/.netrc` is machine-local, so check before relying on it; the MCP remains the
+portable path.

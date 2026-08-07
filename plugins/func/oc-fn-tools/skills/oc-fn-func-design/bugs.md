@@ -333,6 +333,11 @@ conformant** with no markers, no *Evidence base* and no *Suggested fix* — INTR
 zero diagnosis and the best signal-per-word in the sample. Diagnosis is optional in a Bug; what is not
 optional is being clear about which kind of sentence you are writing.
 
+**A retest comment is a different artifact under the same discipline.** When you report the *result* of
+testing a delivered fix, the shape is a *Case / Expected / Actual* table — not a second *Analysis*, and
+not a fix proposal. See `po-review.md` § *The verdict comment — what you did, expected, actual*, which
+also carries the reassign-on-rejection and thank-you-on-pass rules.
+
 ## Limits & volumes
 
 The cross-cutting rule (`SKILL.md` § *Limits & volumes — mandatory reflection*) targets
