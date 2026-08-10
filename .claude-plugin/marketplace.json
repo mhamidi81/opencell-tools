@@ -91,12 +91,12 @@
     {
       "name": "oc-ai-report",
       "source": "./plugins/common/oc-ai-report",
-      "description": "Cross-ticket AI-usage report over a period — reads the AI-metrics JSON (backend/frontend/QA) from Jira, groups by area → date → user → ticket, and adds each ticket's original estimate, Tempo-logged time, and linked-bug count. Read-only; Atlassian MCP only"
+      "description": "Cross-ticket AI-usage report over a period — reads the AI-metrics JSON (backend/frontend/QA) from Jira, groups by area → date → user → ticket, and adds each ticket's Architect & Dev-lead estimates, Tempo-logged time, and child-bug count, with two time gains (Architect and Dev-lead, each without/with bugs). Full-width HTML + CSV to ./docs/. Read-only; Atlassian MCP + optional Tempo"
     },
     {
       "name": "oc-time-report",
       "source": "./plugins/common/oc-time-report",
-      "description": "Estimation-vs-logged-hours report over a period (independent of the AI-usage JSON) — Tempo-worklog driven, one row per developer x ticket with type, area (from the developer roster), title, Architect & Dev-lead estimates, logged hours, bug hours, time gain (without/with bugs) and child-bug count. Writes date-stamped HTML + CSV to ./docs/. Atlassian MCP + Tempo (TEMPO_API_TOKEN)"
+      "description": "Estimation-vs-logged-hours report over a period (independent of the AI-usage JSON) — Tempo-worklog driven, one row per ticket owned by its main developer, with type, area (from the developer roster), title, Architect & Dev-lead estimates, logged hours, bug hours, two time gains (Architect and Dev-lead, each without/with bugs), an AI-assistance flag and child-bug count. Writes date-stamped HTML + CSV to ./docs/. Atlassian MCP + Tempo (TEMPO_API_TOKEN)"
     },
     {
       "name": "oc-figma-mcp",

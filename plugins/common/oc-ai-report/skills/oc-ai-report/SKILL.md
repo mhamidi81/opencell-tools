@@ -218,8 +218,13 @@ def bug_logged_h(bug_nodes, acc, tempo):
         total += hours(tw.get(acc)) if acc in tw else hours(bf.get("timespent"))
     return round(total, 1)
 
-def gain_pct(est, logged): return round((est - logged) / est * 100) if est else None
-def gain_str(g): return "-" if g is None else (f"+{g}%" if g >= 0 else f"{g}%")
+GAIN_CAP = 1000  # |time gain %| beyond this is placeholder-driven noise -> show "-"
+EST_MIN = 0.5    # estimates at/below this (e.g. a 0.01-day placeholder ~= 0.1h) are meaningless
+def gain_pct(est, logged):
+    if not est or est < EST_MIN or not logged or logged <= 0:
+        return None  # placeholder estimate or no logged time -> gain is nonsense
+    return round((est - logged) / est * 100)
+def gain_str(g): return "-" if (g is None or abs(g) > GAIN_CAP) else (f"+{g}%" if g >= 0 else f"{g}%")
 def gain_two(est, logged, bug):
     """Time gain without / with bug hours: (est-logged)/est  /  (est-(logged+bug))/est."""
     return f"{gain_str(gain_pct(est, logged))} / {gain_str(gain_pct(est, logged + bug))}"
@@ -304,14 +309,15 @@ def main():
         g = areas[r["area"]]; g["contrib"].append(r["contrib"]); g["retain"].append(r["retain"])
         for k in SUM: g[k] += r[k]
     P("## Totals by area (sum of detail rows)\n")
-    P("| Area | Rows | AI Contrib | Retain | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Logged h | Bug h | Time gain | Bugs |")
-    P("|---|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|")
+    P("| Area | Rows | AI Contrib | Retain | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Logged h | Bug h | Arch gain | DL gain | Bugs |")
+    P("|---|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
     for ar in AREAS:
         g = areas[ar]
         if not g["contrib"]: continue
         P(f"| {ar.capitalize()} | {len(g['contrib'])} | {avg(g['contrib'])}% | {avg(g['retain'])}% | "
           f"{g['utAdd']}/{g['utMod']} | {g['pmTests']} | {g['turns']} | {round(g['aEst'],1)} | {round(g['dlEst'],1)} | "
-          f"{round(g['logged'],1)} | {round(g['bugLogged'],1)} | {gain_two(g['aEst'], g['logged'], g['bugLogged'])} | {g['bugs']} |")
+          f"{round(g['logged'],1)} | {round(g['bugLogged'],1)} | {gain_two(g['aEst'], g['logged'], g['bugLogged'])} | "
+          f"{gain_two(g['dlEst'], g['logged'], g['bugLogged'])} | {g['bugs']} |")
 
     # ---- Summary by user ----
     users = {}
@@ -322,12 +328,13 @@ def main():
         u["contrib"].append(r["contrib"]); u["retain"].append(r["retain"]); u["rework"].append(r["rework"])
         for k in SUM: u[k] += r[k]
     P("\n## Summary by user\n")
-    P("| User | Area | Tickets | AI Contrib | Retain | Rework | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Logged h | Bug h | Time gain | Bugs |")
-    P("|---|---|--:|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|")
+    P("| User | Area | Tickets | AI Contrib | Retain | Rework | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Logged h | Bug h | Arch gain | DL gain | Bugs |")
+    P("|---|---|--:|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
     for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
         P(f"| {u['name']} | {'/'.join(sorted(u['areas']))} | {len(u['tickets'])} | {avg(u['contrib'])}% | "
           f"{avg(u['retain'])}% | {avg(u['rework'])}% | {u['utAdd']}/{u['utMod']} | {u['pmTests']} | {u['turns']} | "
-          f"{round(u['aEst'],1)} | {round(u['dlEst'],1)} | {round(u['logged'],1)} | {round(u['bugLogged'],1)} | {gain_two(u['aEst'], u['logged'], u['bugLogged'])} | {u['bugs']} |")
+          f"{round(u['aEst'],1)} | {round(u['dlEst'],1)} | {round(u['logged'],1)} | {round(u['bugLogged'],1)} | "
+          f"{gain_two(u['aEst'], u['logged'], u['bugLogged'])} | {gain_two(u['dlEst'], u['logged'], u['bugLogged'])} | {u['bugs']} |")
 
     # ---- Detail per user, by ticket ----
     P("\n## Detail per user")
@@ -335,12 +342,12 @@ def main():
     for r in rows: by_user[r["acc"]].append(r)
     for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
         P(f"\n### {u['name']}\n")
-        P("| Ticket | Date | Type | Area | Summary | AI Contrib | Retain | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Logged h | Bug h | Time gain | Bugs |")
-        P("|---|---|---|---|---|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|")
+        P("| Ticket | Date | Type | Area | Summary | AI Contrib | Retain | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Logged h | Bug h | Arch gain | DL gain | Bugs |")
+        P("|---|---|---|---|---|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
         for r in sorted(by_user[acc], key=lambda x: (x["at"], x["key"])):
             P(f"| {r['key']} | {r['at']} | {r['ttype']} | {r['area']} | {r['summary']} | {r['contrib']}% | {r['retain']}% | "
               f"{r['utAdd']}/{r['utMod']} | {r['pmTests']} | {r['turns']} | {r['aEst']} | {r['dlEst']} | {r['logged']} | "
-              f"{r['bugLogged']} | {gain_two(r['aEst'], r['logged'], r['bugLogged'])} | {r['bugs']} |")
+              f"{r['bugLogged']} | {gain_two(r['aEst'], r['logged'], r['bugLogged'])} | {gain_two(r['dlEst'], r['logged'], r['bugLogged'])} | {r['bugs']} |")
     print("\n".join(out))
 
 if __name__ == "__main__":
@@ -438,11 +445,19 @@ def bug_logged_h(bug_nodes, acc, tempo):
         total += hours(tw.get(acc)) if acc in tw else hours(bf.get("timespent"))
     return round(total, 1)
 
-def gain_pct(est, logged): return round((est - logged) / est * 100) if est else None
-def gain_str(g): return "—" if g is None else (f"+{g}%" if g >= 0 else f"{g}%")
+GAIN_CAP = 1000  # |time gain %| beyond this is placeholder-driven noise -> show dash
+EST_MIN = 0.5    # estimates at/below this (e.g. a 0.01-day placeholder ~= 0.1h) are meaningless
+def gain_pct(est, logged):
+    if not est or est < EST_MIN or not logged or logged <= 0:
+        return None  # placeholder estimate or no logged time -> gain is nonsense
+    return round((est - logged) / est * 100)
+def gain_str(g): return "—" if (g is None or abs(g) > GAIN_CAP) else (f"+{g}%" if g >= 0 else f"{g}%")
 def gain_two(est, logged, bug):
     return f"{gain_str(gain_pct(est, logged))} / {gain_str(gain_pct(est, logged + bug))}"
-def gain_cls(g): return "" if g is None else ("pos" if g >= 0 else "neg")
+def gain_cell(est, logged):  # CSV: capped integer or dash
+    g = gain_pct(est, logged)
+    return "-" if (g is None or abs(g) > GAIN_CAP) else g
+def gain_cls(g): return "" if (g is None or abs(g) > GAIN_CAP) else ("pos" if g >= 0 else "neg")
 def e(x): return html.escape(str(x))
 
 def build_rows(parents, children, tempo, since, until):
@@ -508,7 +523,8 @@ CSV_COLS = [
     ("utAdd", "U.tests added"), ("utMod", "U.tests modified"), ("pmTests", "P.tests"),
     ("turns", "Requests"), ("aEst", "A. Est h"), ("dlEst", "DL. Est h"),
     ("logged", "Logged h"), ("bugLogged", "Bug h"),
-    ("gain", "Time gain % (no bugs)"), ("gainBug", "Time gain % (with bugs)"), ("bugs", "Bugs"),
+    ("gain", "Arch gain % (no bugs)"), ("gainBug", "Arch gain % (with bugs)"),
+    ("gainDl", "DL gain % (no bugs)"), ("gainDlBug", "DL gain % (with bugs)"), ("bugs", "Bugs"),
 ]
 
 def write_csv(rows, path):
@@ -519,8 +535,10 @@ def write_csv(rows, path):
         w.writerow([h for _, h in CSV_COLS])
         for r in sorted(rows, key=lambda x: (x["area"], x["name"].lower(), x["at"], x["key"])):
             r = dict(r)
-            r["gain"] = gain_pct(r["aEst"], r["logged"])
-            r["gainBug"] = gain_pct(r["aEst"], r["logged"] + r["bugLogged"])
+            r["gain"] = gain_cell(r["aEst"], r["logged"])
+            r["gainBug"] = gain_cell(r["aEst"], r["logged"] + r["bugLogged"])
+            r["gainDl"] = gain_cell(r["dlEst"], r["logged"])
+            r["gainDlBug"] = gain_cell(r["dlEst"], r["logged"] + r["bugLogged"])
             w.writerow(["" if r.get(k) is None else r.get(k) for k, _ in CSV_COLS])
     print(f"Wrote {path} ({len(rows)} rows)")
 
@@ -572,34 +590,36 @@ def main():
                            ("Requests", sum(u["turns"] for u in users.values())),
                            ("Est h (A / DL)", f"{round(tot_aest,1)} / {round(tot_dlest,1)}"),
                            ("Logged h (w/o / w bugs)", f"{round(tot_log,1)} / {round(tot_log+tot_bug,1)}"),
-                           ("Time gain (w/ bugs)", gain_two(tot_aest, tot_log, tot_bug))]:
+                           ("Arch gain (w/o / w bugs)", gain_two(tot_aest, tot_log, tot_bug)),
+                           ("DL gain (w/o / w bugs)", gain_two(tot_dlest, tot_log, tot_bug))]:
             W(f'<div class="card"><div class="v">{e(val)}</div><div class="l">{e(label)}</div></div>')
         W('</div>')
 
         # ---- Totals by area (shown first) ----
         W("<h2>Totals by area <span class=\"sub\">(sum of detail rows)</span></h2>")
-        AH = ["Rows","Avg AI contrib","Avg retain","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Logged h","Bug h","Time gain","Bugs"]
+        AH = ["Rows","Avg AI contrib","Avg retain","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Logged h","Bug h","Arch gain","DL gain","Bugs"]
         W('<div class="tw"><table><thead><tr><th>Area</th>'
           + "".join(f'<th class="r">{e(h)}</th>' for h in AH) + "</tr></thead><tbody>")
         for ar in AREAS:
             g = areas[ar]
             if not g["contrib"]: continue
-            gp = gain_pct(g["aEst"], g["logged"])
+            gp = gain_pct(g["aEst"], g["logged"]); gpd = gain_pct(g["dlEst"], g["logged"])
             W(f'<tr><td class="name">{e(ar.capitalize())}</td><td class="r">{len(g["contrib"])}</td>'
               f'<td class="r">{pct(avg(g["contrib"]))}</td><td class="r">{pct(avg(g["retain"]))}</td>'
               f'<td class="r">{g["utAdd"]}/{g["utMod"]}</td><td class="r">{g["pmTests"]}</td>'
               f'<td class="r">{g["turns"]}</td><td class="r">{round(g["aEst"],1)}</td><td class="r">{round(g["dlEst"],1)}</td>'
               f'<td class="r">{round(g["logged"],1)}</td><td class="r">{round(g["bugLogged"],1)}</td>'
-              f'<td class="r {gain_cls(gp)}">{gain_two(g["aEst"], g["logged"], g["bugLogged"])}</td><td class="r">{g["bugs"]}</td></tr>')
+              f'<td class="r {gain_cls(gp)}">{gain_two(g["aEst"], g["logged"], g["bugLogged"])}</td>'
+              f'<td class="r {gain_cls(gpd)}">{gain_two(g["dlEst"], g["logged"], g["bugLogged"])}</td><td class="r">{g["bugs"]}</td></tr>')
         W("</tbody></table></div>")
 
         # ---- Summary by user ----
         W("<h2>Summary by user</h2>")
-        HEAD = ["AI Contrib","Retain","Rework","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Logged h","Bug h","Time gain","Bugs"]
+        HEAD = ["AI Contrib","Retain","Rework","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Logged h","Bug h","Arch gain","DL gain","Bugs"]
         W('<div class="tw"><table><thead><tr><th>User</th><th>Area</th><th class="r">Tickets</th>'
           + "".join(f'<th class="r">{e(h)}</th>' for h in HEAD) + "</tr></thead><tbody>")
         for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
-            g = gain_pct(u["aEst"], u["logged"])
+            g = gain_pct(u["aEst"], u["logged"]); gd = gain_pct(u["dlEst"], u["logged"])
             W(f'<tr><td class="name">{e(u["name"])}</td><td>{e("/".join(sorted(u["areas"])))}</td>'
               f'<td class="r">{len(u["tickets"])}</td>'
               f'<td class="r">{pct(avg(u["contrib"]))}</td><td class="r">{pct(avg(u["retain"]))}</td>'
@@ -607,12 +627,13 @@ def main():
               f'<td class="r">{u["pmTests"]}</td><td class="r">{u["turns"]}</td>'
               f'<td class="r">{round(u["aEst"],1)}</td><td class="r">{round(u["dlEst"],1)}</td><td class="r">{round(u["logged"],1)}</td>'
               f'<td class="r">{round(u["bugLogged"],1)}</td>'
-              f'<td class="r {gain_cls(g)}">{gain_two(u["aEst"], u["logged"], u["bugLogged"])}</td><td class="r">{u["bugs"]}</td></tr>')
+              f'<td class="r {gain_cls(g)}">{gain_two(u["aEst"], u["logged"], u["bugLogged"])}</td>'
+              f'<td class="r {gain_cls(gd)}">{gain_two(u["dlEst"], u["logged"], u["bugLogged"])}</td><td class="r">{u["bugs"]}</td></tr>')
         W("</tbody></table></div>")
 
         # ---- Detail per user, by ticket ----
         W("<h2>Detail per user</h2>")
-        DHEAD = ["Ticket","Date","Type","Area","Summary","AI Contrib","Retain","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Logged h","Bug h","Time gain","Bugs"]
+        DHEAD = ["Ticket","Date","Type","Area","Summary","AI Contrib","Retain","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Logged h","Bug h","Arch gain","DL gain","Bugs"]
         _left = ("Ticket", "Date", "Type", "Area", "Summary")
         for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
             W(f'<h3>{e(u["name"])}</h3>')
@@ -620,20 +641,23 @@ def main():
               + "".join(f'<th class="{ "r" if h not in _left else "" }">{e(h)}</th>' for h in DHEAD)
               + "</tr></thead><tbody>")
             for r in sorted(by_user[acc], key=lambda x: (x["at"], x["key"])):
-                g = gain_pct(r["aEst"], r["logged"])
+                g = gain_pct(r["aEst"], r["logged"]); gd = gain_pct(r["dlEst"], r["logged"])
                 W(f'<tr><td class="key">{e(r["key"])}</td><td>{e(r["at"])}</td><td>{e(r["ttype"])}</td><td>{e(r["area"])}</td>'
                   f'<td>{e(r["summary"])}</td><td class="r">{r["contrib"]}%</td><td class="r">{r["retain"]}%</td>'
                   f'<td class="r">{r["utAdd"]}/{r["utMod"]}</td><td class="r">{r["pmTests"]}</td>'
                   f'<td class="r">{r["turns"]}</td><td class="r">{r["aEst"]}</td><td class="r">{r["dlEst"]}</td><td class="r">{r["logged"]}</td>'
                   f'<td class="r">{r["bugLogged"]}</td>'
-                  f'<td class="r {gain_cls(g)}">{gain_two(r["aEst"], r["logged"], r["bugLogged"])}</td><td class="r">{r["bugs"]}</td></tr>')
+                  f'<td class="r {gain_cls(g)}">{gain_two(r["aEst"], r["logged"], r["bugLogged"])}</td>'
+                  f'<td class="r {gain_cls(gd)}">{gain_two(r["dlEst"], r["logged"], r["bugLogged"])}</td><td class="r">{r["bugs"]}</td></tr>')
             W("</tbody></table></div>")
     W('<p class="foot">AI metrics grouped by record domain. <b>A. Est h</b> (Architect) per area from the estimate '
       'custom fields (days &times;8), else the ticket estimate; <b>DL. Est h</b> (Dev-lead) from the ticket estimation '
       'field &mdash; a User Story sums its child sub-task estimates per area (sub-bugs excluded), a Bug/Enabler uses its '
       'own estimate. Bug count &amp; <b>Bug h</b> (logged on child Bug/Sub-bugs) per area. Logged hours per user &amp; '
-      'ticket (Tempo per-user &rarr; Jira worklog &rarr; ticket total). Time gain (Architect est) shown <b>without / with '
-      'bug hours</b>. Generated by <code>/oc-ai-report</code>.</p>')
+      'ticket (Tempo per-user &rarr; Jira worklog &rarr; ticket total). <b>Arch gain</b> = (A.Est&minus;Logged)/A.Est and '
+      '<b>DL gain</b> = (DL.Est&minus;Logged)/DL.Est, each shown <b>without / with</b> bug hours; a dash (&mdash;) marks a '
+      'meaningless gain &mdash; a placeholder estimate (&le;0.5h), no logged time, or a magnitude beyond &plusmn;1000%. '
+      'Generated by <code>/oc-ai-report</code>.</p>')
     body = "\n".join(B)
     doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -646,7 +670,7 @@ def main():
 * {{ box-sizing:border-box; }}
 body {{ margin:0; padding:2rem 1.25rem 3rem; background:var(--bg); color:var(--fg);
   font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }}
-.wrap {{ max-width:1220px; margin:0 auto; }}
+.wrap {{ width:100%; }}
 h1 {{ font-size:1.6rem; margin:0 0 .25rem; }}
 h2 {{ font-size:1.15rem; margin:2rem 0 .6rem; padding-bottom:.35rem; border-bottom:2px solid var(--line); }}
 h2 .sub {{ font-weight:400; font-size:.8rem; color:var(--muted); }}
@@ -657,7 +681,7 @@ h3 {{ font-size:1rem; margin:1.4rem 0 .5rem; }}
 .card {{ background:var(--card); border:1px solid var(--line); border-radius:10px; padding:.8rem 1rem; min-width:130px; flex:1; }}
 .card .v {{ font-size:1.35rem; font-weight:700; }}
 .card .l {{ color:var(--muted); font-size:.78rem; margin-top:.15rem; }}
-.tw {{ overflow-x:auto; border:1px solid var(--line); border-radius:10px; }}
+.tw {{ border:1px solid var(--line); border-radius:10px; }}
 table {{ border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }}
 th, td {{ padding:.5rem .7rem; text-align:left; white-space:nowrap; border-bottom:1px solid var(--line); }}
 thead th {{ background:var(--head); font-weight:600; position:sticky; top:0; }}

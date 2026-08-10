@@ -1,22 +1,25 @@
 ---
 name: oc-time-report
-description: Produce an estimation-vs-logged-hours report over a period, independent of the AI-usage JSON. Tempo-worklog driven — one row per developer x ticket with ticket type, area (from the developer roster), title, Architect estimate, Dev-lead estimate, logged hours, bug hours, time gain (without/with bugs) and child-bug count. Prints Markdown and writes a styled, date-stamped HTML file and a CSV to ./docs/. Reads Jira (Atlassian MCP) + Tempo (TEMPO_API_TOKEN).
+description: Produce an estimation-vs-logged-hours report over a period, independent of the AI-usage JSON. Tempo-worklog driven, TICKET-based — one row per ticket owned by its main developer (most total hours), with type, area, title, Architect & Dev-lead estimates, total logged & bug hours (all contributors, subtasks rolled up), time gain (without/with bugs), child-bug count, and a contributor breakdown. A ticket counts once, under its main developer. Prints Markdown and writes a styled, date-stamped HTML file and a CSV to ./docs/. Reads Jira (Atlassian MCP) + Tempo (TEMPO_API_TOKEN).
 argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD] [--out PATH] [--csv PATH]"
 ---
 
 ## Purpose
 
-A team **estimation-vs-actual** report. Unlike `/oc-ai-report`, this one is **not** tied to the AI-usage JSON field — it is driven by **Tempo worklogs**: for every developer who logged time on a ticket in the window, it produces one row:
+A team **estimation-vs-actual** report. Unlike `/oc-ai-report`, this one is **not** tied to the AI-usage JSON field — it is driven by **Tempo worklogs** and is **ticket-based**: one row per ticket, owned by its **main developer**, comparing the ticket's estimate to the team's actual logged time.
 
-> **Developer · Ticket · Type · Area · Title · A. Est h · DL. Est h · Logged h · Bug h · Time gain (w/o · w bugs) · Bugs**
+> **Ticket · Type · Area · Title · Main dev · A. Est h · DL. Est h · Logged h · Bug h · AI · Arch gain (w/o · w bugs) · DL gain (w/o · w bugs) · Bugs · Contributors**
 
-- **Area** comes from the **developer roster** below (area is a property of the person), not the ticket.
-- **A. Est h** (Architect) — the Story's per-area estimate custom fields (days ×8), else the ticket's own estimate.
-- **DL. Est h** (Dev-lead) — the ticket's estimation field: for a **Story**, the sum of that area's child **sub-task** estimates (sub-bugs excluded); for a **Bug/Enabler**, the ticket's own estimate.
-- **Logged h** — the developer's Tempo hours on the ticket + its **non-bug** sub-tasks (rolled up to the parent).
-- **Bug h** — the developer's Tempo hours on the ticket's child **Bug/Sub-bug** sub-tasks.
-- **Time gain** — `(A.Est − Logged)/A.Est` and `(A.Est − (Logged+Bug h))/A.Est`, shown `without / with` bug hours.
-- **Bugs** — count of the ticket's child **Bug/Sub-bug** sub-issues; **only for Story / Enabler** tickets (a Bug ticket's own row shows 0 and all its time is Logged, not Bug h).
+- **Main developer** — the roster developer with the **most total hours** (logged + bug) on the ticket. The ticket is attributed to that person only; helpers still appear in **Contributors** but the ticket does **not** count in their own totals.
+- **Area** — the **main developer's** area (from the roster below), which also selects the estimate fields used.
+- **A. Est h** (Architect) — the Story's per-area estimate custom field for the main dev's area (days ×8), else the ticket's own estimate.
+- **DL. Est h** (Dev-lead) — for a **Story**, the sum of that area's child **sub-task** estimates (sub-bugs excluded); for a **Bug/Enabler**, the ticket's own estimate.
+- **Logged h** — the **whole ticket's** Tempo hours on the ticket + its **non-bug** sub-tasks, summed across **all contributors** (subtasks rolled up to the parent).
+- **Bug h** — the whole ticket's Tempo hours on its child **Bug/Sub-bug** sub-tasks, across all contributors.
+- **Arch gain / DL gain** — two time gains, `(Est − Logged)/Est` and `(Est − (Logged+Bug h))/Est`, `without / with` bug hours, computed against the **Architect** and **Dev-lead** estimate respectively. A gain shows as **`-`** when it is meaningless: a placeholder estimate (≤0.5h, e.g. a 0.01-day field), no logged time, or a magnitude beyond ±1000%.
+- **AI** — a badge marking a ticket **developed with AI assistance** (it, or any rolled-up sub-issue, carries the "AI metrics" field `customfield_10745`). Aggregates show **AI tk** = AI-assisted / total.
+- **Bugs** — count of the ticket's child **Bug/Sub-bug** sub-issues; **only for Story / Enabler** tickets.
+- **Contributors** — every roster developer who logged on the ticket, `Name total (logged+bug)`, sorted by total.
 
 Output: Markdown in-session, plus a styled **HTML** file and a **CSV** of the detail rows, both date-stamped in `./docs/`.
 
@@ -92,7 +95,8 @@ If Tempo returns nothing, tell the user and stop.
 
 The rows are at **parent-ticket** granularity, so we need each worklogged issue plus its parent chain and the parents' full sub-task lists.
 
-1. **Worklogged issues** — `searchJiraIssuesUsingJql` `key in (<worklog_ids as keys>)` — but Tempo gives numeric ids; instead query by id: `issue in (<ids>)` is not valid, so use `id in (<ids>)` via JQL `id in (12345,...)` (Jira accepts numeric ids in `id in (...)`). Fields: `["summary","issuetype","components","timeoriginalestimate","parent","customfield_10157","customfield_10158","customfield_10189"]`. Batch ≤ ~80 ids. Collect nodes.
+1. **Worklogged issues** — `searchJiraIssuesUsingJql` `key in (<worklog_ids as keys>)` — but Tempo gives numeric ids; instead query by id: `issue in (<ids>)` is not valid, so use `id in (<ids>)` via JQL `id in (12345,...)` (Jira accepts numeric ids in `id in (...)`). Fields: `["summary","issuetype","components","timeoriginalestimate","parent","customfield_10157","customfield_10158","customfield_10189","customfield_10745"]`. Batch ≤ ~80 ids. Collect nodes.
+   - `customfield_10745` is the **"AI metrics"** field. Its presence (non-empty) marks a ticket as **developed with AI assistance** — the aggregator renders an **AI** badge per ticket and an **AI tk** (AI-assisted / total) count in the aggregates. A ticket is flagged if it *or any of its rolled-up sub-issues* carries the field, so a sub-bug's AI record surfaces on its parent row. Steps 2 & 3 fetch the **same fields**, so children carry it too.
 2. **Parents** — from those nodes, collect every `fields.parent.key` not already fetched; fetch them (same fields) so every rolled-up ticket is present.
 3. **All sub-tasks of the tickets** — for the set of parent-ticket keys (the union of top-level worklogged issues and the parents from step 2), fetch `parent in (<ticketKeys>)` (same fields) so Dev-lead estimate and bug counts see every sub-task, not only worklogged ones.
 
@@ -163,8 +167,10 @@ if __name__ == "__main__":
 
 ```python
 #!/usr/bin/env python3
-"""Estimation-vs-logged report. Rows = (developer, parent-ticket) from Tempo worklogs.
-Area from the developer roster; A/DL estimates, bug count & bug hours from Jira metadata."""
+"""Estimation-vs-logged report, TICKET-based. One row per ticket, owned by its main developer
+(the roster dev with the most total hours on it). Logged/Bug hours are the whole ticket's effort
+(all contributors, rolled up from subtasks); a ticket counts once, under its main developer only.
+Area/estimates follow the main developer's area."""
 import argparse, json, re, html, csv, os
 from collections import defaultdict
 
@@ -173,16 +179,25 @@ _TAG = re.compile(r"\[\s*(back|front|test)", re.I)
 AREA_EST_FIELD = {"backend": "customfield_10157", "frontend": "customfield_10158", "qa": "customfield_10189"}
 DAY_HOURS = 8
 BUG_TYPES = {"bug", "sub-bug"}
+SUBTASK_TYPES = {"sub-task", "sub-bug", "sub test execution", "sub-test execution"}
 TYPE_MAP = {"story": "US", "bug": "Bug", "sub-bug": "Bug", "enabler": "Enabler"}
 
 def nodes(data):
-    iss = data.get("issues", data) if isinstance(data, dict) else data
-    if isinstance(iss, dict): iss = iss.get("nodes", [])
-    return iss or []
+    if isinstance(data, list): return data
+    if isinstance(data, dict):
+        if "issues" in data:
+            iss = data["issues"]
+            return (iss.get("nodes", []) if isinstance(iss, dict) else iss) or []
+        if "nodes" in data: return data["nodes"] or []
+        vals = list(data.values())  # dict keyed by issue key -> values are nodes
+        if vals and isinstance(vals[0], dict) and ("fields" in vals[0] or "key" in vals[0]):
+            return vals
+    return []
 
 def hours(s): return round((s or 0) / 3600, 1)
 def is_bug(f): return ((f.get("issuetype") or {}).get("name") or "").lower() in BUG_TYPES
-def ticket_type(f): 
+def is_subtask(f): return ((f.get("issuetype") or {}).get("name") or "").lower() in SUBTASK_TYPES
+def ticket_type(f):
     n = (f.get("issuetype") or {}).get("name") or ""
     return TYPE_MAP.get(n.lower(), n or "?")
 
@@ -201,11 +216,88 @@ def area_estimate_h(f, area):
         return round(v * DAY_HOURS, 1) if isinstance(v, (int, float)) else 0.0
     return hours(f.get("timeoriginalestimate"))
 
-def gain_pct(est, logged): return round((est - logged) / est * 100) if est else None
-def gain_str(g): return "-" if g is None else (f"+{g}%" if g >= 0 else f"{g}%")
+GAIN_CAP = 1000  # |time gain %| beyond this is placeholder-driven noise -> show "-"
+EST_MIN = 0.5    # estimates at/below this (e.g. a 0.01-day placeholder ~= 0.1h) are meaningless
+def gain_pct(est, logged):
+    if not est or est < EST_MIN or not logged or logged <= 0:
+        return None  # placeholder estimate or no logged time -> gain is nonsense
+    return round((est - logged) / est * 100)
+def gain_str(g): return "-" if (g is None or abs(g) > GAIN_CAP) else (f"+{g}%" if g >= 0 else f"{g}%")
 def gain_two(est, logged, bug):
     return f"{gain_str(gain_pct(est, logged))} / {gain_str(gain_pct(est, logged + bug))}"
+def gain_cell(est, logged):  # CSV: capped integer or "-"
+    g = gain_pct(est, logged)
+    return "-" if (g is None or abs(g) > GAIN_CAP) else g
 def e(x): return html.escape(str(x))
+def is_ai(f): return bool(f.get("customfield_10745"))  # AI-metrics JSON present -> developed with AI assistance
+def ai_yn(b): return "Yes" if b else ""
+
+def build_ticket_rows(parents, children_nodes, tempo, devmap, project):
+    all_nodes = parents  # single merged list of every node
+    by_id = {str(n.get("id")): n for n in all_nodes}
+    by_key = {n.get("key"): n for n in all_nodes}
+    children = defaultdict(list)
+    for n in all_nodes:
+        pk = ((n.get("fields") or {}).get("parent") or {}).get("key")
+        if pk: children[pk].append(n)
+
+    # per-ticket per-dev logged/bug seconds (roll subtasks up to their parent)
+    tk = defaultdict(lambda: {"logged": defaultdict(float), "bug": defaultdict(float)})
+    for iid, per in tempo.items():
+        node = by_id.get(str(iid))
+        if not node: continue
+        nf = node.get("fields") or {}
+        pk = (nf.get("parent") or {}).get("key")
+        st = is_subtask(nf)
+        tkey = pk if (st and pk and pk in by_key) else node.get("key")
+        bucket = "bug" if (st and is_bug(nf)) else "logged"
+        for acc, sec in per.items():
+            if acc not in devmap: continue
+            tk[tkey][bucket][acc] += sec
+
+    rows = []
+    for tkey, agg in tk.items():
+        if project and not str(tkey).startswith(project + "-"): continue
+        tnode = by_key.get(tkey)
+        if not tnode: continue
+        tf = tnode.get("fields") or {}
+        # total hours per dev (logged + bug) -> main developer
+        tot = defaultdict(float)
+        for acc, s in agg["logged"].items(): tot[acc] += s
+        for acc, s in agg["bug"].items(): tot[acc] += s
+        if not tot: continue
+        main = max(tot, key=lambda a: (round(tot[a], 3), round(agg["logged"].get(a, 0), 3)))
+        area = devmap[main]["area"]
+        ttype = ticket_type(tf)
+        a_est = area_estimate_h(tf, area)
+        if ttype == "US":
+            dl = 0.0
+            for c in children.get(tkey, []):
+                cf = c.get("fields") or {}
+                if is_bug(cf): continue
+                if (area_of(cf) or area_of(tf)) == area:
+                    dl += hours(cf.get("timeoriginalestimate"))
+            dl_est = round(dl, 1)
+        else:
+            dl_est = hours(tf.get("timeoriginalestimate"))
+        bugs = sum(1 for c in children.get(tkey, []) if is_bug(c.get("fields") or {})) if ttype in ("US", "Enabler") else 0
+        logged = hours(sum(agg["logged"].values()))
+        bug_logged = hours(sum(agg["bug"].values()))
+        # contributors, sorted by total desc
+        contrib = []
+        for acc in sorted(tot, key=lambda a: -tot[a]):
+            contrib.append({"name": devmap[acc]["name"], "logged": hours(agg["logged"].get(acc, 0)),
+                            "bug": hours(agg["bug"].get(acc, 0)), "total": hours(tot[acc])})
+        ai = is_ai(tf) or any(is_ai(c.get("fields") or {}) for c in children.get(tkey, []))
+        rows.append({"key": tkey, "ttype": ttype, "area": area, "title": (tf.get("summary") or "")[:70],
+                     "main": devmap[main]["name"], "mainAcc": main,
+                     "aEst": a_est, "dlEst": dl_est, "logged": logged, "bugLogged": bug_logged,
+                     "bugs": bugs, "ai": ai, "contrib": contrib})
+    rows.sort(key=lambda r: (r["area"], r["main"].lower(), r["key"]))
+    return rows
+
+def contrib_str(contrib):
+    return "; ".join(f"{c['name']} {c['total']} ({c['logged']}+{c['bug']})" for c in contrib)
 
 def main():
     ap = argparse.ArgumentParser()
@@ -217,145 +309,103 @@ def main():
     tempo = json.load(open(a.tempo, encoding="utf-8"))
     devmap = json.load(open(a.devmap, encoding="utf-8"))
     ns = nodes(json.load(open(a.issues, encoding="utf-8")))
-
-    by_id = {str(n.get("id")): n for n in ns}
-    by_key = {n.get("key"): n for n in ns}
-    children = defaultdict(list)
-    for n in ns:
-        pk = ((n.get("fields") or {}).get("parent") or {}).get("key")
-        if pk: children[pk].append(n)
-
-    # accumulate (acc, ticketKey) -> logged / bugLogged seconds
-    acc_rows = defaultdict(lambda: {"logged": 0.0, "bugLogged": 0.0})
-    warn = []
-    for iid, per in tempo.items():
-        node = by_id.get(str(iid))
-        if not node:
-            continue  # metadata for this worklogged issue was not fetched
-        nf = node.get("fields") or {}
-        pk = (nf.get("parent") or {}).get("key")
-        is_subtask_bug = bool(pk) and is_bug(nf)
-        tkey = pk if (pk and pk in by_key) else node.get("key")
-        for acc, sec in per.items():
-            if acc not in devmap: continue
-            row = acc_rows[(acc, tkey)]
-            if is_subtask_bug: row["bugLogged"] += sec
-            else: row["logged"] += sec
-
-    rows = []
-    for (acc, tkey), agg in acc_rows.items():
-        if a.project and not str(tkey).startswith(a.project + "-"): continue  # keep only the target project
-        tnode = by_key.get(tkey)
-        if not tnode: continue
-        tf = tnode.get("fields") or {}
-        ttype = ticket_type(tf); area = devmap[acc]["area"]
-        a_est = area_estimate_h(tf, area)
-        # Dev-lead estimate
-        if ttype == "US":
-            dl = 0.0
-            for c in children.get(tkey, []):
-                cf = c.get("fields") or {}
-                if is_bug(cf): continue
-                if (area_of(cf) or area_of(tf)) == area:
-                    dl += hours(cf.get("timeoriginalestimate"))
-            dl_est = round(dl, 1)
-        else:
-            dl_est = hours(tf.get("timeoriginalestimate"))
-        # bug count: child Bug/Sub-bug of the ticket, US/Enabler only
-        bugs = 0
-        if ttype in ("US", "Enabler"):
-            bugs = sum(1 for c in children.get(tkey, []) if is_bug(c.get("fields") or {}))
-        logged = hours(agg["logged"]); bug_logged = hours(agg["bugLogged"])
-        rows.append({"acc": acc, "dev": devmap[acc]["name"], "area": area, "key": tkey,
-                     "ttype": ttype, "title": (tf.get("summary") or "")[:70],
-                     "aEst": a_est, "dlEst": dl_est, "logged": logged, "bugLogged": bug_logged, "bugs": bugs})
-
-    rows.sort(key=lambda r: (r["area"], r["dev"].lower(), r["key"]))
+    rows = build_ticket_rows(ns, ns, tempo, devmap, a.project)
 
     # ---------- Markdown ----------
     md = []; P = md.append
-    P(f"# Estimation vs logged — {a.project}, [{a.since or '…'} … {a.until or '…'})\n")
+    P(f"# Estimation vs logged (by ticket) — {a.project}, [{a.since or '…'} … {a.until or '…'})\n")
     if not rows:
         P("_No logged time for the roster in this window._")
     else:
-        # Totals by area
-        AR = defaultdict(lambda: {"devs": set(), "tickets": set(), "aEst": 0.0, "dlEst": 0.0, "logged": 0.0, "bugLogged": 0.0, "bugs": 0})
-        seen_tik = defaultdict(set)
+        # Totals by area (by main developer's area)
+        AR = defaultdict(lambda: {"devs": set(), "tickets": 0, "aEst": 0.0, "dlEst": 0.0, "logged": 0.0, "bugLogged": 0.0, "bugs": 0, "ai": 0})
         for r in rows:
-            g = AR[r["area"]]; g["devs"].add(r["acc"]); g["tickets"].add(r["key"])
-            g["logged"] += r["logged"]; g["bugLogged"] += r["bugLogged"]
-            if r["key"] not in seen_tik[r["area"]]:
-                seen_tik[r["area"]].add(r["key"]); g["aEst"] += r["aEst"]; g["dlEst"] += r["dlEst"]; g["bugs"] += r["bugs"]
+            g = AR[r["area"]]; g["devs"].add(r["mainAcc"]); g["tickets"] += 1
+            for k in ("aEst", "dlEst", "logged", "bugLogged", "bugs"): g[k] += r[k]
+            g["ai"] += int(r["ai"])
         P("## Totals by area\n")
-        P("| Area | Devs | Tickets | A. Est h | DL. Est h | Logged h | Bug h | Time gain | Bugs |")
-        P("|---|--:|--:|--:|--:|--:|--:|--:|--:|")
+        P("| Area | Devs | Tickets | A. Est h | DL. Est h | Logged h | Bug h | AI tk | Arch gain | DL gain | Bugs |")
+        P("|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
         for ar in ("backend", "frontend", "qa"):
             if ar not in AR: continue
             g = AR[ar]
-            P(f"| {ar.capitalize()} | {len(g['devs'])} | {len(g['tickets'])} | {round(g['aEst'],1)} | {round(g['dlEst'],1)} | "
-              f"{round(g['logged'],1)} | {round(g['bugLogged'],1)} | {gain_two(g['aEst'], g['logged'], g['bugLogged'])} | {g['bugs']} |")
-        # Summary by developer
-        DV = defaultdict(lambda: {"area": "", "tickets": set(), "aEst": 0.0, "dlEst": 0.0, "logged": 0.0, "bugLogged": 0.0, "bugs": 0})
+            P(f"| {ar.capitalize()} | {len(g['devs'])} | {g['tickets']} | {round(g['aEst'],1)} | {round(g['dlEst'],1)} | "
+              f"{round(g['logged'],1)} | {round(g['bugLogged'],1)} | {g['ai']}/{g['tickets']} | {gain_two(g['aEst'], g['logged'], g['bugLogged'])} | "
+              f"{gain_two(g['dlEst'], g['logged'], g['bugLogged'])} | {g['bugs']} |")
+        # Summary by developer (as main developer)
+        DV = defaultdict(lambda: {"area": "", "tickets": 0, "aEst": 0.0, "dlEst": 0.0, "logged": 0.0, "bugLogged": 0.0, "bugs": 0, "ai": 0})
         for r in rows:
-            g = DV[r["dev"]]; g["area"] = r["area"]; g["tickets"].add(r["key"])
-            g["aEst"] += r["aEst"]; g["dlEst"] += r["dlEst"]; g["logged"] += r["logged"]; g["bugLogged"] += r["bugLogged"]; g["bugs"] += r["bugs"]
-        P("\n## Summary by developer\n")
-        P("| Developer | Area | Tickets | A. Est h | DL. Est h | Logged h | Bug h | Time gain | Bugs |")
-        P("|---|---|--:|--:|--:|--:|--:|--:|--:|")
+            g = DV[r["main"]]; g["area"] = r["area"]; g["tickets"] += 1
+            for k in ("aEst", "dlEst", "logged", "bugLogged", "bugs"): g[k] += r[k]
+            g["ai"] += int(r["ai"])
+        P("\n## Summary by developer (owned tickets)\n")
+        P("| Developer | Area | Tickets | A. Est h | DL. Est h | Logged h | Bug h | AI tk | Arch gain | DL gain | Bugs |")
+        P("|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
         for dev in sorted(DV, key=str.lower):
             g = DV[dev]
-            P(f"| {dev} | {g['area']} | {len(g['tickets'])} | {round(g['aEst'],1)} | {round(g['dlEst'],1)} | "
-              f"{round(g['logged'],1)} | {round(g['bugLogged'],1)} | {gain_two(g['aEst'], g['logged'], g['bugLogged'])} | {g['bugs']} |")
-        # Detail
-        P("\n## Detail (developer x ticket)\n")
-        P("| Developer | Ticket | Type | Area | Title | A. Est h | DL. Est h | Logged h | Bug h | Time gain | Bugs |")
-        P("|---|---|---|---|---|--:|--:|--:|--:|--:|--:|")
+            P(f"| {dev} | {g['area']} | {g['tickets']} | {round(g['aEst'],1)} | {round(g['dlEst'],1)} | "
+              f"{round(g['logged'],1)} | {round(g['bugLogged'],1)} | {g['ai']}/{g['tickets']} | {gain_two(g['aEst'], g['logged'], g['bugLogged'])} | "
+              f"{gain_two(g['dlEst'], g['logged'], g['bugLogged'])} | {g['bugs']} |")
+        # Detail (one row per ticket)
+        P("\n## Detail (by ticket)\n")
+        P("| Ticket | Type | Area | Title | Main dev | A. Est h | DL. Est h | Logged h | Bug h | AI | Arch gain | DL gain | Bugs | Contributors |")
+        P("|---|---|---|---|---|--:|--:|--:|--:|:--:|--:|--:|--:|---|")
         for r in rows:
-            P(f"| {r['dev']} | {r['key']} | {r['ttype']} | {r['area']} | {r['title']} | {r['aEst']} | {r['dlEst']} | "
-              f"{r['logged']} | {r['bugLogged']} | {gain_two(r['aEst'], r['logged'], r['bugLogged'])} | {r['bugs']} |")
-    if warn:
-        P("\n## Notes")
-        for w in warn[:30]: P(f"- {w}")
+            P(f"| {r['key']} | {r['ttype']} | {r['area']} | {r['title']} | {r['main']} | {r['aEst']} | {r['dlEst']} | "
+              f"{r['logged']} | {r['bugLogged']} | {ai_yn(r['ai'])} | {gain_two(r['aEst'], r['logged'], r['bugLogged'])} | "
+              f"{gain_two(r['dlEst'], r['logged'], r['bugLogged'])} | {r['bugs']} | {contrib_str(r['contrib'])} |")
     md_text = "\n".join(md)
     if a.md: open(a.md, "w", encoding="utf-8").write(md_text)
     print(md_text)
 
-    # ---------- CSV (detail) ----------
+    # ---------- CSV (ticket detail) ----------
     if a.csv:
         os.makedirs(os.path.dirname(os.path.abspath(a.csv)) or ".", exist_ok=True)
         with open(a.csv, "w", encoding="utf-8-sig", newline="") as fh:
             w = csv.writer(fh)
-            w.writerow(["Developer", "Ticket", "Type", "Area", "Title", "A. Est h", "DL. Est h",
-                        "Logged h", "Bug h", "Time gain % (no bugs)", "Time gain % (with bugs)", "Bugs"])
+            w.writerow(["Ticket", "Type", "Area", "Title", "Main developer", "A. Est h", "DL. Est h",
+                        "Logged h", "Bug h", "AI assisted", "Arch gain % (no bugs)", "Arch gain % (with bugs)",
+                        "DL gain % (no bugs)", "DL gain % (with bugs)", "Bugs", "Contributors"])
             for r in rows:
-                w.writerow([r["dev"], r["key"], r["ttype"], r["area"], r["title"], r["aEst"], r["dlEst"],
-                            r["logged"], r["bugLogged"], gain_pct(r["aEst"], r["logged"]),
-                            gain_pct(r["aEst"], r["logged"] + r["bugLogged"]), r["bugs"]])
+                w.writerow([r["key"], r["ttype"], r["area"], r["title"], r["main"], r["aEst"], r["dlEst"],
+                            r["logged"], r["bugLogged"], "Yes" if r["ai"] else "No",
+                            gain_cell(r["aEst"], r["logged"]), gain_cell(r["aEst"], r["logged"] + r["bugLogged"]),
+                            gain_cell(r["dlEst"], r["logged"]), gain_cell(r["dlEst"], r["logged"] + r["bugLogged"]),
+                            r["bugs"], contrib_str(r["contrib"])])
 
     # ---------- HTML ----------
     os.makedirs(os.path.dirname(os.path.abspath(a.out)) or ".", exist_ok=True)
-    def cell(v): return "" if v is None else v
     B = []; W = B.append
-    W("<h1>Estimation vs logged hours</h1>")
-    W(f'<p class="meta">Project <b>{e(a.project)}</b> &middot; [{e(a.since or "…")} … {e(a.until or "…")}) &middot; {len(rows)} rows</p>')
+    W("<h1>Estimation vs logged hours (by ticket)</h1>")
+    W(f'<p class="meta">Project <b>{e(a.project)}</b> &middot; [{e(a.since or "…")} … {e(a.until or "…")}) &middot; {len(rows)} tickets</p>')
     if not rows:
         W('<p>No logged time for the roster in this window.</p>')
     else:
-        W("<h2>Detail (developer &times; ticket)</h2>")
-        head = ["Developer","Ticket","Type","Area","Title","A. Est h","DL. Est h","Logged h","Bug h","Time gain","Bugs"]
-        left = {"Developer","Ticket","Type","Area","Title"}
-        W('<div class="tw"><table><thead><tr>' + "".join(f'<th class="{ "" if h in left else "r" }">{e(h)}</th>' for h in head) + "</tr></thead><tbody>")
+        W("<h2>Detail (one row per ticket)</h2>")
+        head = ["Ticket", "Type", "Area", "Title", "Main dev", "A. Est h", "DL. Est h", "Logged h", "Bug h", "AI", "Arch gain", "DL gain", "Bugs", "Contributors"]
+        left = {"Ticket", "Type", "Area", "Title", "Main dev", "Contributors"}
+        cent = {"AI"}
+        W('<div class="tw"><table><thead><tr>' + "".join(f'<th class="{ "c" if h in cent else ("" if h in left else "r") }">{e(h)}</th>' for h in head) + "</tr></thead><tbody>")
+        AIBADGE = '<span class="aibadge">AI</span>'
         for r in rows:
-            W(f'<tr><td>{e(r["dev"])}</td><td class="key">{e(r["key"])}</td><td>{e(r["ttype"])}</td><td>{e(r["area"])}</td>'
-              f'<td>{e(r["title"])}</td><td class="r">{r["aEst"]}</td><td class="r">{r["dlEst"]}</td>'
+            aicell = AIBADGE if r["ai"] else ""
+            W(f'<tr><td class="key">{e(r["key"])}</td><td>{e(r["ttype"])}</td><td>{e(r["area"])}</td>'
+              f'<td>{e(r["title"])}</td><td class="name">{e(r["main"])}</td><td class="r">{r["aEst"]}</td><td class="r">{r["dlEst"]}</td>'
               f'<td class="r">{r["logged"]}</td><td class="r">{r["bugLogged"]}</td>'
-              f'<td class="r">{gain_two(r["aEst"], r["logged"], r["bugLogged"])}</td><td class="r">{r["bugs"]}</td></tr>')
+              f'<td class="c">{aicell}</td>'
+              f'<td class="r">{gain_two(r["aEst"], r["logged"], r["bugLogged"])}</td>'
+              f'<td class="r">{gain_two(r["dlEst"], r["logged"], r["bugLogged"])}</td><td class="r">{r["bugs"]}</td>'
+              f'<td class="sm">{e(contrib_str(r["contrib"]))}</td></tr>')
         W("</tbody></table></div>")
-    W('<p class="foot">Rows = developer &times; ticket from Tempo worklogs. Area from the developer roster. '
-      'A. Est = Architect (per-area estimate custom fields, days&times;8, else ticket estimate); DL. Est = Dev-lead '
-      '(Story: sum of child sub-task estimates per area; Bug/Enabler: ticket estimate). Logged = dev hours on the ticket '
-      '+ non-bug sub-tasks; Bug h = dev hours on child Bug/Sub-bugs. Time gain = (A.Est&minus;Logged)/A.Est shown '
-      'without / with bug hours. Bugs = child Bug/Sub-bug count (Story/Enabler only). Generated by <code>/oc-time-report</code>.</p>')
+    W('<p class="foot">One row per ticket, owned by its <b>main developer</b> (most total hours). Logged h &amp; Bug h are the '
+      'whole ticket\'s effort (all contributors, subtasks rolled up); a ticket counts once, under its main developer. Area &amp; '
+      'estimates follow the main developer\'s area. Logged = non-bug work; Bug h = child Bug/Sub-bug work. '
+      '<b>Arch gain</b> = (A.Est&minus;Logged)/A.Est and <b>DL gain</b> = (DL.Est&minus;Logged)/DL.Est, each shown '
+      'without / with bug hours; a dash (&ndash;) marks a meaningless gain &mdash; a placeholder estimate '
+      '(&le;0.5h, e.g. a 0.01-day field), no logged time, or a magnitude beyond &plusmn;1000%. '
+      'The <b>AI</b> badge (and <b>AI tk</b> = AI-assisted / total in the aggregates) marks a ticket carrying an '
+      'AI-usage record (the "AI metrics" field), i.e. developed with AI assistance. '
+      'Generated by <code>/oc-time-report</code>.</p>')
     body = "\n".join(B)
     doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -368,16 +418,21 @@ def main():
 * {{ box-sizing:border-box; }}
 body {{ margin:0; padding:2rem 1.25rem 3rem; background:var(--bg); color:var(--fg);
   font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }}
-.wrap {{ max-width:1200px; margin:0 auto; }}
+.wrap {{ width:100%; }}
 h1 {{ font-size:1.6rem; margin:0 0 .25rem; }}
 h2 {{ font-size:1.15rem; margin:2rem 0 .6rem; padding-bottom:.35rem; border-bottom:2px solid var(--line); }}
 .meta {{ color:var(--muted); margin:0 0 1.25rem; }}
-.tw {{ overflow-x:auto; border:1px solid var(--line); border-radius:10px; }}
+.tw {{ border:1px solid var(--line); border-radius:10px; }}
 table {{ border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }}
 th, td {{ padding:.5rem .7rem; text-align:left; white-space:nowrap; border-bottom:1px solid var(--line); }}
 thead th {{ background:var(--head); font-weight:600; position:sticky; top:0; }}
 tbody tr:nth-child(even) {{ background:var(--zebra); }}
 .r {{ text-align:right; }}
+.c {{ text-align:center; }}
+.aibadge {{ display:inline-block; font-size:.7rem; font-weight:700; letter-spacing:.03em; color:#fff;
+  background:var(--accent); border-radius:4px; padding:.05rem .35rem; }}
+.name {{ font-weight:600; }}
+.sm {{ color:var(--muted); font-size:.85em; }}
 .key {{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--accent); font-weight:600; }}
 .foot {{ color:var(--muted); font-size:.8rem; margin-top:2rem; border-top:1px solid var(--line); padding-top:1rem; }}
 </style></head><body><div class="wrap">
