@@ -1,7 +1,7 @@
 ---
 name: oc-fn-portal
-version: 1.4.0
-updated: 2026-08-05T13:22:00+02:00
+version: 1.5.0
+updated: 2026-08-10T17:05:00+02:00
 author: Stéphane Chambrin
 description: >
   Drive the Opencell Portal (React SPA) through the Playwright MCP server to navigate
@@ -105,7 +105,7 @@ The persistent profile usually keeps the Keycloak session alive, so **most sessi
 
 1. **Check first.** `browser_navigate` to `OC_PORTAL_URL`. If the result URL is the portal (page title `Opencell | Portal`), you're already in — skip to the task. If it's an `…/auth/realms/opencell/…` URL, log in.
 2. **The Keycloak form** has a `Username or email` textbox, a `Password` textbox, and a `Sign In` button — plus an `Opencell Internal` broker link for SSO, which you **ignore** (use the username/password form). `Read` the snapshot `.yml` once to get the field refs, then `browser_fill_form` both fields and click `Sign In`.
-3. **Credentials:** read `OC_PORTAL_USER` from the credentials file (Bash — not sensitive). The password (`OC_PORTAL_PASS`) by default transits the fill/`browser_type` arguments (acceptable for a low-risk sandbox you control; for any shared or sensitive tenant, use the `--secrets` lever in `setup.md` to keep it out of context).
+3. **Credentials — pass the password's *key name*, never its value.** Read `OC_PORTAL_USER` from the credentials file (Bash — not sensitive) and fill it literally. For the password, fill the **string `OC_PORTAL_PASS`**: the server is registered with `--secrets` pointing at that same credentials file, so Playwright substitutes the real value on the way in and redacts it on the way out. **Never try to read the password itself** — the permission classifier refuses it and refuses every workaround (see `setup.md` § 6, which also covers what to do when `--secrets` isn't in effect yet: hand the user a checklist, don't chase the secret).
 4. **Settle, then verify.** After the redirect the SPA renders — the page title goes `Opencell | Portal` → `- Opencell` and the home hub appears. Give it a moment (`browser_wait_for`) before screenshotting; a capture can take several seconds on slower hardware (hence `--timeout-action=30000`).
 5. **Probe that clicks land — once, before any interaction sequence that matters.** Click **one** control with an unmistakable observable effect (switch a tab, expand a menu) and confirm the effect actually happened. If it did not, **stop**: this session cannot drive this app. Fall back to read-only navigation + screenshots and tell the user. Skip the probe only for a pure navigate-and-capture errand where you never click anything.
 
