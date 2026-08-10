@@ -1,6 +1,6 @@
 ---
 name: oc-review-pr
-description: Review the pull request linked to a JIRA ticket — frontend (opencell-portal) PRs are reviewed here with oc-fe-reviewer, the report is always posted on the PR, and the PR status follows the score (8-10 left open, 6-7 drafted, 1-5 declined); backend (opencell-core) PRs are delegated to the /oc-be-review command.
+description: Review the pull request linked to a JIRA ticket — frontend (opencell-portal) PRs are reviewed here with oc-fe-reviewer, the report (headed by the number of Vitest tests the PR adds) is always posted on the PR, and the PR status follows the score (8-10 left open, 6-7 drafted, 1-5 declined); backend (opencell-core) PRs are delegated to the /oc-be-review command.
 argument-hint: <TICKET-ID> (e.g., INTRD-36922)
 ---
 
@@ -8,7 +8,7 @@ argument-hint: <TICKET-ID> (e.g., INTRD-36922)
 
 Review the pull request associated with a JIRA ticket. This command resolves the ticket → its PR, then routes by repository:
 
-- **opencell-portal (frontend)** → reviewed **here** with the `oc-fe-reviewer:oc-fe-reviewer` agent. The report is **always posted as a comment on the PR** and the ticket is always tagged `ai_code_review_Front`. The **PR status then follows the score**: 8-10 left open, 6-7 marked Draft, 1-5 declined. All of it automatic, without asking.
+- **opencell-portal (frontend)** → reviewed **here** with the `oc-fe-reviewer:oc-fe-reviewer` agent. The report — which **starts with the number of Vitest tests the PR adds** (Step 5b), so it is the first thing visible on the Bitbucket comment — is **always posted as a comment on the PR** and the ticket is always tagged `ai_code_review_Front`. The **PR status then follows the score**: 8-10 left open, 6-7 marked Draft, 1-5 declined. All of it automatic, without asking.
 - **opencell-core (backend)** → **not reviewed here.** This command hands off to the **`/oc-be-tools:oc-be-review`** command, which owns the backend review (the `oc-be-pr-reviewer` agent + guidelines), the confirm-first PR comment and verdict, and the `ai_code_review_back` Jira tag. Keeping a single backend owner avoids two divergent backend-review paths.
 
 When the ticket has **several PRs** (the same change opened against different target branches), exactly **one** is reviewed, commented and has its status changed: the one targeting **`dev`** if it exists. See **Selecting a single PR** in Step 4.
@@ -107,16 +107,76 @@ Once selected, note the skipped ones — they are reported in Step 6 and must re
 
 ### 5. Fetch the PR diff (frontend)
 
+Save the diff to a file — Step 5b counts the tests by scanning it, and the report body needs the whole
+thing anyway:
+
 ```bash
-# diff
+# diff (write it to disk, don't just read it inline)
 curl -sL -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
-  "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/diff"
+  "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/diff" \
+  -o /tmp/oc-review-pr-[PR-ID].diff
 # changed files
 curl -sL -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
   "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/diffstat"
 ```
 
-- Store the diff as `[PR-DIFF]` and the changed file paths as `[CHANGED-FILES]`.
+- Store the diff path as `[PR-DIFF-FILE]`, its content as `[PR-DIFF]`, and the changed file paths as `[CHANGED-FILES]`.
+- If `[PR-DIFF-FILE]` is empty, the `-L` redirect was not followed (see **Access**) — fix that before continuing; never review an empty diff.
+
+### 5b. Count the Vitest tests added by the PR (frontend)
+
+The report leads with this count, so compute it **before** the review runs. Count only what the PR itself
+contains — this is a diff-based count, not a run of the suite.
+
+**What counts as a Vitest test file:** a changed path matching `*.spec.ts`, `*.spec.tsx`, `*.test.ts` or
+`*.test.tsx`. Cypress/Playwright E2E specs (under `cypress/` or `e2e/`, or `*.cy.ts`) are **not** Vitest
+and must be excluded from the count — mention them separately if the PR touches them.
+
+**What counts as a test case:** an added line opening a test block — `it(`, `test(`, and their variants
+(`it.each`, `it.only`, `it.skip`, `it.todo`, `test.each`, `test.concurrent`, …). `describe(` blocks are
+suites, not tests, and are not counted.
+
+Scan the saved diff:
+
+```bash
+awk '
+  /^diff --git / {
+    in_spec = ($NF ~ /\.(spec|test)\.(ts|tsx)$/) && ($NF !~ /(^|\/)(cypress|e2e)\//)
+    if (in_spec) { path = $NF; sub(/^b\//, "", path); files[path] = 1 }
+    next
+  }
+  !in_spec { next }
+  /^new file mode/ { new_files[path] = 1; next }
+  /^(\+\+\+|---)/ { next }
+  /^\+[[:space:]]*(it|test)([.][A-Za-z]+)*[[:space:]]*[(`]/ { added++ }
+  /^-[[:space:]]*(it|test)([.][A-Za-z]+)*[[:space:]]*[(`]/ { removed++ }
+  END {
+    printf "spec_files=%d new_spec_files=%d added=%d removed=%d net=%d\n",
+      length(files), length(new_files), added+0, removed+0, (added+0)-(removed+0)
+  }
+' /tmp/oc-review-pr-[PR-ID].diff
+```
+
+Store the results as:
+
+- `[VITEST-ADDED]` — test cases added (`added`). **This is the headline number.**
+- `[VITEST-REMOVED]` — test cases removed (`removed`), and `[VITEST-NET]` (`net`).
+- `[VITEST-FILES]` — spec files touched (`spec_files`), `[VITEST-NEW-FILES]` — of those, newly created (`new_spec_files`).
+- `[VITEST-FILE-LIST]` — the spec file paths, for the report's detail line.
+
+Rules:
+
+- **Sanity-check the awk output against the diff.** If the numbers look wrong (e.g. the diff clearly adds
+  spec files but `added=0`, or a spec uses an unusual helper such as a custom `testEach(` wrapper), count
+  the added test blocks by reading the spec hunks yourself and use that figure instead. The awk pass is a
+  fast default, not the authority.
+- A parameterised test (`it.each([...])`) counts as **one** test case even though it expands to several at
+  run time. Say so in the report's detail line when the PR contains any.
+- **Zero is a real, reportable answer.** If the PR adds no Vitest tests, report `0` explicitly — do not
+  omit the section — and make sure the **Testing** row of the Step 8 breakdown reflects it (`FAIL` or
+  `WARN`, never `Pass`) and that the score accounts for it.
+- Never guess or round the number, and never report tests as "passing" — this command does not execute
+  Vitest, it only counts what the diff adds.
 
 ### 6. Display PR overview
 
@@ -131,6 +191,7 @@ Branch:    [PR-SOURCE-BRANCH] → [PR-DEST-BRANCH]
 State:     [PR-STATE]
 URL:       [PR-URL]
 Files:     [number of changed files] files changed
+Vitest:    [VITEST-ADDED] tests added in [VITEST-FILES] spec file(s)
 Reviewer:  [REVIEWER-LABEL] (frontend)
 
 Starting review...
@@ -150,6 +211,7 @@ Use the `oc-fe-reviewer:oc-fe-reviewer` agent to perform a comprehensive review.
 - The full `[PR-DIFF]` content.
 - The list of `[CHANGED-FILES]`.
 - Context: "This is a PR review for [TICKET-NUMBER]: [TICKET-SUMMARY]".
+- The test count from Step 5b: "This PR adds [VITEST-ADDED] Vitest test case(s) across [VITEST-FILES] spec file(s) ([VITEST-FILE-LIST])" — so the reviewer judges the **Testing** category against the actual coverage the PR brings.
 - Instruction: "Review the following pull request diff. Focus on the changed code only. For each issue found, provide the exact file path and line context. Suggest concrete fixes with code snippets."
 
 The reviewer should evaluate: TypeScript quality and type safety; React component patterns; state management; import conventions and path aliases; naming conventions; widget structure; API usage patterns; i18n completeness (EN + FR); testing coverage; accessibility; performance; error handling; security.
@@ -162,6 +224,18 @@ Compile the results into a well-structured report:
 ╔══════════════════════════════════════════════════════════════╗
 ║                    PR REVIEW REPORT                         ║
 ╚══════════════════════════════════════════════════════════════╝
+
+## Vitest tests in this PR: [VITEST-ADDED] added
+
+| Metric | Value |
+|---|---|
+| Test cases added | **[VITEST-ADDED]** |
+| Test cases removed | [VITEST-REMOVED] (net [VITEST-NET]) |
+| Spec files touched | [VITEST-FILES] ([VITEST-NEW-FILES] new) |
+
+[VITEST-FILE-LIST — one `path` per line, or "No Vitest spec file changed in this PR." when there is none]
+
+---
 
 ## [TICKET-NUMBER]: [TICKET-SUMMARY]
 **PR #[PR-ID]** — [PR-TITLE]
@@ -247,7 +321,7 @@ Where [SCORE-BADGE] is:
 | Widget Structure      | [status-icon] | [brief note]            |
 | API Usage             | [status-icon] | [brief note]            |
 | i18n Compliance       | [status-icon] | [brief note]            |
-| Testing               | [status-icon] | [brief note]            |
+| Testing               | [status-icon] | [VITEST-ADDED] Vitest tests added — [brief note] |
 | Accessibility         | [status-icon] | [brief note]            |
 | Performance           | [status-icon] | [brief note]            |
 | Error Handling        | [status-icon] | [brief note]            |
@@ -268,6 +342,12 @@ Where [status-icon] is: PASS "Pass" | WARN "Warn" | FAIL "Fail" | N/A "N/A".
 *Review generated by Claude Code with [REVIEWER-LABEL]*
 *PR: [PR-URL]*
 ```
+
+**The Vitest block stays at the very top.** It is the first thing after the banner, above the score and
+the summary, because on Bitbucket only the head of a long comment is visible without expanding it. Keep
+it as a heading plus the small table — never move it into an appendix, never fold it into the Testing row,
+and never drop it because the count is `0` (write `Vitest tests in this PR: 0 added` and keep the table).
+The numbers here must be exactly those from Step 5b, and must agree with the **Testing** row below.
 
 ### 9. Mark the ticket as reviewed by the frontend AI reviewer
 
@@ -396,6 +476,7 @@ State the score and the resulting status explicitly, so the decision is auditabl
 
 ```
 Score:          [REVIEW-SCORE]/10
+Vitest tests:   [VITEST-ADDED] added in [VITEST-FILES] spec file(s) (net [VITEST-NET])
 Review posted:  [COMMENT-URL]
 PR status:      <one of the three below>
 ```
@@ -453,8 +534,9 @@ missing or a call returns `401`, tell the user and stop (frontend path) or fall 
 
 # Frontend ticket (opencell-portal) — reviewed here with oc-fe-reviewer
 /oc-review-pr INTRD-41200
-# → fetches the ticket live from Jira (no cache) → reviews React/TypeScript
-# → posts the report on the PR, sets its status from the score, tags the ticket ai_code_review_Front
+# → fetches the ticket live from Jira (no cache) → counts the Vitest tests in the diff
+# → reviews React/TypeScript → posts the report (Vitest count first) on the PR,
+#   sets its status from the score, tags the ticket ai_code_review_Front
 
 # Ticket with one PR per target branch — only the `dev` one is reviewed
 /oc-review-pr INTRD-45369
