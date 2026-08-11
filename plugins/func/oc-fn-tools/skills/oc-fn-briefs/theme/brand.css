@@ -97,6 +97,17 @@ tfoot td{padding:7px 8px;font-weight:800;border-top:2px solid var(--oc-red);font
   border-radius:10px;padding:1px 7px}
 .x.ink{background:var(--oc-black)}
 
+/* ── Links ────────────────────────────────────────────────────────────────────────────── */
+/* Browser-default blue+underline is off-brand on the red/black page, and inside a pill the
+ * default `a` colour overrides the pill's own white text. `--oc-red-ink` is the token reserved
+ * for red text on white that passes contrast — exactly what a prose link is. Inside a pill use
+ * `inherit`, NOT #fff: it works for both `.x` (red) and `.x.ink` (black) and for any later
+ * variant, with no extra rule. No print override — a PDF link stays clickable, and the
+ * hover underline is screen-only by nature. */
+a{color:var(--oc-red-ink);text-decoration:none}
+a:hover{text-decoration:underline}
+.x a{color:inherit;text-decoration:none}
+
 /* ── Framing / call-out cards ─────────────────────────────────────────────────────────── */
 .cards{display:flex;gap:12px;margin:12px 0 0}
 .card{flex:1;border:1px solid var(--oc-line);border-radius:6px;padding:11px 13px;background:#fff}

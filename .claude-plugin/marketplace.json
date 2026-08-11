@@ -86,7 +86,7 @@
     {
       "name": "oc-review-pr",
       "source": "./plugins/common/oc-review-pr",
-      "description": "Review a pull request linked to a JIRA ticket using the oc-fe-reviewer agent with a detailed report and suggested fixes"
+      "description": "Review a pull request linked to a JIRA ticket using the oc-fe-reviewer agent with a detailed report headed by the PR's Vitest test count, plus suggested fixes"
     },
     {
       "name": "oc-ai-report",

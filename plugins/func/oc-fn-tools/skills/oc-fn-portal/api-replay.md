@@ -106,9 +106,11 @@ and, where configured, other components. Prefer it whenever a login is available
 Core call above to fill the gap — it reports Core's own component only.
 
 **Login-free fallback — read the build constants out of the shell bundle.** The browser lane is not
-always open: reading `OC_PORTAL_PASS` out of `~/.config/oc-fn-portal/credentials` can be refused by
-the permission classifier, and without the password Keycloak cannot be driven — which closes the UI
-panel entirely. Do not stop there and ask the user; the build constants are readable unauthenticated.
+always open: reading `OC_PORTAL_PASS` out of `~/.config/oc-fn-portal/credentials` is refused by the
+permission classifier, and without the password Keycloak cannot be driven — which closes the UI panel
+entirely. (The fix is `--secrets` on the MCP registration, which fills the password without ever
+revealing it — `setup.md` § 6. Until that is in effect, do not chase the secret.) Don't stop there and
+ask the user either: the build constants are readable unauthenticated.
 
 ```bash
 BASE="https://<host>/opencell/frontend/<TENANT>/portal"

@@ -1,7 +1,7 @@
 ---
 name: oc-fn-portal
-version: 1.3.0
-updated: 2026-08-03T22:10:00+02:00
+version: 1.5.0
+updated: 2026-08-10T17:05:00+02:00
 author: Stéphane Chambrin
 description: >
   Drive the Opencell Portal (React SPA) through the Playwright MCP server to navigate
@@ -105,7 +105,7 @@ The persistent profile usually keeps the Keycloak session alive, so **most sessi
 
 1. **Check first.** `browser_navigate` to `OC_PORTAL_URL`. If the result URL is the portal (page title `Opencell | Portal`), you're already in — skip to the task. If it's an `…/auth/realms/opencell/…` URL, log in.
 2. **The Keycloak form** has a `Username or email` textbox, a `Password` textbox, and a `Sign In` button — plus an `Opencell Internal` broker link for SSO, which you **ignore** (use the username/password form). `Read` the snapshot `.yml` once to get the field refs, then `browser_fill_form` both fields and click `Sign In`.
-3. **Credentials:** read `OC_PORTAL_USER` from the credentials file (Bash — not sensitive). The password (`OC_PORTAL_PASS`) by default transits the fill/`browser_type` arguments (acceptable for a low-risk sandbox you control; for any shared or sensitive tenant, use the `--secrets` lever in `setup.md` to keep it out of context).
+3. **Credentials — pass the password's *key name*, never its value.** Read `OC_PORTAL_USER` from the credentials file (Bash — not sensitive) and fill it literally. For the password, fill the **string `OC_PORTAL_PASS`**: the server is registered with `--secrets` pointing at that same credentials file, so Playwright substitutes the real value on the way in and redacts it on the way out. **Never try to read the password itself** — the permission classifier refuses it and refuses every workaround (see `setup.md` § 6, which also covers what to do when `--secrets` isn't in effect yet: hand the user a checklist, don't chase the secret).
 4. **Settle, then verify.** After the redirect the SPA renders — the page title goes `Opencell | Portal` → `- Opencell` and the home hub appears. Give it a moment (`browser_wait_for`) before screenshotting; a capture can take several seconds on slower hardware (hence `--timeout-action=30000`).
 5. **Probe that clicks land — once, before any interaction sequence that matters.** Click **one** control with an unmistakable observable effect (switch a tab, expand a menu) and confirm the effect actually happened. If it did not, **stop**: this session cannot drive this app. Fall back to read-only navigation + screenshots and tell the user. Skip the probe only for a pure navigate-and-capture errand where you never click anything.
 
@@ -143,6 +143,32 @@ that make server bugs look like client errors.
 - **Viewport** (default 1280×720) for most captures; `fullPage: true` only when the user wants the whole scrollable page.
 - For documentation: capture, record the file path, and hand it to the documentation workflow — do **not** `Read` it into context just to "confirm" it.
 
+## Close the browser when you are done
+
+**Before you end a turn in which you used a `browser_*` tool and have no next navigation planned,
+call `browser_close`.** Not tidiness — the browser does not go away on its own, and nothing else
+closes it.
+
+The trap is that a leaked browser looks perfectly healthy. It is **not** orphaned: the MCP server is
+alive and still owns it, so no supervisor reaps it, no log records it, and it holds its memory until
+the session itself exits — which, in a long-lived tmux pane, may be days. Measured on a real leak: a
+tree left behind by a finished task sat for 12 minutes at **0% CPU** holding **536 MB resident**
+(1.26 GB of summed RSS, 777 MB PSS) on a 3.83 GiB host, on top of three Claude sessions. A host that
+is thrashing cannot be diagnosed from inside a session, so this cost is invisible from where you sit.
+
+**Closing is close to free, so there is no reason to hoard it.** The profile is persistent on disk,
+so a relaunch **keeps the Keycloak login** — `browser_close` costs the warm page and a 2–4 s
+relaunch, nothing more. Weigh that against half a gigabyte held for hours.
+
+Keep it open only across a genuinely continuous sequence — you are mid-task on the same page and the
+next call is another `browser_*`. The moment the portal work is finished, close it, even if the turn
+continues with unrelated work.
+
+**A backstop exists, and it is not a substitute.** `reap-idle-browser.sh` (shipped in this skill,
+enabled per machine — see `setup.md` § *Reaping leaked browsers*) kills trees that have been idle
+past a threshold. It cannot help within a turn, it only runs where someone installed it, and it
+deliberately never kills on first sight. Assume it is not there.
+
 ## Record what you learn
 
 The catalogues shipped with this skill (`pages.md`, `ui-patterns.md`) are **read-only seed
@@ -155,7 +181,8 @@ Create the `catalog/` dir and either file the first time you have something to r
 
 ## Reference files
 
-- `setup.md` — one-time machine setup, the exact MCP registration command + flags, credential file format, token-tuning levers, security hardening (`--secrets`), and troubleshooting. **Load when setting up, when a launch fails, or when clicks are accepted but nothing happens.**
+- `setup.md` — one-time machine setup, the exact MCP registration command + flags, credential file format, token-tuning levers, security hardening (`--secrets`), reaping leaked browsers, and troubleshooting. **Load when setting up, when a launch fails, or when clicks are accepted but nothing happens.**
+- `reap-idle-browser.sh` — the idle-browser backstop invoked by the hook/timer set up in `setup.md`. Run it directly with `--status` or `--dry-run` to see what it would do. Not something to invoke mid-task — `browser_close` is the in-session tool.
 - `api-replay.md` — replaying a failing Portal request straight against the API: getting a Keycloak token, reconstructing the payload from the resource's provider, confirming which Core/Portal build you are reasoning about, and the two Opencell traps that make server bugs look like client errors. **Load when a Portal action fails server-side.**
 - `pages.md` — read-only **seed** catalogue of known portal pages (path → role → selectors). **Read before navigating to a non-trivial page.** Record newly confirmed pages in your user catalog (`~/.local/state/oc-fn-portal/catalog/pages.md`), not here — the shipped file is read-only.
 - `ui-patterns.md` — read-only **seed** catalogue of recurring Opencell Portal UI patterns and how to interact with them. **Read when reasoning about how to drive an unfamiliar control.** Record new observations in `~/.local/state/oc-fn-portal/catalog/ui-patterns.md`.

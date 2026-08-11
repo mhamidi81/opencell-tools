@@ -83,8 +83,9 @@ Eight phases with **hard gates**. A phase exits only when (a) its deliverables a
 
 - Update `README.md` in the **same commit** as any change that affects it.
 - Technical **and** user documentation in `.md`, mirrored one-way to Confluence.
-- **Deck-as-md:** any pitch deck is authored as `deck.md` and rendered to PPTX one-way (never the
-  master, never committed as a binary).
+- **Deck-as-md:** any pitch deck is authored as **markdown** and rendered to PPTX one-way (never the
+  master, never committed as a binary). Name the source `YYYYMMDD_<slug>.md` — the date it was cut,
+  fixed at creation; the renders inherit the basename.
 
 ## 9. Who's involved when
 

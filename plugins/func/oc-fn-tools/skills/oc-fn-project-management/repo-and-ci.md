@@ -139,8 +139,10 @@ paths is the safety model that lets an agent author code on a high-stakes system
   page.** (Confluence authoring mechanics: `oc-fn-documentation`.)
 - **Same-commit doc discipline:** `README.md` is updated in the **same commit** as any change to what
   it documents — never deferred to a follow-up.
-- **Slide decks follow the same rule:** the Phase-2 deck is authored as `deck.md` (one section per
+- **Slide decks follow the same rule:** the Phase-2 deck is authored as **markdown** (one section per
   slide + speaker notes) and the `.pptx` is **rendered from it** against the branded template — a
-  one-way print, never the master, never committed as a binary. Deck authoring, the branded theme, the
-  render command, the overflow check, and the **24h-time / ISO-date locale non-negotiable** live in the
-  **`oc-fn-decks`** skill.
+  one-way print, never the master, never committed as a binary. Name the source
+  **`YYYYMMDD_<slug>.md`** per `oc-fn-decks`' filename rule — not a bare `deck.md`, which collides the
+  moment a project cuts a second deck. Deck authoring, the branded theme, the render command, the
+  overflow check, and the **24h-time / ISO-date locale non-negotiable** live in the **`oc-fn-decks`**
+  skill.
