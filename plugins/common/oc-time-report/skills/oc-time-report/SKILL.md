@@ -25,7 +25,7 @@ A team **estimation-vs-actual** report. Unlike `/oc-ai-report`, this one is **no
 
 Output: Markdown in-session, plus a styled **HTML** file and a **CSV** of the detail rows, both date-stamped in `./docs/`.
 
-**Second report — finished-US per-developer summary.** The same run also writes `time-report-<TODAY>-us-summary.html` and `…-us-summary.csv` (derived from `--out`/`--csv` by inserting `-us-summary`). It considers **only User Stories in a final status**, grouped by **main developer**, in **two tables — one where AI is true and one where AI is false**. Columns: **Developer · US (final) · Avg bugs / US · Sum A. Est h · Sum logged h · Sum bug h · Sum total h · Gain (no bugs) · Gain (with bugs)** — the gains are `(Sum A. Est − Sum logged)/Sum A. Est` without / with bug hours (same `-` rule for meaningless gains). Each table ends with a **Total** row: sums are added up and **Avg bugs / US = total bugs ÷ total US** (weighted by each developer's ticket count, not a mean of the per-developer averages). The CSV carries both groups (dev rows + their Total) with a leading **AI assisted** column.
+**Second report — finished-US per-developer summary.** The same run also writes `time-report-<TODAY>-us-summary.html` and `…-us-summary.csv` (derived from `--out`/`--csv` by inserting `-us-summary`). It considers **only User Stories in a final status**, grouped by **main developer**, in **two tables — one where AI is true and one where AI is false**. Columns: **Developer · US (final) · Avg bugs / US · Sum A. Est h · Sum logged h · Sum bug h · Sum total h · Gain (with bugs) · Gain (no bugs)** — the gains are `(Sum A. Est − Sum logged)/Sum A. Est` without / with bug hours (same `-` rule for meaningless gains). Each table ends with a **Total** row: sums are added up and **Avg bugs / US = total bugs ÷ total US** (weighted by each developer's ticket count, not a mean of the per-developer averages). The CSV carries both groups (dev rows + their Total) with a leading **AI assisted** column.
 
 ## Access
 
@@ -356,7 +356,7 @@ def write_us_summary(rows, html_path, csv_path, project, since, until):
     summ = us_summary_by_dev(rows)
     COLS = [("dev", "Developer"), ("nUS", "US (final)"), ("avgBugs", "Avg bugs / US"),
             ("sumAEst", "Sum A. Est h"), ("sumLogged", "Sum logged h"), ("sumBug", "Sum bug h"),
-            ("sumTotal", "Sum total h"), ("gainNoBug", "Gain (no bugs)"), ("gainBug", "Gain (with bugs)")]
+            ("sumTotal", "Sum total h"), ("gainBug", "Gain (with bugs)"), ("gainNoBug", "Gain (no bugs)")]
     numcols = {"nUS", "avgBugs", "sumAEst", "sumLogged", "sumBug", "sumTotal", "gainNoBug", "gainBug"}
 
     def cells_for(d):
