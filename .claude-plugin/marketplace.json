@@ -91,7 +91,7 @@
     {
       "name": "oc-ai-report",
       "source": "./plugins/common/oc-ai-report",
-      "description": "Cross-ticket AI-usage report over a period — reads the AI-metrics JSON (backend/frontend/QA) from Jira, groups by area → date → user → ticket, and adds each ticket's Architect & Dev-lead estimates, Tempo-logged time, and child-bug count, with two time gains (Architect and Dev-lead, each without/with bugs). Full-width HTML + CSV to ./docs/. Read-only; Atlassian MCP + optional Tempo"
+      "description": "Cross-ticket AI-usage report over a period — reads the AI-metrics JSON (backend/frontend/QA) from Jira, groups by area → date → user → ticket, and adds each ticket's Architect & Dev-lead estimates, Tempo-logged time, child-bug count, two time gains (Architect and Dev-lead, each without/with bugs), plus the ticket's Jira status and a Final flag with AI-contrib-below-60% highlighted red in the detail tables. Full-width HTML + CSV to ./docs/. Read-only; Atlassian MCP + optional Tempo"
     },
     {
       "name": "oc-time-report",

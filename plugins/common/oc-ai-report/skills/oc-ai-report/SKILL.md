@@ -43,7 +43,8 @@ Only Jira dates are JQL-filterable (the record's `at` lives *inside* the text fi
    project = [PROJECT] AND cf[10745] IS NOT EMPTY AND updated >= "[SINCE]" ORDER BY updated DESC
    ```
 2. `searchJiraIssuesUsingJql` with fields:
-   `["summary","assignee","issuetype","resolutiondate","updated","timeoriginalestimate","timespent","worklog","issuelinks","subtasks","components","customfield_10157","customfield_10158","customfield_10189","customfield_10745","customfield_10613"]`
+   `["summary","assignee","issuetype","status","resolutiondate","updated","timeoriginalestimate","timespent","worklog","issuelinks","subtasks","components","customfield_10157","customfield_10158","customfield_10189","customfield_10745","customfield_10613"]`
+   - `status` drives the **Status** column and the **Final** flag in the *Detail per user* tables: a ticket is *final* when its Jira status (case-insensitive) is terminal for its type — **Bug**: Done/Invalid; **US**: Ready for Sprint review / Need documentation / Ready for release / Released; **any other type**: Done. The *Detail per user* section also shows **AI Contrib below 60% in red**.
    - The three estimate custom fields (**days**) are the per-area estimates on a User Story: `customfield_10157` = *Architect estimate back*, `customfield_10158` = *Architect estimate front*, `customfield_10189` = *QA estimate*. The aggregator converts days → hours (×8) and, if none are set (e.g. a standalone Bug), falls back to the ticket's own `timeoriginalestimate`. Sub-issue estimates are **never summed**.
    - **Paginate** until all pages are collected. Write to scratchpad as `tickets.json` (shape `{issues:{nodes:[…]}}` or `{issues:[…]}` — both accepted; if the result is large and auto-saved to a file, point the aggregator at that file).
 
@@ -197,6 +198,14 @@ TYPE_MAP = {"story": "US", "bug": "Bug", "sub-bug": "Bug", "enabler": "Enabler"}
 def ticket_type(pf):
     n = (pf.get("issuetype") or {}).get("name") or ""
     return TYPE_MAP.get(n.lower(), n or "?")
+# terminal status per ticket type (case-insensitive):
+FINAL_STATUS = {
+    "Bug": {"done", "invalid"},
+    "US": {"ready for sprint review", "need documentation", "ready for release", "released"},
+}
+DEFAULT_FINAL = {"done"}
+def status_of(pf): return ((pf.get("status") or {}).get("name") or "").strip()
+def is_final(ttype, status): return (status or "").strip().lower() in FINAL_STATUS.get(ttype, DEFAULT_FINAL)
 
 def area_estimate_h(pf, area):
     """Architect estimate (A. Est h) in hours. If any per-area estimate custom field is set
@@ -263,6 +272,7 @@ def build_rows(parents, children, tempo, since, until):
         try: doc = json.loads(raw)
         except json.JSONDecodeError: continue
         summary = (pf.get("summary") or "")[:44]; ttype = ticket_type(pf)
+        status = status_of(pf); final = is_final(ttype, status)
         parent_logged = hours(pf.get("timespent")); parent_est = hours(pf.get("timeoriginalestimate"))
         wl = worklog_by_user(pf.get("worklog")); tw = tempo.get(str(p.get("id")), {})
         for rkey, rec in (doc.get("records") or {}).items():
@@ -281,7 +291,7 @@ def build_rows(parents, children, tempo, since, until):
             elif acc in wl: logged = hours(wl.get(acc))
             else: logged = parent_logged
             rows.append({"area": domain, "at": at, "acc": acc, "name": name, "key": key,
-                         "ttype": ttype, "summary": summary,
+                         "ttype": ttype, "summary": summary, "status": status, "final": final,
                          "contrib": num(rec.get("contrib")), "retain": num(rec.get("retain")), "rework": num(rec.get("rework")),
                          "utAdd": num(rec.get("utAdd")), "utMod": num(rec.get("utMod")), "pmTests": num(rec.get("pmTests")),
                          "turns": num(rec.get("subReq") if rec.get("subReq") is not None else rec.get("turns")),
@@ -344,10 +354,12 @@ def main():
     for r in rows: by_user[r["acc"]].append(r)
     for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
         P(f"\n### {u['name']}\n")
-        P("| Ticket | Date | Type | Area | Summary | AI Contrib | Retain | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Total dev h | Logged h | Bug h | Arch gain | DL gain | Bugs |")
-        P("|---|---|---|---|---|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
+        P("| Ticket | Date | Type | Area | Summary | Status | Final | AI Contrib | Retain | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Total dev h | Logged h | Bug h | Arch gain | DL gain | Bugs |")
+        P("|---|---|---|---|---|---|:--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
         for r in sorted(by_user[acc], key=lambda x: (x["at"], x["key"])):
-            P(f"| {r['key']} | {r['at']} | {r['ttype']} | {r['area']} | {r['summary']} | {r['contrib']}% | {r['retain']}% | "
+            c = r['contrib']
+            cc = f"**{c}%**" if isinstance(c, (int, float)) and c < 60 else f"{c}%"  # <60% flagged (red in HTML)
+            P(f"| {r['key']} | {r['at']} | {r['ttype']} | {r['area']} | {r['summary']} | {r['status']} | {'T' if r['final'] else ''} | {cc} | {r['retain']}% | "
               f"{r['utAdd']}/{r['utMod']} | {r['pmTests']} | {r['turns']} | {r['aEst']} | {r['dlEst']} | {round(r['logged'] + r['bugLogged'],1)} | {r['logged']} | "
               f"{r['bugLogged']} | {gain_two(r['aEst'], r['logged'], r['bugLogged'])} | {gain_two(r['dlEst'], r['logged'], r['bugLogged'])} | {r['bugs']} |")
     print("\n".join(out))
@@ -431,6 +443,14 @@ TYPE_MAP = {"story": "US", "bug": "Bug", "sub-bug": "Bug", "enabler": "Enabler"}
 def ticket_type(pf):
     n = (pf.get("issuetype") or {}).get("name") or ""
     return TYPE_MAP.get(n.lower(), n or "?")
+# terminal status per ticket type (case-insensitive):
+FINAL_STATUS = {
+    "Bug": {"done", "invalid"},
+    "US": {"ready for sprint review", "need documentation", "ready for release", "released"},
+}
+DEFAULT_FINAL = {"done"}
+def status_of(pf): return ((pf.get("status") or {}).get("name") or "").strip()
+def is_final(ttype, status): return (status or "").strip().lower() in FINAL_STATUS.get(ttype, DEFAULT_FINAL)
 
 def area_estimate_h(pf, area):
     vals = {ar: pf.get(f) for ar, f in AREA_EST_FIELD.items()}
@@ -495,6 +515,7 @@ def build_rows(parents, children, tempo, since, until):
         try: doc = json.loads(raw)
         except json.JSONDecodeError: continue
         summary = (pf.get("summary") or "")[:60]; ttype = ticket_type(pf)
+        status = status_of(pf); final = is_final(ttype, status)
         parent_logged = hours(pf.get("timespent")); parent_est = hours(pf.get("timeoriginalestimate"))
         wl = worklog_by_user(pf.get("worklog")); tw = tempo.get(str(p.get("id")), {})
         for rkey, rec in (doc.get("records") or {}).items():
@@ -512,7 +533,7 @@ def build_rows(parents, children, tempo, since, until):
             elif acc in wl: logged = hours(wl.get(acc))
             else: logged = parent_logged
             rows.append({"area": domain, "at": at, "acc": acc, "name": name, "key": key,
-                         "ttype": ttype, "summary": summary,
+                         "ttype": ttype, "summary": summary, "status": status, "final": final,
                          "contrib": num(rec.get("contrib")), "retain": num(rec.get("retain")), "rework": num(rec.get("rework")),
                          "utAdd": num(rec.get("utAdd")), "utMod": num(rec.get("utMod")), "pmTests": num(rec.get("pmTests")),
                          "turns": num(rec.get("subReq") if rec.get("subReq") is not None else rec.get("turns")),
@@ -522,7 +543,7 @@ def build_rows(parents, children, tempo, since, until):
 
 CSV_COLS = [
     ("key", "Ticket"), ("at", "Date"), ("ttype", "Type"), ("area", "Area"),
-    ("name", "User"), ("summary", "Summary"),
+    ("name", "User"), ("summary", "Summary"), ("status", "Status"), ("finalTxt", "Final status"),
     ("contrib", "AI Contrib %"), ("retain", "Retain %"), ("rework", "Rework %"),
     ("utAdd", "U.tests added"), ("utMod", "U.tests modified"), ("pmTests", "P.tests"),
     ("turns", "Requests"), ("aEst", "A. Est h"), ("dlEst", "DL. Est h"),
@@ -539,6 +560,7 @@ def write_csv(rows, path):
         w.writerow([h for _, h in CSV_COLS])
         for r in sorted(rows, key=lambda x: (x["area"], x["name"].lower(), x["at"], x["key"])):
             r = dict(r)
+            r["finalTxt"] = "T" if r.get("final") else ""
             r["totalDev"] = round(r["logged"] + r["bugLogged"], 1)
             r["gain"] = gain_cell(r["aEst"], r["logged"])
             r["gainBug"] = gain_cell(r["aEst"], r["logged"] + r["bugLogged"])
@@ -639,17 +661,21 @@ def main():
 
         # ---- Detail per user, by ticket ----
         W("<h2>Detail per user</h2>")
-        DHEAD = ["Ticket","Date","Type","Area","Summary","AI Contrib","Retain","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Total dev h","Logged h","Bug h","Arch gain","DL gain","Bugs"]
-        _left = ("Ticket", "Date", "Type", "Area", "Summary")
+        DHEAD = ["Ticket","Date","Type","Area","Summary","Status","Final","AI Contrib","Retain","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Total dev h","Logged h","Bug h","Arch gain","DL gain","Bugs"]
+        _left = ("Ticket", "Date", "Type", "Area", "Summary", "Status")
+        _cent = ("Final",)
         for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
             W(f'<h3>{e(u["name"])}</h3>')
             W('<div class="tw"><table><thead><tr>'
-              + "".join(f'<th class="{ "r" if h not in _left else "" }">{e(h)}</th>' for h in DHEAD)
+              + "".join(f'<th class="{ "c" if h in _cent else ("" if h in _left else "r") }">{e(h)}</th>' for h in DHEAD)
               + "</tr></thead><tbody>")
             for r in sorted(by_user[acc], key=lambda x: (x["at"], x["key"])):
                 g = gain_pct(r["aEst"], r["logged"]); gd = gain_pct(r["dlEst"], r["logged"])
+                finalcell = '<span class="finalbadge">T</span>' if r["final"] else ""
+                low = isinstance(r["contrib"], (int, float)) and r["contrib"] < 60  # flag weak AI contribution
                 W(f'<tr><td class="key">{e(r["key"])}</td><td>{e(r["at"])}</td><td>{e(r["ttype"])}</td><td>{e(r["area"])}</td>'
-                  f'<td>{e(r["summary"])}</td><td class="r">{r["contrib"]}%</td><td class="r">{r["retain"]}%</td>'
+                  f'<td>{e(r["summary"])}</td><td>{e(r["status"])}</td><td class="c">{finalcell}</td>'
+                  f'<td class="r{" low" if low else ""}">{r["contrib"]}%</td><td class="r">{r["retain"]}%</td>'
                   f'<td class="r">{r["utAdd"]}/{r["utMod"]}</td><td class="r">{r["pmTests"]}</td>'
                   f'<td class="r">{r["turns"]}</td><td class="r">{r["aEst"]}</td><td class="r">{r["dlEst"]}</td>'
                   f'<td class="r">{round(r["logged"] + r["bugLogged"],1)}</td><td class="r">{r["logged"]}</td>'
@@ -664,6 +690,9 @@ def main():
       'ticket (Tempo per-user &rarr; Jira worklog &rarr; ticket total). <b>Arch gain</b> = (A.Est&minus;Logged)/A.Est and '
       '<b>DL gain</b> = (DL.Est&minus;Logged)/DL.Est, each shown <b>without / with</b> bug hours; a dash (&mdash;) marks a '
       'meaningless gain &mdash; a placeholder estimate (&le;0.5h), no logged time, or a magnitude beyond &plusmn;1000%. '
+      'In the detail tables, <b>Status</b> is the ticket\'s Jira status and <b>Final</b> (T) marks a terminal status for its type '
+      '(Bug: Done/Invalid; US: Ready for Sprint review / Need documentation / Ready for release / Released; others: Done); '
+      '<b>AI Contrib</b> below 60% is shown in <span class="low">red</span>. '
       'Generated by <code>/oc-ai-report</code>.</p>')
     body = "\n".join(B)
     doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -695,6 +724,9 @@ thead th {{ background:var(--head); font-weight:600; position:sticky; top:0; }}
 tbody tr:nth-child(even) {{ background:var(--zebra); }}
 tbody tr:last-child td {{ border-bottom:0; }}
 .r {{ text-align:right; }}
+.c {{ text-align:center; }}
+.low {{ color:var(--neg); font-weight:700; }}
+.finalbadge {{ display:inline-block; font-size:.7rem; font-weight:700; color:#fff; background:#16a34a; border-radius:4px; padding:.05rem .4rem; }}
 .name {{ font-weight:600; }}
 .key {{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--accent); font-weight:600; }}
 .pos {{ color:var(--pos); font-weight:600; }}
