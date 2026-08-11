@@ -25,7 +25,7 @@ A team **estimation-vs-actual** report. Unlike `/oc-ai-report`, this one is **no
 
 Output: Markdown in-session, plus a styled **HTML** file and a **CSV** of the detail rows, both date-stamped in `./docs/`.
 
-**Second report — finished-US per-developer summary.** The same run also writes `time-report-<TODAY>-us-summary.html` and `…-us-summary.csv` (derived from `--out`/`--csv` by inserting `-us-summary`). It considers **only User Stories in a final status**, grouped by **main developer**, in **two tables — one where AI is true and one where AI is false**. Columns: **Developer · US (final) · Avg bugs / US · Sum A. Est h · Sum logged h · Sum bug h · Sum total h · Gain (no bugs) · Gain (with bugs)** — the gains are `(Sum A. Est − Sum logged)/Sum A. Est` without / with bug hours (same `-` rule for meaningless gains). The CSV carries both groups with a leading **AI assisted** column.
+**Second report — finished-US per-developer summary.** The same run also writes `time-report-<TODAY>-us-summary.html` and `…-us-summary.csv` (derived from `--out`/`--csv` by inserting `-us-summary`). It considers **only User Stories in a final status**, grouped by **main developer**, in **two tables — one where AI is true and one where AI is false**. Columns: **Developer · US (final) · Avg bugs / US · Sum A. Est h · Sum logged h · Sum bug h · Sum total h · Gain (no bugs) · Gain (with bugs)** — the gains are `(Sum A. Est − Sum logged)/Sum A. Est` without / with bug hours (same `-` rule for meaningless gains). Each table ends with a **Total** row: sums are added up and **Avg bugs / US = total bugs ÷ total US** (weighted by each developer's ticket count, not a mean of the per-developer averages). The CSV carries both groups (dev rows + their Total) with a leading **AI assisted** column.
 
 ## Access
 
@@ -318,9 +318,25 @@ def build_ticket_rows(parents, children_nodes, tempo, devmap, project):
 def contrib_str(contrib):
     return "; ".join(f"{c['name']} {c['total']} ({c['logged']}+{c['bug']})" for c in contrib)
 
+def _us_agg_row(label, rs):
+    """Aggregate a set of finished-US rows into one summary row. avgBugs is total bugs
+    over total US, so a Total row is weighted by each developer's ticket count."""
+    n = len(rs)
+    sum_aest = round(sum(x["aEst"] for x in rs), 1)
+    sum_log = round(sum(x["logged"] for x in rs), 1)
+    sum_bug = round(sum(x["bugLogged"] for x in rs), 1)
+    return {
+        "dev": label, "nUS": n,
+        "avgBugs": round(sum(x["bugs"] for x in rs) / n, 2) if n else 0,
+        "sumAEst": sum_aest, "sumLogged": sum_log, "sumBug": sum_bug,
+        "sumTotal": round(sum_log + sum_bug, 1),
+        "gainNoBug": gain_pct(sum_aest, sum_log),
+        "gainBug": gain_pct(sum_aest, sum_log + sum_bug),
+    }
+
 def us_summary_by_dev(rows):
     """Per-developer aggregates over finished User Stories only, split by AI true/false.
-    Returns {True: [devrow, ...], False: [...]} sorted by developer name."""
+    Returns {True: {"rows": [...], "total": row|None}, False: {...}}."""
     buckets = {True: defaultdict(list), False: defaultdict(list)}
     for r in rows:
         if r["ttype"] != "US" or not r["final"]:
@@ -328,22 +344,10 @@ def us_summary_by_dev(rows):
         buckets[bool(r["ai"])][r["main"]].append(r)
     out = {}
     for ai_flag, per_dev in buckets.items():
-        devrows = []
-        for dev in sorted(per_dev, key=str.lower):
-            rs = per_dev[dev]
-            n = len(rs)
-            sum_aest = round(sum(x["aEst"] for x in rs), 1)
-            sum_log = round(sum(x["logged"] for x in rs), 1)
-            sum_bug = round(sum(x["bugLogged"] for x in rs), 1)
-            devrows.append({
-                "dev": dev, "nUS": n,
-                "avgBugs": round(sum(x["bugs"] for x in rs) / n, 2),
-                "sumAEst": sum_aest, "sumLogged": sum_log, "sumBug": sum_bug,
-                "sumTotal": round(sum_log + sum_bug, 1),
-                "gainNoBug": gain_pct(sum_aest, sum_log),
-                "gainBug": gain_pct(sum_aest, sum_log + sum_bug),
-            })
-        out[ai_flag] = devrows
+        devrows = [_us_agg_row(dev, per_dev[dev]) for dev in sorted(per_dev, key=str.lower)]
+        allrs = [x for rs in per_dev.values() for x in rs]
+        total = _us_agg_row(f"TOTAL ({len(per_dev)} dev)", allrs) if allrs else None
+        out[ai_flag] = {"rows": devrows, "total": total}
     return out
 
 def write_us_summary(rows, html_path, csv_path, project, since, until):
@@ -355,34 +359,41 @@ def write_us_summary(rows, html_path, csv_path, project, since, until):
             ("sumTotal", "Sum total h"), ("gainNoBug", "Gain (no bugs)"), ("gainBug", "Gain (with bugs)")]
     numcols = {"nUS", "avgBugs", "sumAEst", "sumLogged", "sumBug", "sumTotal", "gainNoBug", "gainBug"}
 
-    def table_html(devrows, label):
+    def cells_for(d):
+        out = []
+        for k, _ in COLS:
+            if k in ("gainNoBug", "gainBug"):
+                out.append(f'<td class="r">{gain_str(d[k])}</td>')
+            elif k == "dev":
+                out.append(f'<td class="name">{e(d[k])}</td>')
+            else:
+                out.append(f'<td class="r">{d[k]}</td>')
+        return "".join(out)
+
+    def table_html(group, label):
         h = [f'<h2>AI-assisted: {label}</h2>']
+        devrows = group.get("rows") if group else None
         if not devrows:
             return "".join(h) + '<p class="meta">No finished User Stories in this group.</p>'
         h.append('<div class="tw"><table><thead><tr>'
                  + "".join(f'<th class="{ "r" if k in numcols else "" }">{e(t)}</th>' for k, t in COLS)
                  + "</tr></thead><tbody>")
         for d in devrows:
-            cells = []
-            for k, _ in COLS:
-                if k in ("gainNoBug", "gainBug"):
-                    cells.append(f'<td class="r">{gain_str(d[k])}</td>')
-                elif k == "dev":
-                    cells.append(f'<td class="name">{e(d[k])}</td>')
-                else:
-                    cells.append(f'<td class="r">{d[k]}</td>')
-            h.append("<tr>" + "".join(cells) + "</tr>")
+            h.append("<tr>" + cells_for(d) + "</tr>")
+        if group.get("total"):
+            h.append('<tr class="total">' + cells_for(group["total"]) + "</tr>")
         h.append("</tbody></table></div>")
         return "".join(h)
 
     body = [f"<h1>Finished User Stories &mdash; per-developer summary</h1>",
             f'<p class="meta">Project <b>{e(project)}</b> &middot; [{e(since or "…")} … {e(until or "…")}) '
             f'&middot; only <b>User Stories</b> in a final status &middot; grouped by main developer</p>',
-            table_html(summ.get(True, []), "true"),
-            table_html(summ.get(False, []), "false"),
+            table_html(summ.get(True) or {}, "true"),
+            table_html(summ.get(False) or {}, "false"),
             '<p class="foot">Only <b>User Stories</b> whose status is final '
             '(Ready for Sprint review / Need documentation / Ready for release / Released) are counted, '
-            'attributed to their <b>main developer</b>. <b>Avg bugs / US</b> = mean child Bug/Sub-bug count. '
+            'attributed to their <b>main developer</b>. <b>Avg bugs / US</b> = child Bug/Sub-bug count per US '
+            '(the <b>Total</b> row uses total bugs &divide; total US, i.e. weighted by each developer\'s ticket count). '
             'Sums are over that developer\'s finished US. <b>Gain</b> = (Sum A. Est &minus; Sum logged)/Sum A. Est, '
             'without / with bug hours; a dash marks a meaningless gain. Generated by <code>/oc-time-report</code>.</p>']
     doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -407,6 +418,7 @@ thead th {{ background:var(--head); font-weight:600; position:sticky; top:0; }}
 tbody tr:nth-child(even) {{ background:var(--zebra); }}
 .r {{ text-align:right; }}
 .name {{ font-weight:600; }}
+tr.total td {{ font-weight:700; border-top:2px solid var(--line); background:var(--head); }}
 .foot {{ color:var(--muted); font-size:.8rem; margin-top:2rem; border-top:1px solid var(--line); padding-top:1rem; }}
 </style></head><body><div class="wrap">
 {"".join(body)}
@@ -415,19 +427,24 @@ tbody tr:nth-child(even) {{ background:var(--zebra); }}
     open(html_path, "w", encoding="utf-8").write(doc)
 
     if csv_path:
+        def csv_row(label, d):
+            row = [label]
+            for k, _ in COLS:
+                if k in ("gainNoBug", "gainBug"):
+                    g = d[k]
+                    row.append("-" if (g is None or abs(g) > GAIN_CAP) else g)
+                else:
+                    row.append(d[k])
+            return row
         with open(csv_path, "w", encoding="utf-8-sig", newline="") as fh:
             w = csv.writer(fh)
             w.writerow(["AI assisted"] + [t for _, t in COLS])
             for ai_flag, label in ((True, "Yes"), (False, "No")):
-                for d in summ.get(ai_flag, []):
-                    row = [label]
-                    for k, _ in COLS:
-                        if k in ("gainNoBug", "gainBug"):
-                            g = d[k]
-                            row.append("-" if (g is None or abs(g) > GAIN_CAP) else g)
-                        else:
-                            row.append(d[k])
-                    w.writerow(row)
+                grp = summ.get(ai_flag) or {}
+                for d in grp.get("rows", []):
+                    w.writerow(csv_row(label, d))
+                if grp.get("total"):
+                    w.writerow(csv_row(label, grp["total"]))
     return summ
 
 def _summary_path(path, tag):
@@ -584,7 +601,7 @@ tbody tr:nth-child(even) {{ background:var(--zebra); }}
     summ_html = _summary_path(a.out, "us-summary")
     summ_csv = _summary_path(a.csv, "us-summary") if a.csv else None
     summ = write_us_summary(rows, summ_html, summ_csv, a.project, a.since, a.until)
-    n_true = len(summ.get(True, [])); n_false = len(summ.get(False, []))
+    n_true = len((summ.get(True) or {}).get("rows", [])); n_false = len((summ.get(False) or {}).get("rows", []))
     print(f"\nFinished-US summary: {summ_html}"
           + (f" + {summ_csv}" if summ_csv else "")
           + f"  ({n_true} dev(s) with AI, {n_false} without)")
