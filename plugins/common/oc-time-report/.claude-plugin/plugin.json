@@ -1,5 +1,5 @@
 {
   "name": "oc-time-report",
   "description": "Estimation-vs-logged-hours report over a period (independent of the AI-usage JSON). Tempo-worklog driven, TICKET-based: one row per ticket owned by its main developer (most total hours), with ticket type, area, title, Architect & Dev-lead estimates, total logged & bug hours (all contributors, subtasks rolled up), two time gains (Architect and Dev-lead, each without/with bugs; a gain shows as '-' when it is meaningless: a placeholder estimate <=0.5h, no logged time, or a magnitude beyond +/-1000%), an AI-assistance flag (ticket or any rolled-up sub-issue carries the AI-metrics field; aggregates show AI-assisted/total), child-bug count, and a contributor breakdown. A ticket counts once, under its main developer. Prints Markdown and writes a self-contained styled, date-stamped HTML file and a CSV to ./docs/. Reads Jira (Atlassian MCP) + Tempo (TEMPO_API_TOKEN).",
-  "version": "1.3.1"
+  "version": "1.3.2"
 }

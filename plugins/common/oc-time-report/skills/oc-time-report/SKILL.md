@@ -213,8 +213,10 @@ def area_estimate_h(f, area):
     vals = {ar: f.get(fld) for ar, fld in AREA_EST_FIELD.items()}
     if any(isinstance(v, (int, float)) for v in vals.values()):
         v = vals.get(area)
-        return round(v * DAY_HOURS, 1) if isinstance(v, (int, float)) else 0.0
-    return hours(f.get("timeoriginalestimate"))
+        est = round(v * DAY_HOURS, 1) if isinstance(v, (int, float)) else 0.0
+    else:
+        est = hours(f.get("timeoriginalestimate"))
+    return 0.0 if 0 < est < EST_MIN else est  # a placeholder like 0.01d (~0.1h) counts as no estimate -> 0
 
 GAIN_CAP = 1000  # |time gain %| beyond this is placeholder-driven noise -> show "-"
 EST_MIN = 0.5    # estimates at/below this (e.g. a 0.01-day placeholder ~= 0.1h) are meaningless

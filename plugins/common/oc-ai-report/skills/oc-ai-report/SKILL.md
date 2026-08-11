@@ -205,8 +205,10 @@ def area_estimate_h(pf, area):
     vals = {ar: pf.get(f) for ar, f in AREA_EST_FIELD.items()}
     if any(isinstance(v, (int, float)) for v in vals.values()):
         v = vals.get(area)
-        return round(v * DAY_HOURS, 1) if isinstance(v, (int, float)) else 0.0
-    return hours(pf.get("timeoriginalestimate"))
+        est = round(v * DAY_HOURS, 1) if isinstance(v, (int, float)) else 0.0
+    else:
+        est = hours(pf.get("timeoriginalestimate"))
+    return 0.0 if 0 < est < EST_MIN else est  # a placeholder like 0.01d (~0.1h) counts as no estimate -> 0
 
 def bug_logged_h(bug_nodes, acc, tempo):
     """Hours logged on the given bug sub-issues for this user: Tempo per-user if available,
@@ -434,8 +436,10 @@ def area_estimate_h(pf, area):
     vals = {ar: pf.get(f) for ar, f in AREA_EST_FIELD.items()}
     if any(isinstance(v, (int, float)) for v in vals.values()):
         v = vals.get(area)
-        return round(v * DAY_HOURS, 1) if isinstance(v, (int, float)) else 0.0
-    return hours(pf.get("timeoriginalestimate"))
+        est = round(v * DAY_HOURS, 1) if isinstance(v, (int, float)) else 0.0
+    else:
+        est = hours(pf.get("timeoriginalestimate"))
+    return 0.0 if 0 < est < EST_MIN else est  # a placeholder like 0.01d (~0.1h) counts as no estimate -> 0
 
 def bug_logged_h(bug_nodes, acc, tempo):
     total = 0.0
