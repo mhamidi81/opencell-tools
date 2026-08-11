@@ -157,6 +157,9 @@ Schema:
 ```bash
 RUN=".claude/cache/ai-stats/<RUN_ID>"        # the directory your manifest path is in
 mkdir -p "$RUN/snapshots"
+git add -N -- <the files in your manifest>   # REQUIRED — see the note below
 git diff HEAD -- <the files in your manifest> > "$RUN/snapshots/tests.diff"
 ```
+**The `git add -N` (intent-to-add) line is not optional.** `git diff HEAD` ignores untracked files completely, so without it every file you *created* produces **no diff output at all** and its retention becomes unmeasurable — on frontend work that is most of your output. `-N` records an intent-to-add entry only: it stages no content, commits nothing, and is undone by `git reset`.
+
 This records your **added lines vs the branch base** (`HEAD`) — the delta, so it is correct for modified files (an existing component, an existing `en.json`) as well as new ones. Name the `.diff` after the same phase as your manifest. Best-effort; skip if git or the path is unavailable, and skip entirely if no manifest path was provided.

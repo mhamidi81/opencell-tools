@@ -121,7 +121,7 @@ $ARGUMENTS = "INTRD-36922 dev"
 
 - Define `[RUN_ID]` = `{TICKET-NUMBER}-{yyyymmdd-HHMMSS}` (timestamp via `date -u +%Y%m%d-%H%M%S`) and create `.claude/cache/ai-stats/[RUN_ID]/` (it is git-ignored). Reuse an existing run directory for the same ticket if one is already there.
 - Add this line to the `oc-fe-e2e-expert` dispatch prompt: "Write your file manifest to `.claude/cache/ai-stats/[RUN_ID]/e2e.json` per your manifest instructions, then snapshot your first pass to `snapshots/e2e.diff`."
-- When the agent returns, check that `snapshots/e2e.diff` exists; if it is missing, capture it yourself **before editing any of those files** (`git diff HEAD -- <files from e2e.json> > .claude/cache/ai-stats/[RUN_ID]/snapshots/e2e.diff`) — a snapshot taken after your own edits makes retention a meaningless 100%.
+- When the agent returns, check that `snapshots/e2e.diff` exists; if it is missing, capture it yourself **before editing any of those files** (`git add -N -- <files from e2e.json> && git diff HEAD -- <files from e2e.json> > .claude/cache/ai-stats/[RUN_ID]/snapshots/e2e.diff` — the `git add -N` is required, because `git diff HEAD` ignores untracked files and brand-new specs would otherwise diff to nothing) — a snapshot taken after your own edits makes retention a meaningless 100%.
 - Cheap and non-blocking: if any of it fails, continue creating the tests normally.
 
 1. **Create Page Object (if not exists):**

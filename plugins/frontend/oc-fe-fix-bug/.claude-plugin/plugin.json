@@ -1,5 +1,5 @@
 {
   "name": "oc-fe-fix-bug",
   "description": "Fix a bug from a JIRA ticket: update status, create fix branch, and start fixing",
-  "version": "1.2.0"
+  "version": "1.2.1"
 }

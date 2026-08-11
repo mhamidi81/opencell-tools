@@ -104,6 +104,13 @@ There is intentionally **no ticket argument** — see Task 2.
    - Otherwise, if there are tracked uncommitted changes → ask the developer: "Measure the last commit (HEAD) or the uncommitted changes?" (default: last commit). If clean → **commit mode** against `HEAD`.
 3. Record `[MODE]` (`commit`/`working`) and `[COMMIT-REF]` (for commit mode, default `HEAD`).
 4. Confirm there is something to measure (commit mode: `git show --stat [COMMIT-REF]`; working mode: `git diff --stat HEAD`). If nothing, tell the developer and stop.
+5. **Working mode only — make created files visible first.** `git diff HEAD` ignores untracked files, so a brand-new `Form.tsx` or `__tests__/Form.test.tsx` would be measured as if it did not exist. Before running the analyzer, mark them intent-to-add:
+
+   ```bash
+   git add -N -- .        # stages no content, commits nothing; undo with `git reset`
+   ```
+
+   Tell the developer you are doing this and why. The analyzer warns if measurable untracked files remain. **This hole is the main reason commit mode is the recommended default** — a commit has no untracked files by definition.
 
 ---
 
@@ -308,7 +315,8 @@ def collect_file_history(transcripts, fh_root, repo):
 # ---- source 4: sub-agent first-pass snapshots (added lines captured at agent finish) ----
 def collect_snapshot_lines(manifests_dir, repo):
     """AI first-pass added lines captured at each agent's finish, from
-    <RUN_ID>/snapshots/*.diff (a `git diff HEAD -- <files>` per agent). These preserve the
+    <RUN_ID>/snapshots/*.diff (a `git add -N` + `git diff HEAD -- <files>` per agent; the
+    intent-to-add is what makes newly *created* files appear at all). These preserve the
     sub-agent's produced line content — otherwise lost when its session ends — so retention
     is measurable for sub-agent-created/modified files. Added lines only, so it is
     delta-correct for modified files (an edited Form.tsx, an existing en.json) too."""
@@ -367,6 +375,18 @@ def changed_paths(repo, mode, ref):
     res = git(repo, "diff", "--name-only", "HEAD") if mode == "working" \
           else git(repo, "diff", "--name-only", f"{ref}~1..{ref}")
     return [p.strip().replace("\\", "/") for p in res.stdout.splitlines() if p.strip()]
+
+MEASURED_CATS = ("components", "i18n", "tests", "e2e", "styles")
+
+def untracked_measurable(repo):
+    """Files git does not track yet. `git diff HEAD` — which every measurement and every
+    agent snapshot is built on — ignores them entirely, so a newly created component or
+    test would be measured as if it did not exist. Only relevant in working mode (a commit
+    has no untracked files); the caller turns this into a warning telling the developer to
+    run `git add -N -- .` (intent-to-add: stages no content) and re-run."""
+    res = git(repo, "ls-files", "--others", "--exclude-standard")
+    return [p.strip().replace("\\", "/") for p in res.stdout.splitlines()
+            if p.strip() and category(p.strip().replace("\\", "/")) in MEASURED_CATS]
 
 def file_versions(repo, rel, mode, ref):
     """(base_src, final_src); base is '' for a newly added/unavailable file."""
@@ -710,6 +730,15 @@ def main():
     total_added = sum(len(v) for v in added.values())
     changed = changed_paths(repo, a.mode, a.commit)   # this commit's files: the scope anchor
     changed_set = set(changed)
+
+    if a.mode == "working":
+        unt = untracked_measurable(repo)
+        if unt:
+            warnings.append(
+                f"{len(unt)} untracked source file(s) are NOT measured — `git diff HEAD` ignores "
+                f"untracked files, so newly created components/tests read as if they do not exist. "
+                f"Run `git add -N -- .` (intent-to-add; stages no content) and re-run, or measure the "
+                f"commit instead. e.g. {unt[:3]}")
 
     planning = build_planning(load_planning_manifest(a.manifests),
                               reconstruct_planning(a.transcripts, repo, changed_set))
@@ -1055,6 +1084,7 @@ Key legend (all per (domain,user), latest run only):
 
 - **Sub-agent coverage.** A sub-agent's `Write`/`Edit` calls never appear in the session transcript, and sub-agent transcripts are not persisted separately. The **manifests** are what make sub-agent (including sub-agent-*created*) files countable. Work done by hand, or by an agent dispatched without a manifest path, has no manifest — the transcript and file-history still cover main-context edits and edits to existing files, but a sub-agent-created new file from such a run cannot be attributed.
 - **Contribution vs. retention.** Contribution is complete with manifests; retention is content-based and defined for files whose line content was captured — the sub-agent first-pass **snapshot** (`snapshots/*.diff`), the main-context transcript, or file-history. A sub-agent file with none of these is counted for contribution and reported as retention-unknown.
+- **`git diff HEAD` ignores untracked files — this bites twice.** (a) An agent snapshot taken without `git add -N` first contains **nothing** for the files the agent *created*, so those files are contribution-only and show up in the retention-unknown warning; every frontend agent's snapshot step therefore runs `git add -N -- <its files>` before the diff. (b) In **working mode** the measurement itself misses untracked files, which on frontend work is typically the new widget and its new tests — the analyzer detects this and warns. Commit mode has neither problem, which is why it is the default. If you are looking at an old run whose snapshots predate this fix, expect retention on created files to be missing rather than wrong.
 - **Attribution.** A final line is `fix` if it appears in a main-context edit, else `agent` if the file is in a manifest or the line is in a snapshot/file-history, else `human`. Whitespace-normalized, pure-punctuation lines ignored, distinct-line based per file (heavy rewrites de-duplicated). JSX means many short, repeated lines (`/>`, `}`, `<Grid item xs={6}>`) — they are de-duplicated per file, so a repetitive form counts once per distinct line, which is the intended behaviour.
 - **Category heuristics.** `tests` = `__tests__/`, `*.test.*`, `*.spec.*` under `src/`, plus `src/test-utils/`; `e2e` = anything under `tests/`, `e2e/` or `cypress/` and any `*.cy.*` — the portal keeps Playwright specs in `tests/e2e/` (repo root), so the e2e check runs **before** the unit-test check (a Playwright spec is also a `*.spec.ts`). `i18n` = JSON under `i18n/`/`locale/` plus `src/i18n/<lang>.js`. The portal's Vitest config only collects `src/**/*.test.{ts,tsx,js,jsx}`, and the frontend skills/agents all write `.test.*` for that reason — `*.spec.*` under `src/` is still categorised as a unit test here, deliberately, so that a stray legacy file is measured rather than silently dropped into `components`.
 - **Test counts are commit-derived, not AI-attributed.** The `it(`/`test(` extractor is a heuristic brace match; a title built from a template literal or a helper that wraps `it()` can be miscounted slightly, and `it.each` counts once. Good enough for the ticket record; the developer can correct.

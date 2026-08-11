@@ -1,5 +1,5 @@
 {
   "name": "oc-fe-fix-pr",
   "description": "Fix the review remarks of a pull request: read its unresolved Bitbucket comments, fix them on the PR branch via oc-fe-engineer, then reply, resolve, and push",
-  "version": "1.1.0"
+  "version": "1.1.1"
 }

@@ -182,6 +182,8 @@ Once the page is implemented and validated, add test coverage for the changed co
 
 ```bash
 mkdir -p .claude/cache/ai-stats/[RUN_ID]/snapshots
+git add -N -- <files from <phase>.json>   # REQUIRED: git diff HEAD ignores untracked files,
+                                          # so created files would otherwise produce no diff at all
 git diff HEAD -- <files from <phase>.json> > .claude/cache/ai-stats/[RUN_ID]/snapshots/<phase>.diff
 ```
 

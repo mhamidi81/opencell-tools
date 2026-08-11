@@ -82,7 +82,7 @@ Launch the `oc-fe-test-writer` sub-agent (`subagent_type: oc-fe-test-writer:oc-f
 
 The agent will read the target code, find nearby existing specs to match style, write/update the tests following project conventions (`__tests__/`, `FormWrapper`, `renderWithApp`, MSW, accessible queries), and run Vitest to verify them.
 
-When it returns, check that `snapshots/<phase>.diff` exists; if it is missing, capture it yourself **before editing any of those files** (`git diff HEAD -- <files from the manifest> > .claude/cache/ai-stats/[RUN_ID]/snapshots/<phase>.diff`) — a snapshot taken after your own edits makes retention a meaningless 100%.
+When it returns, check that `snapshots/<phase>.diff` exists; if it is missing, capture it yourself **before editing any of those files** (`git add -N -- <files from the manifest> && git diff HEAD -- <files from the manifest> > .claude/cache/ai-stats/[RUN_ID]/snapshots/<phase>.diff` — the `git add -N` is required, because `git diff HEAD` ignores untracked files and newly created tests would otherwise diff to nothing) — a snapshot taken after your own edits makes retention a meaningless 100%.
 
 ### Step 4: Present the Report
 

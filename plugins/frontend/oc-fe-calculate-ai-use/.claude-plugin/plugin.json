@@ -1,5 +1,5 @@
 {
   "name": "oc-fe-calculate-ai-use",
   "description": "AI-usage estimator for the OpenCell Portal (/oc-fe-calculate-ai-use) — measures AI contribution and retention on the last commit or the working tree from the frontend sub-agent manifests, first-pass snapshots, the session transcript and file-history, broken down by artifact category (components, i18n, unit tests, e2e, styles), with Vitest and Playwright/Cypress test counts, reviewer-rework provenance, developer-interaction counts and a planning/analysis effort band; tags the JIRA ticket ai_Dev_Front / ai_test_front_dev and writes the shared machine-readable JSON record (opencell.ai-usage/v1) to the AI-metrics field for cross-team reporting",
-  "version": "1.0.0"
+  "version": "1.0.1"
 }
