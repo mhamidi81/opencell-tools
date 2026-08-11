@@ -297,3 +297,33 @@ When delivering design implementations:
 - Suggest design improvements when you notice inconsistencies
 - Ask for design clarification when specs are ambiguous
 - Compare your implementation against the original design visually when possible
+
+## Report your file manifest (AI-usage stats)
+
+If your dispatch prompt includes an **AI-stats manifest path** (e.g. `.claude/cache/ai-stats/<RUN_ID>/design.json`), then after ALL file work is complete, write a JSON manifest to that exact path as your **final action**. This lets `/oc-fe-calculate-ai-use` attribute sub-agent work that is otherwise invisible in the session transcript — your `Write`/`Edit` calls do not appear in the main session's transcript and are lost when this session ends. If no manifest path was provided, skip this section entirely.
+
+Schema:
+```json
+{
+  "agent": "oc-fe-designer",
+  "phase": "design",
+  "timestamp": "<ISO-8601 UTC>",
+  "files": [
+    { "path": "src/srcProject/widgets/B2B/Contracts/components/Header.tsx", "action": "create" },
+    { "path": "src/styles/theme.ts", "action": "modify" }
+  ]
+}
+```
+- Repo-relative paths, forward slashes (e.g. `src/srcProject/widgets/B2B/Contracts/Form.tsx`).
+- `action`: `create` for a new file, `modify` for an edit to an existing file.
+- `phase`: use the basename of the manifest path you were given (so a second dispatch in the same run does not overwrite the first).
+- Get the timestamp with `date -u +%Y-%m-%dT%H:%M:%SZ` (best-effort; omit the field if unavailable).
+- List **every** file you created or modified.
+
+**Then snapshot your first pass** — so `/oc-fe-calculate-ai-use` can measure *retention* (how much of your output survives to the commit); your line content is otherwise lost when this session ends. Immediately after the manifest, using the same `<RUN_ID>` directory as your manifest path, capture a `git diff` of exactly the files you listed:
+```bash
+RUN=".claude/cache/ai-stats/<RUN_ID>"        # the directory your manifest path is in
+mkdir -p "$RUN/snapshots"
+git diff HEAD -- <the files in your manifest> > "$RUN/snapshots/design.diff"
+```
+This records your **added lines vs the branch base** (`HEAD`) — the delta, so it is correct for modified files (an existing component, an existing `en.json`) as well as new ones. Name the `.diff` after the same phase as your manifest. Best-effort; skip if git or the path is unavailable, and skip entirely if no manifest path was provided.

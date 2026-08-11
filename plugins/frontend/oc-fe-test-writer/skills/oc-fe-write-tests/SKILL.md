@@ -6,7 +6,7 @@ argument-hint: "[FILE... | BASE-BRANCH] (e.g., src/widgets/.../Form.tsx  or  dev
 
 ## Sub-agent Configuration
 
-Use the `oc-fe-test-writer` sub-agent (via Task tool with `subagent_type: oc-fe-test-writer:oc-fe-test-writer`) to write and verify the Vitest tests. This skill only resolves the scope (which files to test) and then delegates everything else — reading the code, writing `*.spec.tsx` / `*.spec.ts`, and running Vitest — to the agent.
+Use the `oc-fe-test-writer` sub-agent (via Task tool with `subagent_type: oc-fe-test-writer:oc-fe-test-writer`) to write and verify the Vitest tests. This skill only resolves the scope (which files to test) and then delegates everything else — reading the code, writing `*.test.tsx` / `*.test.ts`, and running Vitest — to the agent.
 
 ## Purpose
 
@@ -68,12 +68,21 @@ If file and branch-like arguments are mixed, treat it as file mode and ignore th
 
 ### Step 3: Invoke the oc-fe-test-writer Agent
 
+**First, resolve an AI-stats run directory** so the agent's work stays measurable by `/oc-fe-calculate-ai-use` — the agent's `Write`/`Edit` calls never appear in this session's transcript and are lost when it finishes.
+
+- Reuse the **most recently modified** `.claude/cache/ai-stats/*/` directory if one exists for this ticket (this skill is often called after `/oc-fe-fix-bug` or `/oc-fe-create-ui`, which already created one).
+- Otherwise define `[RUN_ID]` = `{TICKET-NUMBER or "tests"}-{yyyymmdd-HHMMSS}` (timestamp via `date -u +%Y%m%d-%H%M%S`) and create `.claude/cache/ai-stats/[RUN_ID]/` (it is git-ignored).
+- Cheap and non-blocking: if it fails, dispatch the agent anyway.
+
 Launch the `oc-fe-test-writer` sub-agent (`subagent_type: oc-fe-test-writer:oc-fe-test-writer`) with a prompt that includes the resolved scope:
 
 - **Changed mode:** instruct the agent to write Vitest tests for the code changed against `[BASE-BRANCH]`, passing `[BASE-BRANCH]` so it can compute the diff.
 - **File mode:** instruct the agent to write Vitest tests for exactly the files in `[FILES]` (do not expand to the whole diff).
+- **Always:** "Write your file manifest to `.claude/cache/ai-stats/[RUN_ID]/tests.json` per your manifest instructions, then snapshot your first pass to `snapshots/tests.diff`." If `tests.json` already exists in that run directory (an earlier dispatch), use `tests-2.json`, `tests-3.json`, … instead.
 
 The agent will read the target code, find nearby existing specs to match style, write/update the tests following project conventions (`__tests__/`, `FormWrapper`, `renderWithApp`, MSW, accessible queries), and run Vitest to verify them.
+
+When it returns, check that `snapshots/<phase>.diff` exists; if it is missing, capture it yourself **before editing any of those files** (`git diff HEAD -- <files from the manifest> > .claude/cache/ai-stats/[RUN_ID]/snapshots/<phase>.diff`) — a snapshot taken after your own edits makes retention a meaningless 100%.
 
 ### Step 4: Present the Report
 
@@ -111,6 +120,10 @@ After the tests are written and verified, set the JIRA **AI field** (`customfiel
    Expand `<...CURRENT-TAGS>` into the actual strings you read — every one of them must survive, including tags you don't recognise. Never drop or rename a tag you did not add.
 4. **If the read fails, do not write** — a blind write would clobber the field. Warn the user and skip the tagging.
 5. If the update fails, warn the user but continue.
+
+### Step 6: Point to the AI-Usage Measurement
+
+Once the tests are committed, mention that **`/oc-fe-calculate-ai-use`** records AI-usage stats on the ticket — it reads the manifest and snapshot this run wrote (so the test-writer's output is attributed with a real retention figure) and reports the Vitest tests added/modified alongside the per-category contribution/retention.
 
 ## Examples
 

@@ -54,6 +54,11 @@
       "description": "Create Playwright E2E tests from JIRA ticket requirements using the oc-fe-e2e-expert sub-agent"
     },
     {
+      "name": "oc-fe-calculate-ai-use",
+      "source": "./plugins/frontend/oc-fe-calculate-ai-use",
+      "description": "Estimate AI contribution and retention on the OpenCell Portal (/oc-fe-calculate-ai-use) from the frontend sub-agent manifests, first-pass snapshots, session transcript and file-history — per-category breakdown (components, i18n, unit tests, e2e, styles), Vitest/Playwright test counts, reviewer-rework provenance, planning-effort band, ai_Dev_Front / ai_test_front_dev Jira tagging, and the shared machine-readable JSON record for cross-team reporting"
+    },
+    {
       "name": "oc-be-tools",
       "source": "./plugins/backend/oc-be-tools",
       "description": "Backend development toolkit for Opencell Core — agents for building entities, services, APIs, tests, and Postman collections, guideline-loading skills, an implementation orchestrator (/oc-be-implement), and a guideline-based code review command (/oc-be-review)"

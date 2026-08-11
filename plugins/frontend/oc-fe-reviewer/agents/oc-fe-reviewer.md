@@ -174,7 +174,7 @@ GET_LIST: {
 ### 9. Testing Requirements
 
 - [ ] **Test file location** - In `__tests__/` subdirectory
-- [ ] **Naming convention** - `ComponentName.spec.tsx`
+- [ ] **Naming convention** - `ComponentName.test.tsx` / `useThing.test.ts` (**not** `.spec.*` — the portal's `vitest.config.ts` only includes `src/**/*.test.{ts,tsx,js,jsx}`, so a `.spec.*` file never runs)
 - [ ] **FormWrapper usage** - For form/input component tests
 - [ ] **renderWithApp** - For full page tests
 - [ ] **MSW mocking** - For API calls

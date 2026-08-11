@@ -1,5 +1,5 @@
 {
   "name": "oc-fe-create-ui",
   "description": "Create UI page from JIRA ticket ID using the oc-fe-engineer sub-agent",
-  "version": "1.1.0"
+  "version": "1.2.0"
 }

@@ -117,6 +117,13 @@ $ARGUMENTS = "INTRD-36922 dev"
 
 #### Step 7: Create Test Artifacts
 
+**Before dispatching the agent, set up the AI-stats run directory** so its work stays measurable by `/oc-fe-calculate-ai-use` — a sub-agent's `Write`/`Edit` calls never appear in this session's transcript and are lost when it finishes.
+
+- Define `[RUN_ID]` = `{TICKET-NUMBER}-{yyyymmdd-HHMMSS}` (timestamp via `date -u +%Y%m%d-%H%M%S`) and create `.claude/cache/ai-stats/[RUN_ID]/` (it is git-ignored). Reuse an existing run directory for the same ticket if one is already there.
+- Add this line to the `oc-fe-e2e-expert` dispatch prompt: "Write your file manifest to `.claude/cache/ai-stats/[RUN_ID]/e2e.json` per your manifest instructions, then snapshot your first pass to `snapshots/e2e.diff`."
+- When the agent returns, check that `snapshots/e2e.diff` exists; if it is missing, capture it yourself **before editing any of those files** (`git diff HEAD -- <files from e2e.json> > .claude/cache/ai-stats/[RUN_ID]/snapshots/e2e.diff`) — a snapshot taken after your own edits makes retention a meaningless 100%.
+- Cheap and non-blocking: if any of it fails, continue creating the tests normally.
+
 1. **Create Page Object (if not exists):**
    - Create `tests/pages/[Feature]Page.ts`
    - Define locators using `getByTestId`, `getByRole`, `getByLabel`, `getByText`
@@ -161,6 +168,9 @@ $ARGUMENTS = "INTRD-36922 dev"
 3. **Generate report:**
    - Run: `npx playwright show-report`
    - Verify HTML report is generated with passing results
+
+4. **Point to the AI-usage measurement:**
+   - Once the specs are committed, mention that **`/oc-fe-calculate-ai-use`** records AI-usage stats on the ticket — it reads the manifest and snapshot this run wrote and reports the e2e tests added alongside the per-category contribution/retention.
 
 ## Examples
 

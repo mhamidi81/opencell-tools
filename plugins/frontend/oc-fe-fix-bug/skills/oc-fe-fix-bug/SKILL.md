@@ -102,6 +102,15 @@ $ARGUMENTS = "INTRD-36922 dev"
   - ( ) Free input from the user: "Enter branch name:"
 - If branch creation fails, report error and stop execution
 
+### Step 4b: Set Up the AI-Stats Run Directory
+
+This makes the AI's work measurable by `/oc-fe-calculate-ai-use` later. **A sub-agent's `Write`/`Edit` calls never appear in this session's transcript and are lost when the sub-agent finishes** — the manifests and snapshots written into this directory are the only record of them.
+
+- Define `[RUN_ID]` = `{TICKET-NUMBER}-{yyyymmdd-HHMMSS}` (timestamp via `date -u +%Y%m%d-%H%M%S`).
+- Create `.claude/cache/ai-stats/[RUN_ID]/` (it is git-ignored).
+- Pass a manifest path inside this directory to **every** sub-agent you dispatch below.
+- Cheap and non-blocking: if it fails, continue the fix normally.
+
 ### Step 5: Start Fixing
 
 - Read the JIRA ticket description and acceptance criteria from the ticket data
@@ -111,19 +120,55 @@ $ARGUMENTS = "INTRD-36922 dev"
   - Steps to reproduce (if available)
 - Start investigating and fixing the bug in the codebase
 
+**Record the analysis effort (best-effort, non-blocking).** If you presented an analysis or a fix approach to the developer before editing code — in plan mode or in prose — write `.claude/cache/ai-stats/[RUN_ID]/_planning.json` once they approve it. This work produces no committed code and is invisible to a line-based metric, so this file is what lets `/oc-fe-calculate-ai-use` credit it:
+
+```json
+{
+  "type": "planning",
+  "agent": "oc-fe-fix-bug",
+  "phase": "planning",
+  "ticket": "[TICKET-NUMBER]",
+  "run_id": "[RUN_ID]",
+  "planning_started": "<ISO-8601 UTC when you started reading the ticket>",
+  "plan_approved": "<ISO-8601 UTC now>",
+  "revision_rounds": <times you presented the approach; 1 if approved first try, +1 per requested revision>,
+  "plan_word_count": <word count of the approved approach>,
+  "plan_text": "<the approved approach, verbatim>",
+  "notes": "<1-2 lines: the root cause and the decision taken with the developer>"
+}
+```
+
+If you fixed the bug directly with no approach presented, skip this file — the analyzer reconstructs the planning window from the transcript.
+
+**If you delegate the fix to the `oc-fe-engineer` sub-agent**, add this line to its dispatch prompt:
+
+> "Write your file manifest to `.claude/cache/ai-stats/[RUN_ID]/component.json` per your manifest instructions, then snapshot your first pass to `snapshots/component.diff`."
+
+Your own edits in this (main) context need no manifest — the session transcript already captures them, and `/oc-fe-calculate-ai-use` reports them separately as the post-review fix contribution.
+
 ### Step 6: Write Tests for the Fix
 
 Once the fix is implemented, add test coverage for the changed code **before** the review step (which runs later in `/oc-commit`):
 
 - Use the **oc-fe-test-writer** sub-agent (via Task tool with `subagent_type: oc-fe-test-writer:oc-fe-test-writer`)
 - Pass it the [BASE-BRANCH] so it can compute the diff, plus the list of files you changed while fixing the bug
+- Add to its dispatch prompt: "Write your file manifest to `.claude/cache/ai-stats/[RUN_ID]/tests.json` per your manifest instructions, then snapshot your first pass to `snapshots/tests.diff`."
 - The agent will:
   - Inspect the git diff to find the changed React/TypeScript source files
-  - Write or update Vitest `*.spec.tsx` / `*.spec.ts` tests following project conventions
+  - Write or update Vitest `*.test.tsx` / `*.test.ts` tests following project conventions — the portal's `vitest.config.ts` only collects `src/**/*.test.{ts,tsx,js,jsx}`, so a `.spec.*` file would never run
   - Run Vitest to verify the new tests pass
 - Present the agent's report (test files created/updated and the run result) to the user
 - If the agent surfaces a real defect in the fix, address it before continuing
 - If there is no meaningfully testable change, note this and continue
+
+**Verify each agent's snapshot before you touch its files.** After every sub-agent returns, check that `.claude/cache/ai-stats/[RUN_ID]/snapshots/<phase>.diff` exists. If it is missing (an older agent, or it skipped the step), capture it yourself **immediately, before applying any review fixes**, from the manifest's file list:
+
+```bash
+mkdir -p .claude/cache/ai-stats/[RUN_ID]/snapshots
+git diff HEAD -- <files from <phase>.json> > .claude/cache/ai-stats/[RUN_ID]/snapshots/<phase>.diff
+```
+
+Do the fallback before your own edits so the snapshot reflects the AI's initial output, not your fixes — otherwise the snapshot equals the final code and retention is a meaningless 100%. Best-effort and non-blocking.
 
 ### Step 7: Mark the Ticket as Handled by the Frontend AI Dev
 
@@ -140,6 +185,10 @@ Once the bug is fixed, add the tag `ai_Dev_Front` to the JIRA **AI field** (`cus
    Expand `<...CURRENT-TAGS>` into the actual strings you read — every one of them must survive, including tags you don't recognise. Never drop or rename a tag you did not add.
 4. **If the read fails, do not write** — a blind write would clobber the field. Warn the user and skip the tagging.
 5. If the update fails, warn the user but continue.
+
+### Step 8: Point to the AI-Usage Measurement
+
+Remind the user, once the fix is committed, that they can run **`/oc-fe-calculate-ai-use`** to record AI-usage stats on the ticket. It reads the manifests and snapshots in `.claude/cache/ai-stats/[RUN_ID]/` (so sub-agent work and the analysis effort are attributed) plus this session's transcript (for your own edits), and reports contribution/retention per artifact category alongside the Vitest counts.
 
 ## Examples
 

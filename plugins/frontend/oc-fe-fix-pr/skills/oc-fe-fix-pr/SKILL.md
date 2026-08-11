@@ -134,6 +134,12 @@ Starting fixes...
 
 ### Step 7: Fix the Remarks
 
+**First, set up the AI-stats run directory.** This makes the AI's work measurable by `/oc-fe-calculate-ai-use` later — **a sub-agent's `Write`/`Edit` calls never appear in this session's transcript and are lost when the sub-agent finishes**, so the manifests and snapshots written here are the only record of them.
+
+- Define `[RUN_ID]` = `{TICKET-NUMBER or PR-[PR-ID]}-{yyyymmdd-HHMMSS}` (timestamp via `date -u +%Y%m%d-%H%M%S`).
+- Create `.claude/cache/ai-stats/[RUN_ID]/` (it is git-ignored).
+- Cheap and non-blocking: if it fails, continue the fixes normally.
+
 Delegate the code changes to the **oc-fe-engineer** sub-agent (via the Task tool with `subagent_type: oc-fe-engineer:oc-fe-engineer`).
 
 For each remark (or batched logically by file), pass the agent:
@@ -141,6 +147,7 @@ For each remark (or batched logically by file), pass the agent:
 - The remark text [COMMENT-TEXT] and its location [COMMENT-FILE]:[COMMENT-LINE].
 - Context: "This is reviewer feedback on PR #[PR-ID] ([PR-TITLE]). Apply the requested change on the current branch ([PR-SOURCE-BRANCH])."
 - Instruction: "Implement the fix for this review remark following the OpenCell Portal frontend conventions. Edit the relevant file(s) directly. If the remark is a question, not actionable, or already addressed, do not change code — explain why instead."
+- Manifest: "Write your file manifest to `.claude/cache/ai-stats/[RUN_ID]/component.json` per your manifest instructions, then snapshot your first pass to `snapshots/component.diff`." When you dispatch the agent more than once, give each dispatch its own phase name (`component-1.json`, `component-2.json`, …) so the manifests do not overwrite each other.
 
 Track for each remark whether it resulted in a code change ([ACTION] = `Fixed` / `Skipped — <reason>`) and the files touched. Keep this mapping for Steps 9 and 10.
 
@@ -150,10 +157,20 @@ Once the fixes are implemented, add test coverage for the changed code:
 
 - Use the **oc-fe-test-writer** sub-agent (via the Task tool with `subagent_type: oc-fe-test-writer:oc-fe-test-writer`).
 - Pass it [PR-DEST-BRANCH] as the base branch (so it can compute the diff) plus the list of files changed in Step 7.
-- The agent inspects the diff, writes/updates Vitest `*.spec.tsx` / `*.spec.ts` tests, and runs Vitest to verify they pass.
+- Add to its dispatch prompt: "Write your file manifest to `.claude/cache/ai-stats/[RUN_ID]/tests.json` per your manifest instructions, then snapshot your first pass to `snapshots/tests.diff`."
+- The agent inspects the diff, writes/updates Vitest `*.test.tsx` / `*.test.ts` tests (the portal's `vitest.config.ts` only collects `src/**/*.test.{ts,tsx,js,jsx}`, so a `.spec.*` file would never run), and runs Vitest to verify they pass.
 - Present the agent's report (tests created/updated and the run result).
 - If the agent surfaces a real defect in a fix, address it before continuing.
 - If there is no meaningfully testable change, note this and continue.
+
+**Verify each agent's snapshot before you touch its files.** After every sub-agent returns, check that `.claude/cache/ai-stats/[RUN_ID]/snapshots/<phase>.diff` exists; if it is missing, capture it yourself **immediately, before applying any fixes of your own**:
+
+```bash
+mkdir -p .claude/cache/ai-stats/[RUN_ID]/snapshots
+git diff HEAD -- <files from <phase>.json> > .claude/cache/ai-stats/[RUN_ID]/snapshots/<phase>.diff
+```
+
+A snapshot taken after your edits equals the final code and makes retention a meaningless 100%. Best-effort and non-blocking.
 
 ### Step 9: Commit & Push to the PR Branch
 
@@ -238,6 +255,8 @@ Present a summary:
 
 The PR has been updated. Review the remaining open remarks (if any) at [PR-URL].
 ```
+
+Then remind the user they can run **`/oc-fe-calculate-ai-use`** to record AI-usage stats on the ticket — it reads the manifests and snapshots in `.claude/cache/ai-stats/[RUN_ID]/` (so the fix agent's work is attributed) plus this session's transcript, and reports contribution/retention per artifact category.
 
 ---
 

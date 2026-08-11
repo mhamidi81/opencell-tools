@@ -1,5 +1,5 @@
 {
   "name": "oc-fe-test-writer",
   "description": "Frontend test writer sub-agent that writes Vitest tests for changed React/TypeScript code following OpenCell Portal testing conventions, plus the /oc-fe-write-tests command to invoke it directly on the diff or specific files",
-  "version": "1.1.0"
+  "version": "1.2.0"
 }
