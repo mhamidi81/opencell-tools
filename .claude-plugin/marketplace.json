@@ -96,7 +96,7 @@
     {
       "name": "oc-time-report",
       "source": "./plugins/common/oc-time-report",
-      "description": "Estimation-vs-logged-hours report over a period (independent of the AI-usage JSON) — Tempo-worklog driven, one row per ticket owned by its main developer, with type, area (from the developer roster), title, Architect & Dev-lead estimates, logged hours, bug hours, two time gains (Architect and Dev-lead, each without/with bugs), an AI-assistance flag and child-bug count. Writes date-stamped HTML + CSV to ./docs/. Atlassian MCP + Tempo (TEMPO_API_TOKEN)"
+      "description": "Estimation-vs-logged-hours report over a period (independent of the AI-usage JSON) — Tempo-worklog driven, one row per ticket owned by its main developer, with type, area (from the developer roster), title, Architect & Dev-lead estimates, logged hours, bug hours, two time gains (Architect and Dev-lead, each without/with bugs), an AI-assistance flag, the Jira status and a Final (terminal-status) flag, and child-bug count. Also writes a second finished-User-Story per-developer summary (HTML + CSV, AI-true/AI-false tables). Date-stamped HTML + CSV to ./docs/. Atlassian MCP + Tempo (TEMPO_API_TOKEN)"
     },
     {
       "name": "oc-figma-mcp",

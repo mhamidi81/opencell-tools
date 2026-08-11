@@ -8,10 +8,11 @@ argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD] [--o
 
 A team **estimation-vs-actual** report. Unlike `/oc-ai-report`, this one is **not** tied to the AI-usage JSON field — it is driven by **Tempo worklogs** and is **ticket-based**: one row per ticket, owned by its **main developer**, comparing the ticket's estimate to the team's actual logged time.
 
-> **Ticket · Type · Area · Title · Main dev · A. Est h · DL. Est h · Total dev h · Logged h · Bug h · AI · Arch gain (w/o · w bugs) · DL gain (w/o · w bugs) · Bugs · Contributors**
+> **Ticket · Type · Area · Title · Status · Final · Main dev · A. Est h · DL. Est h · Total dev h · Logged h · Bug h · AI · Arch gain (w/o · w bugs) · DL gain (w/o · w bugs) · Bugs · Contributors**
 
 - **Main developer** — the roster developer with the **most total hours** (logged + bug) on the ticket. The ticket is attributed to that person only; helpers still appear in **Contributors** but the ticket does **not** count in their own totals.
 - **Area** — the **main developer's** area (from the roster below), which also selects the estimate fields used.
+- **Status / Final** — the ticket's Jira status, and a **T** flag when that status is *terminal* for the ticket's type (**Bug**: Done/Invalid; **US**: Ready for Sprint review / Need documentation / Ready for release / Released; **others**: Done), matched case-insensitively.
 - **A. Est h** (Architect) — the Story's per-area estimate custom field for the main dev's area (days ×8), else the ticket's own estimate.
 - **DL. Est h** (Dev-lead) — for a **Story**, the sum of that area's child **sub-task** estimates (sub-bugs excluded); for a **Bug/Enabler**, the ticket's own estimate.
 - **Total dev h** — total development time on the ticket = **Logged h + Bug h** (the sum of all effort, bug-fixing included). Shown immediately before Logged h.
@@ -23,6 +24,8 @@ A team **estimation-vs-actual** report. Unlike `/oc-ai-report`, this one is **no
 - **Contributors** — every roster developer who logged on the ticket, `Name total (logged+bug)`, sorted by total.
 
 Output: Markdown in-session, plus a styled **HTML** file and a **CSV** of the detail rows, both date-stamped in `./docs/`.
+
+**Second report — finished-US per-developer summary.** The same run also writes `time-report-<TODAY>-us-summary.html` and `…-us-summary.csv` (derived from `--out`/`--csv` by inserting `-us-summary`). It considers **only User Stories in a final status**, grouped by **main developer**, in **two tables — one where AI is true and one where AI is false**. Columns: **Developer · US (final) · Avg bugs / US · Sum A. Est h · Sum logged h · Sum bug h · Sum total h · Gain (no bugs) · Gain (with bugs)** — the gains are `(Sum A. Est − Sum logged)/Sum A. Est` without / with bug hours (same `-` rule for meaningless gains). The CSV carries both groups with a leading **AI assisted** column.
 
 ## Access
 
@@ -96,7 +99,8 @@ If Tempo returns nothing, tell the user and stop.
 
 The rows are at **parent-ticket** granularity, so we need each worklogged issue plus its parent chain and the parents' full sub-task lists.
 
-1. **Worklogged issues** — `searchJiraIssuesUsingJql` `key in (<worklog_ids as keys>)` — but Tempo gives numeric ids; instead query by id: `issue in (<ids>)` is not valid, so use `id in (<ids>)` via JQL `id in (12345,...)` (Jira accepts numeric ids in `id in (...)`). Fields: `["summary","issuetype","components","timeoriginalestimate","parent","customfield_10157","customfield_10158","customfield_10189","customfield_10745"]`. Batch ≤ ~80 ids. Collect nodes.
+1. **Worklogged issues** — `searchJiraIssuesUsingJql` `key in (<worklog_ids as keys>)` — but Tempo gives numeric ids; instead query by id: `issue in (<ids>)` is not valid, so use `id in (<ids>)` via JQL `id in (12345,...)` (Jira accepts numeric ids in `id in (...)`). Fields: `["summary","issuetype","components","timeoriginalestimate","parent","status","customfield_10157","customfield_10158","customfield_10189","customfield_10745"]`. Batch ≤ ~80 ids. Collect nodes.
+   - `status` drives the **Status** column and the **Final** flag: a ticket is *final* when its Jira status (case-insensitive) is terminal for its type — **Bug**: Done / Invalid; **US**: Ready for Sprint review / Need documentation / Ready for release / Released; **any other type**: Done. The finished-User-Story summary (below) counts only US with Final = true.
    - `customfield_10745` is the **"AI metrics"** field. Its presence (non-empty) marks a ticket as **developed with AI assistance** — the aggregator renders an **AI** badge per ticket and an **AI tk** (AI-assisted / total) count in the aggregates. A ticket is flagged if it *or any of its rolled-up sub-issues* carries the field, so a sub-bug's AI record surfaces on its parent row. Steps 2 & 3 fetch the **same fields**, so children carry it too.
 2. **Parents** — from those nodes, collect every `fields.parent.key` not already fetched; fetch them (same fields) so every rolled-up ticket is present.
 3. **All sub-tasks of the tickets** — for the set of parent-ticket keys (the union of top-level worklogged issues and the parents from step 2), fetch `parent in (<ticketKeys>)` (same fields) so Dev-lead estimate and bug counts see every sub-task, not only worklogged ones.
@@ -182,6 +186,12 @@ DAY_HOURS = 8
 BUG_TYPES = {"bug", "sub-bug"}
 SUBTASK_TYPES = {"sub-task", "sub-bug", "sub test execution", "sub-test execution"}
 TYPE_MAP = {"story": "US", "bug": "Bug", "sub-bug": "Bug", "enabler": "Enabler"}
+# "final" (terminal) status per ticket type, matched case-insensitively:
+FINAL_STATUS = {
+    "Bug": {"done", "invalid"},
+    "US": {"ready for sprint review", "need documentation", "ready for release", "released"},
+}
+DEFAULT_FINAL = {"done"}  # Enabler and any other type
 
 def nodes(data):
     if isinstance(data, list): return data
@@ -201,6 +211,9 @@ def is_subtask(f): return ((f.get("issuetype") or {}).get("name") or "").lower()
 def ticket_type(f):
     n = (f.get("issuetype") or {}).get("name") or ""
     return TYPE_MAP.get(n.lower(), n or "?")
+def status_of(f): return ((f.get("status") or {}).get("name") or "").strip()
+def is_final(ttype, status):
+    return (status or "").strip().lower() in FINAL_STATUS.get(ttype, DEFAULT_FINAL)
 
 def area_of(f):
     for c in f.get("components") or []:
@@ -292,7 +305,10 @@ def build_ticket_rows(parents, children_nodes, tempo, devmap, project):
             contrib.append({"name": devmap[acc]["name"], "logged": hours(agg["logged"].get(acc, 0)),
                             "bug": hours(agg["bug"].get(acc, 0)), "total": hours(tot[acc])})
         ai = is_ai(tf) or any(is_ai(c.get("fields") or {}) for c in children.get(tkey, []))
+        status = status_of(tf)
+        final = is_final(ttype, status)
         rows.append({"key": tkey, "ttype": ttype, "area": area, "title": (tf.get("summary") or "")[:70],
+                     "status": status, "final": final,
                      "main": devmap[main]["name"], "mainAcc": main,
                      "aEst": a_est, "dlEst": dl_est, "logged": logged, "bugLogged": bug_logged,
                      "bugs": bugs, "ai": ai, "contrib": contrib})
@@ -301,6 +317,122 @@ def build_ticket_rows(parents, children_nodes, tempo, devmap, project):
 
 def contrib_str(contrib):
     return "; ".join(f"{c['name']} {c['total']} ({c['logged']}+{c['bug']})" for c in contrib)
+
+def us_summary_by_dev(rows):
+    """Per-developer aggregates over finished User Stories only, split by AI true/false.
+    Returns {True: [devrow, ...], False: [...]} sorted by developer name."""
+    buckets = {True: defaultdict(list), False: defaultdict(list)}
+    for r in rows:
+        if r["ttype"] != "US" or not r["final"]:
+            continue
+        buckets[bool(r["ai"])][r["main"]].append(r)
+    out = {}
+    for ai_flag, per_dev in buckets.items():
+        devrows = []
+        for dev in sorted(per_dev, key=str.lower):
+            rs = per_dev[dev]
+            n = len(rs)
+            sum_aest = round(sum(x["aEst"] for x in rs), 1)
+            sum_log = round(sum(x["logged"] for x in rs), 1)
+            sum_bug = round(sum(x["bugLogged"] for x in rs), 1)
+            devrows.append({
+                "dev": dev, "nUS": n,
+                "avgBugs": round(sum(x["bugs"] for x in rs) / n, 2),
+                "sumAEst": sum_aest, "sumLogged": sum_log, "sumBug": sum_bug,
+                "sumTotal": round(sum_log + sum_bug, 1),
+                "gainNoBug": gain_pct(sum_aest, sum_log),
+                "gainBug": gain_pct(sum_aest, sum_log + sum_bug),
+            })
+        out[ai_flag] = devrows
+    return out
+
+def write_us_summary(rows, html_path, csv_path, project, since, until):
+    """Write the per-developer finished-US summary as its own HTML (two tables: AI true / false)
+    and, if csv_path is given, a CSV (both groups, with an AI column)."""
+    summ = us_summary_by_dev(rows)
+    COLS = [("dev", "Developer"), ("nUS", "US (final)"), ("avgBugs", "Avg bugs / US"),
+            ("sumAEst", "Sum A. Est h"), ("sumLogged", "Sum logged h"), ("sumBug", "Sum bug h"),
+            ("sumTotal", "Sum total h"), ("gainNoBug", "Gain (no bugs)"), ("gainBug", "Gain (with bugs)")]
+    numcols = {"nUS", "avgBugs", "sumAEst", "sumLogged", "sumBug", "sumTotal", "gainNoBug", "gainBug"}
+
+    def table_html(devrows, label):
+        h = [f'<h2>AI-assisted: {label}</h2>']
+        if not devrows:
+            return "".join(h) + '<p class="meta">No finished User Stories in this group.</p>'
+        h.append('<div class="tw"><table><thead><tr>'
+                 + "".join(f'<th class="{ "r" if k in numcols else "" }">{e(t)}</th>' for k, t in COLS)
+                 + "</tr></thead><tbody>")
+        for d in devrows:
+            cells = []
+            for k, _ in COLS:
+                if k in ("gainNoBug", "gainBug"):
+                    cells.append(f'<td class="r">{gain_str(d[k])}</td>')
+                elif k == "dev":
+                    cells.append(f'<td class="name">{e(d[k])}</td>')
+                else:
+                    cells.append(f'<td class="r">{d[k]}</td>')
+            h.append("<tr>" + "".join(cells) + "</tr>")
+        h.append("</tbody></table></div>")
+        return "".join(h)
+
+    body = [f"<h1>Finished User Stories &mdash; per-developer summary</h1>",
+            f'<p class="meta">Project <b>{e(project)}</b> &middot; [{e(since or "…")} … {e(until or "…")}) '
+            f'&middot; only <b>User Stories</b> in a final status &middot; grouped by main developer</p>',
+            table_html(summ.get(True, []), "true"),
+            table_html(summ.get(False, []), "false"),
+            '<p class="foot">Only <b>User Stories</b> whose status is final '
+            '(Ready for Sprint review / Need documentation / Ready for release / Released) are counted, '
+            'attributed to their <b>main developer</b>. <b>Avg bugs / US</b> = mean child Bug/Sub-bug count. '
+            'Sums are over that developer\'s finished US. <b>Gain</b> = (Sum A. Est &minus; Sum logged)/Sum A. Est, '
+            'without / with bug hours; a dash marks a meaningless gain. Generated by <code>/oc-time-report</code>.</p>']
+    doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finished US summary — {e(project)} {e(since or '')}…{e(until or '')}</title>
+<style>
+:root {{ color-scheme: light dark; --bg:#f7f8fa; --fg:#1a1d21; --muted:#6b7280; --line:#e3e6ea;
+  --head:#eef1f5; --accent:#2563eb; --zebra:#fafbfc; }}
+@media (prefers-color-scheme: dark) {{ :root {{ --bg:#0f1216; --fg:#e6e8eb; --muted:#9aa3ad;
+  --line:#242a31; --head:#171b21; --accent:#6ea8fe; --zebra:#12161c; }} }}
+* {{ box-sizing:border-box; }}
+body {{ margin:0; padding:2rem 1.25rem 3rem; background:var(--bg); color:var(--fg);
+  font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }}
+.wrap {{ width:100%; }}
+h1 {{ font-size:1.6rem; margin:0 0 .25rem; }}
+h2 {{ font-size:1.15rem; margin:2rem 0 .6rem; padding-bottom:.35rem; border-bottom:2px solid var(--line); }}
+.meta {{ color:var(--muted); margin:0 0 1.25rem; }}
+.tw {{ border:1px solid var(--line); border-radius:10px; }}
+table {{ border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }}
+th, td {{ padding:.5rem .7rem; text-align:left; white-space:nowrap; border-bottom:1px solid var(--line); }}
+thead th {{ background:var(--head); font-weight:600; position:sticky; top:0; }}
+tbody tr:nth-child(even) {{ background:var(--zebra); }}
+.r {{ text-align:right; }}
+.name {{ font-weight:600; }}
+.foot {{ color:var(--muted); font-size:.8rem; margin-top:2rem; border-top:1px solid var(--line); padding-top:1rem; }}
+</style></head><body><div class="wrap">
+{"".join(body)}
+</div></body></html>"""
+    os.makedirs(os.path.dirname(os.path.abspath(html_path)) or ".", exist_ok=True)
+    open(html_path, "w", encoding="utf-8").write(doc)
+
+    if csv_path:
+        with open(csv_path, "w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.writer(fh)
+            w.writerow(["AI assisted"] + [t for _, t in COLS])
+            for ai_flag, label in ((True, "Yes"), (False, "No")):
+                for d in summ.get(ai_flag, []):
+                    row = [label]
+                    for k, _ in COLS:
+                        if k in ("gainNoBug", "gainBug"):
+                            g = d[k]
+                            row.append("-" if (g is None or abs(g) > GAIN_CAP) else g)
+                        else:
+                            row.append(d[k])
+                    w.writerow(row)
+    return summ
+
+def _summary_path(path, tag):
+    base, ext = os.path.splitext(path)
+    return f"{base}-{tag}{ext}"
 
 def main():
     ap = argparse.ArgumentParser()
@@ -351,10 +483,10 @@ def main():
               f"{gain_two(g['dlEst'], g['logged'], g['bugLogged'])} | {g['bugs']} |")
         # Detail (one row per ticket)
         P("\n## Detail (by ticket)\n")
-        P("| Ticket | Type | Area | Title | Main dev | A. Est h | DL. Est h | Total dev h | Logged h | Bug h | AI | Arch gain | DL gain | Bugs | Contributors |")
-        P("|---|---|---|---|---|--:|--:|--:|--:|--:|:--:|--:|--:|--:|---|")
+        P("| Ticket | Type | Area | Title | Status | Final | Main dev | A. Est h | DL. Est h | Total dev h | Logged h | Bug h | AI | Arch gain | DL gain | Bugs | Contributors |")
+        P("|---|---|---|---|---|:--:|---|--:|--:|--:|--:|--:|:--:|--:|--:|--:|---|")
         for r in rows:
-            P(f"| {r['key']} | {r['ttype']} | {r['area']} | {r['title']} | {r['main']} | {r['aEst']} | {r['dlEst']} | "
+            P(f"| {r['key']} | {r['ttype']} | {r['area']} | {r['title']} | {r['status']} | {'T' if r['final'] else ''} | {r['main']} | {r['aEst']} | {r['dlEst']} | "
               f"{round(r['logged'] + r['bugLogged'],1)} | {r['logged']} | {r['bugLogged']} | {ai_yn(r['ai'])} | {gain_two(r['aEst'], r['logged'], r['bugLogged'])} | "
               f"{gain_two(r['dlEst'], r['logged'], r['bugLogged'])} | {r['bugs']} | {contrib_str(r['contrib'])} |")
     md_text = "\n".join(md)
@@ -366,11 +498,11 @@ def main():
         os.makedirs(os.path.dirname(os.path.abspath(a.csv)) or ".", exist_ok=True)
         with open(a.csv, "w", encoding="utf-8-sig", newline="") as fh:
             w = csv.writer(fh)
-            w.writerow(["Ticket", "Type", "Area", "Title", "Main developer", "A. Est h", "DL. Est h",
+            w.writerow(["Ticket", "Type", "Area", "Title", "Status", "Final status", "Main developer", "A. Est h", "DL. Est h",
                         "Total dev h", "Logged h", "Bug h", "AI assisted", "Arch gain % (no bugs)", "Arch gain % (with bugs)",
                         "DL gain % (no bugs)", "DL gain % (with bugs)", "Bugs", "Contributors"])
             for r in rows:
-                w.writerow([r["key"], r["ttype"], r["area"], r["title"], r["main"], r["aEst"], r["dlEst"],
+                w.writerow([r["key"], r["ttype"], r["area"], r["title"], r["status"], "T" if r["final"] else "", r["main"], r["aEst"], r["dlEst"],
                             round(r["logged"] + r["bugLogged"], 1), r["logged"], r["bugLogged"], "Yes" if r["ai"] else "No",
                             gain_cell(r["aEst"], r["logged"]), gain_cell(r["aEst"], r["logged"] + r["bugLogged"]),
                             gain_cell(r["dlEst"], r["logged"]), gain_cell(r["dlEst"], r["logged"] + r["bugLogged"]),
@@ -385,15 +517,16 @@ def main():
         W('<p>No logged time for the roster in this window.</p>')
     else:
         W("<h2>Detail (one row per ticket)</h2>")
-        head = ["Ticket", "Type", "Area", "Title", "Main dev", "A. Est h", "DL. Est h", "Total dev h", "Logged h", "Bug h", "AI", "Arch gain", "DL gain", "Bugs", "Contributors"]
-        left = {"Ticket", "Type", "Area", "Title", "Main dev", "Contributors"}
-        cent = {"AI"}
+        head = ["Ticket", "Type", "Area", "Title", "Status", "Final", "Main dev", "A. Est h", "DL. Est h", "Total dev h", "Logged h", "Bug h", "AI", "Arch gain", "DL gain", "Bugs", "Contributors"]
+        left = {"Ticket", "Type", "Area", "Title", "Status", "Main dev", "Contributors"}
+        cent = {"AI", "Final"}
         W('<div class="tw"><table><thead><tr>' + "".join(f'<th class="{ "c" if h in cent else ("" if h in left else "r") }">{e(h)}</th>' for h in head) + "</tr></thead><tbody>")
         AIBADGE = '<span class="aibadge">AI</span>'
         for r in rows:
             aicell = AIBADGE if r["ai"] else ""
+            finalcell = '<span class="finalbadge">T</span>' if r["final"] else ""
             W(f'<tr><td class="key">{e(r["key"])}</td><td>{e(r["ttype"])}</td><td>{e(r["area"])}</td>'
-              f'<td>{e(r["title"])}</td><td class="name">{e(r["main"])}</td><td class="r">{r["aEst"]}</td><td class="r">{r["dlEst"]}</td>'
+              f'<td>{e(r["title"])}</td><td>{e(r["status"])}</td><td class="c">{finalcell}</td><td class="name">{e(r["main"])}</td><td class="r">{r["aEst"]}</td><td class="r">{r["dlEst"]}</td>'
               f'<td class="r">{round(r["logged"] + r["bugLogged"], 1)}</td><td class="r">{r["logged"]}</td><td class="r">{r["bugLogged"]}</td>'
               f'<td class="c">{aicell}</td>'
               f'<td class="r">{gain_two(r["aEst"], r["logged"], r["bugLogged"])}</td>'
@@ -408,6 +541,8 @@ def main():
       '(&le;0.5h, e.g. a 0.01-day field), no logged time, or a magnitude beyond &plusmn;1000%. '
       'The <b>AI</b> badge (and <b>AI tk</b> = AI-assisted / total in the aggregates) marks a ticket carrying an '
       'AI-usage record (the "AI metrics" field), i.e. developed with AI assistance. '
+      '<b>Status</b> is the ticket\'s Jira status; <b>Final</b> (T) marks a ticket in a terminal status for its type '
+      '(Bug: Done/Invalid; US: Ready for Sprint review / Need documentation / Ready for release / Released; others: Done). '
       'Generated by <code>/oc-time-report</code>.</p>')
     body = "\n".join(B)
     doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -434,6 +569,8 @@ tbody tr:nth-child(even) {{ background:var(--zebra); }}
 .c {{ text-align:center; }}
 .aibadge {{ display:inline-block; font-size:.7rem; font-weight:700; letter-spacing:.03em; color:#fff;
   background:var(--accent); border-radius:4px; padding:.05rem .35rem; }}
+.finalbadge {{ display:inline-block; font-size:.7rem; font-weight:700; color:#fff;
+  background:#16a34a; border-radius:4px; padding:.05rem .4rem; }}
 .name {{ font-weight:600; }}
 .sm {{ color:var(--muted); font-size:.85em; }}
 .key {{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--accent); font-weight:600; }}
@@ -442,6 +579,15 @@ tbody tr:nth-child(even) {{ background:var(--zebra); }}
 {body}
 </div></body></html>"""
     open(a.out, "w", encoding="utf-8").write(doc)
+
+    # ---------- Finished-US per-developer summary (second report) ----------
+    summ_html = _summary_path(a.out, "us-summary")
+    summ_csv = _summary_path(a.csv, "us-summary") if a.csv else None
+    summ = write_us_summary(rows, summ_html, summ_csv, a.project, a.since, a.until)
+    n_true = len(summ.get(True, [])); n_false = len(summ.get(False, []))
+    print(f"\nFinished-US summary: {summ_html}"
+          + (f" + {summ_csv}" if summ_csv else "")
+          + f"  ({n_true} dev(s) with AI, {n_false} without)")
 
 if __name__ == "__main__":
     main()
