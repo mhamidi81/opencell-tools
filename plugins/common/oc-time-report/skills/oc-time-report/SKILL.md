@@ -8,12 +8,13 @@ argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD] [--o
 
 A team **estimation-vs-actual** report. Unlike `/oc-ai-report`, this one is **not** tied to the AI-usage JSON field — it is driven by **Tempo worklogs** and is **ticket-based**: one row per ticket, owned by its **main developer**, comparing the ticket's estimate to the team's actual logged time.
 
-> **Ticket · Type · Area · Title · Main dev · A. Est h · DL. Est h · Logged h · Bug h · AI · Arch gain (w/o · w bugs) · DL gain (w/o · w bugs) · Bugs · Contributors**
+> **Ticket · Type · Area · Title · Main dev · A. Est h · DL. Est h · Total dev h · Logged h · Bug h · AI · Arch gain (w/o · w bugs) · DL gain (w/o · w bugs) · Bugs · Contributors**
 
 - **Main developer** — the roster developer with the **most total hours** (logged + bug) on the ticket. The ticket is attributed to that person only; helpers still appear in **Contributors** but the ticket does **not** count in their own totals.
 - **Area** — the **main developer's** area (from the roster below), which also selects the estimate fields used.
 - **A. Est h** (Architect) — the Story's per-area estimate custom field for the main dev's area (days ×8), else the ticket's own estimate.
 - **DL. Est h** (Dev-lead) — for a **Story**, the sum of that area's child **sub-task** estimates (sub-bugs excluded); for a **Bug/Enabler**, the ticket's own estimate.
+- **Total dev h** — total development time on the ticket = **Logged h + Bug h** (the sum of all effort, bug-fixing included). Shown immediately before Logged h.
 - **Logged h** — the **whole ticket's** Tempo hours on the ticket + its **non-bug** sub-tasks, summed across **all contributors** (subtasks rolled up to the parent).
 - **Bug h** — the whole ticket's Tempo hours on its child **Bug/Sub-bug** sub-tasks, across all contributors.
 - **Arch gain / DL gain** — two time gains, `(Est − Logged)/Est` and `(Est − (Logged+Bug h))/Est`, `without / with` bug hours, computed against the **Architect** and **Dev-lead** estimate respectively. A gain shows as **`-`** when it is meaningless: a placeholder estimate (≤0.5h, e.g. a 0.01-day field), no logged time, or a magnitude beyond ±1000%.
@@ -326,13 +327,13 @@ def main():
             for k in ("aEst", "dlEst", "logged", "bugLogged", "bugs"): g[k] += r[k]
             g["ai"] += int(r["ai"])
         P("## Totals by area\n")
-        P("| Area | Devs | Tickets | A. Est h | DL. Est h | Logged h | Bug h | AI tk | Arch gain | DL gain | Bugs |")
-        P("|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
+        P("| Area | Devs | Tickets | A. Est h | DL. Est h | Total dev h | Logged h | Bug h | AI tk | Arch gain | DL gain | Bugs |")
+        P("|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
         for ar in ("backend", "frontend", "qa"):
             if ar not in AR: continue
             g = AR[ar]
             P(f"| {ar.capitalize()} | {len(g['devs'])} | {g['tickets']} | {round(g['aEst'],1)} | {round(g['dlEst'],1)} | "
-              f"{round(g['logged'],1)} | {round(g['bugLogged'],1)} | {g['ai']}/{g['tickets']} | {gain_two(g['aEst'], g['logged'], g['bugLogged'])} | "
+              f"{round(g['logged'] + g['bugLogged'],1)} | {round(g['logged'],1)} | {round(g['bugLogged'],1)} | {g['ai']}/{g['tickets']} | {gain_two(g['aEst'], g['logged'], g['bugLogged'])} | "
               f"{gain_two(g['dlEst'], g['logged'], g['bugLogged'])} | {g['bugs']} |")
         # Summary by developer (as main developer)
         DV = defaultdict(lambda: {"area": "", "tickets": 0, "aEst": 0.0, "dlEst": 0.0, "logged": 0.0, "bugLogged": 0.0, "bugs": 0, "ai": 0})
@@ -341,20 +342,20 @@ def main():
             for k in ("aEst", "dlEst", "logged", "bugLogged", "bugs"): g[k] += r[k]
             g["ai"] += int(r["ai"])
         P("\n## Summary by developer (owned tickets)\n")
-        P("| Developer | Area | Tickets | A. Est h | DL. Est h | Logged h | Bug h | AI tk | Arch gain | DL gain | Bugs |")
-        P("|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
+        P("| Developer | Area | Tickets | A. Est h | DL. Est h | Total dev h | Logged h | Bug h | AI tk | Arch gain | DL gain | Bugs |")
+        P("|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
         for dev in sorted(DV, key=str.lower):
             g = DV[dev]
             P(f"| {dev} | {g['area']} | {g['tickets']} | {round(g['aEst'],1)} | {round(g['dlEst'],1)} | "
-              f"{round(g['logged'],1)} | {round(g['bugLogged'],1)} | {g['ai']}/{g['tickets']} | {gain_two(g['aEst'], g['logged'], g['bugLogged'])} | "
+              f"{round(g['logged'] + g['bugLogged'],1)} | {round(g['logged'],1)} | {round(g['bugLogged'],1)} | {g['ai']}/{g['tickets']} | {gain_two(g['aEst'], g['logged'], g['bugLogged'])} | "
               f"{gain_two(g['dlEst'], g['logged'], g['bugLogged'])} | {g['bugs']} |")
         # Detail (one row per ticket)
         P("\n## Detail (by ticket)\n")
-        P("| Ticket | Type | Area | Title | Main dev | A. Est h | DL. Est h | Logged h | Bug h | AI | Arch gain | DL gain | Bugs | Contributors |")
-        P("|---|---|---|---|---|--:|--:|--:|--:|:--:|--:|--:|--:|---|")
+        P("| Ticket | Type | Area | Title | Main dev | A. Est h | DL. Est h | Total dev h | Logged h | Bug h | AI | Arch gain | DL gain | Bugs | Contributors |")
+        P("|---|---|---|---|---|--:|--:|--:|--:|--:|:--:|--:|--:|--:|---|")
         for r in rows:
             P(f"| {r['key']} | {r['ttype']} | {r['area']} | {r['title']} | {r['main']} | {r['aEst']} | {r['dlEst']} | "
-              f"{r['logged']} | {r['bugLogged']} | {ai_yn(r['ai'])} | {gain_two(r['aEst'], r['logged'], r['bugLogged'])} | "
+              f"{round(r['logged'] + r['bugLogged'],1)} | {r['logged']} | {r['bugLogged']} | {ai_yn(r['ai'])} | {gain_two(r['aEst'], r['logged'], r['bugLogged'])} | "
               f"{gain_two(r['dlEst'], r['logged'], r['bugLogged'])} | {r['bugs']} | {contrib_str(r['contrib'])} |")
     md_text = "\n".join(md)
     if a.md: open(a.md, "w", encoding="utf-8").write(md_text)
@@ -366,11 +367,11 @@ def main():
         with open(a.csv, "w", encoding="utf-8-sig", newline="") as fh:
             w = csv.writer(fh)
             w.writerow(["Ticket", "Type", "Area", "Title", "Main developer", "A. Est h", "DL. Est h",
-                        "Logged h", "Bug h", "AI assisted", "Arch gain % (no bugs)", "Arch gain % (with bugs)",
+                        "Total dev h", "Logged h", "Bug h", "AI assisted", "Arch gain % (no bugs)", "Arch gain % (with bugs)",
                         "DL gain % (no bugs)", "DL gain % (with bugs)", "Bugs", "Contributors"])
             for r in rows:
                 w.writerow([r["key"], r["ttype"], r["area"], r["title"], r["main"], r["aEst"], r["dlEst"],
-                            r["logged"], r["bugLogged"], "Yes" if r["ai"] else "No",
+                            round(r["logged"] + r["bugLogged"], 1), r["logged"], r["bugLogged"], "Yes" if r["ai"] else "No",
                             gain_cell(r["aEst"], r["logged"]), gain_cell(r["aEst"], r["logged"] + r["bugLogged"]),
                             gain_cell(r["dlEst"], r["logged"]), gain_cell(r["dlEst"], r["logged"] + r["bugLogged"]),
                             r["bugs"], contrib_str(r["contrib"])])
@@ -384,7 +385,7 @@ def main():
         W('<p>No logged time for the roster in this window.</p>')
     else:
         W("<h2>Detail (one row per ticket)</h2>")
-        head = ["Ticket", "Type", "Area", "Title", "Main dev", "A. Est h", "DL. Est h", "Logged h", "Bug h", "AI", "Arch gain", "DL gain", "Bugs", "Contributors"]
+        head = ["Ticket", "Type", "Area", "Title", "Main dev", "A. Est h", "DL. Est h", "Total dev h", "Logged h", "Bug h", "AI", "Arch gain", "DL gain", "Bugs", "Contributors"]
         left = {"Ticket", "Type", "Area", "Title", "Main dev", "Contributors"}
         cent = {"AI"}
         W('<div class="tw"><table><thead><tr>' + "".join(f'<th class="{ "c" if h in cent else ("" if h in left else "r") }">{e(h)}</th>' for h in head) + "</tr></thead><tbody>")
@@ -393,7 +394,7 @@ def main():
             aicell = AIBADGE if r["ai"] else ""
             W(f'<tr><td class="key">{e(r["key"])}</td><td>{e(r["ttype"])}</td><td>{e(r["area"])}</td>'
               f'<td>{e(r["title"])}</td><td class="name">{e(r["main"])}</td><td class="r">{r["aEst"]}</td><td class="r">{r["dlEst"]}</td>'
-              f'<td class="r">{r["logged"]}</td><td class="r">{r["bugLogged"]}</td>'
+              f'<td class="r">{round(r["logged"] + r["bugLogged"], 1)}</td><td class="r">{r["logged"]}</td><td class="r">{r["bugLogged"]}</td>'
               f'<td class="c">{aicell}</td>'
               f'<td class="r">{gain_two(r["aEst"], r["logged"], r["bugLogged"])}</td>'
               f'<td class="r">{gain_two(r["dlEst"], r["logged"], r["bugLogged"])}</td><td class="r">{r["bugs"]}</td>'

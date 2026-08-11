@@ -311,14 +311,14 @@ def main():
         g = areas[r["area"]]; g["contrib"].append(r["contrib"]); g["retain"].append(r["retain"])
         for k in SUM: g[k] += r[k]
     P("## Totals by area (sum of detail rows)\n")
-    P("| Area | Rows | AI Contrib | Retain | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Logged h | Bug h | Arch gain | DL gain | Bugs |")
-    P("|---|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
+    P("| Area | Rows | AI Contrib | Retain | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Total dev h | Logged h | Bug h | Arch gain | DL gain | Bugs |")
+    P("|---|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
     for ar in AREAS:
         g = areas[ar]
         if not g["contrib"]: continue
         P(f"| {ar.capitalize()} | {len(g['contrib'])} | {avg(g['contrib'])}% | {avg(g['retain'])}% | "
           f"{g['utAdd']}/{g['utMod']} | {g['pmTests']} | {g['turns']} | {round(g['aEst'],1)} | {round(g['dlEst'],1)} | "
-          f"{round(g['logged'],1)} | {round(g['bugLogged'],1)} | {gain_two(g['aEst'], g['logged'], g['bugLogged'])} | "
+          f"{round(g['logged'] + g['bugLogged'],1)} | {round(g['logged'],1)} | {round(g['bugLogged'],1)} | {gain_two(g['aEst'], g['logged'], g['bugLogged'])} | "
           f"{gain_two(g['dlEst'], g['logged'], g['bugLogged'])} | {g['bugs']} |")
 
     # ---- Summary by user ----
@@ -330,12 +330,12 @@ def main():
         u["contrib"].append(r["contrib"]); u["retain"].append(r["retain"]); u["rework"].append(r["rework"])
         for k in SUM: u[k] += r[k]
     P("\n## Summary by user\n")
-    P("| User | Area | Tickets | AI Contrib | Retain | Rework | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Logged h | Bug h | Arch gain | DL gain | Bugs |")
-    P("|---|---|--:|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
+    P("| User | Area | Tickets | AI Contrib | Retain | Rework | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Total dev h | Logged h | Bug h | Arch gain | DL gain | Bugs |")
+    P("|---|---|--:|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
     for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
         P(f"| {u['name']} | {'/'.join(sorted(u['areas']))} | {len(u['tickets'])} | {avg(u['contrib'])}% | "
           f"{avg(u['retain'])}% | {avg(u['rework'])}% | {u['utAdd']}/{u['utMod']} | {u['pmTests']} | {u['turns']} | "
-          f"{round(u['aEst'],1)} | {round(u['dlEst'],1)} | {round(u['logged'],1)} | {round(u['bugLogged'],1)} | "
+          f"{round(u['aEst'],1)} | {round(u['dlEst'],1)} | {round(u['logged'] + u['bugLogged'],1)} | {round(u['logged'],1)} | {round(u['bugLogged'],1)} | "
           f"{gain_two(u['aEst'], u['logged'], u['bugLogged'])} | {gain_two(u['dlEst'], u['logged'], u['bugLogged'])} | {u['bugs']} |")
 
     # ---- Detail per user, by ticket ----
@@ -344,11 +344,11 @@ def main():
     for r in rows: by_user[r["acc"]].append(r)
     for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
         P(f"\n### {u['name']}\n")
-        P("| Ticket | Date | Type | Area | Summary | AI Contrib | Retain | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Logged h | Bug h | Arch gain | DL gain | Bugs |")
-        P("|---|---|---|---|---|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
+        P("| Ticket | Date | Type | Area | Summary | AI Contrib | Retain | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Total dev h | Logged h | Bug h | Arch gain | DL gain | Bugs |")
+        P("|---|---|---|---|---|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
         for r in sorted(by_user[acc], key=lambda x: (x["at"], x["key"])):
             P(f"| {r['key']} | {r['at']} | {r['ttype']} | {r['area']} | {r['summary']} | {r['contrib']}% | {r['retain']}% | "
-              f"{r['utAdd']}/{r['utMod']} | {r['pmTests']} | {r['turns']} | {r['aEst']} | {r['dlEst']} | {r['logged']} | "
+              f"{r['utAdd']}/{r['utMod']} | {r['pmTests']} | {r['turns']} | {r['aEst']} | {r['dlEst']} | {round(r['logged'] + r['bugLogged'],1)} | {r['logged']} | "
               f"{r['bugLogged']} | {gain_two(r['aEst'], r['logged'], r['bugLogged'])} | {gain_two(r['dlEst'], r['logged'], r['bugLogged'])} | {r['bugs']} |")
     print("\n".join(out))
 
@@ -526,7 +526,7 @@ CSV_COLS = [
     ("contrib", "AI Contrib %"), ("retain", "Retain %"), ("rework", "Rework %"),
     ("utAdd", "U.tests added"), ("utMod", "U.tests modified"), ("pmTests", "P.tests"),
     ("turns", "Requests"), ("aEst", "A. Est h"), ("dlEst", "DL. Est h"),
-    ("logged", "Logged h"), ("bugLogged", "Bug h"),
+    ("totalDev", "Total dev h"), ("logged", "Logged h"), ("bugLogged", "Bug h"),
     ("gain", "Arch gain % (no bugs)"), ("gainBug", "Arch gain % (with bugs)"),
     ("gainDl", "DL gain % (no bugs)"), ("gainDlBug", "DL gain % (with bugs)"), ("bugs", "Bugs"),
 ]
@@ -539,6 +539,7 @@ def write_csv(rows, path):
         w.writerow([h for _, h in CSV_COLS])
         for r in sorted(rows, key=lambda x: (x["area"], x["name"].lower(), x["at"], x["key"])):
             r = dict(r)
+            r["totalDev"] = round(r["logged"] + r["bugLogged"], 1)
             r["gain"] = gain_cell(r["aEst"], r["logged"])
             r["gainBug"] = gain_cell(r["aEst"], r["logged"] + r["bugLogged"])
             r["gainDl"] = gain_cell(r["dlEst"], r["logged"])
@@ -601,7 +602,7 @@ def main():
 
         # ---- Totals by area (shown first) ----
         W("<h2>Totals by area <span class=\"sub\">(sum of detail rows)</span></h2>")
-        AH = ["Rows","Avg AI contrib","Avg retain","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Logged h","Bug h","Arch gain","DL gain","Bugs"]
+        AH = ["Rows","Avg AI contrib","Avg retain","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Total dev h","Logged h","Bug h","Arch gain","DL gain","Bugs"]
         W('<div class="tw"><table><thead><tr><th>Area</th>'
           + "".join(f'<th class="r">{e(h)}</th>' for h in AH) + "</tr></thead><tbody>")
         for ar in AREAS:
@@ -612,14 +613,14 @@ def main():
               f'<td class="r">{pct(avg(g["contrib"]))}</td><td class="r">{pct(avg(g["retain"]))}</td>'
               f'<td class="r">{g["utAdd"]}/{g["utMod"]}</td><td class="r">{g["pmTests"]}</td>'
               f'<td class="r">{g["turns"]}</td><td class="r">{round(g["aEst"],1)}</td><td class="r">{round(g["dlEst"],1)}</td>'
-              f'<td class="r">{round(g["logged"],1)}</td><td class="r">{round(g["bugLogged"],1)}</td>'
+              f'<td class="r">{round(g["logged"] + g["bugLogged"],1)}</td><td class="r">{round(g["logged"],1)}</td><td class="r">{round(g["bugLogged"],1)}</td>'
               f'<td class="r {gain_cls(gp)}">{gain_two(g["aEst"], g["logged"], g["bugLogged"])}</td>'
               f'<td class="r {gain_cls(gpd)}">{gain_two(g["dlEst"], g["logged"], g["bugLogged"])}</td><td class="r">{g["bugs"]}</td></tr>')
         W("</tbody></table></div>")
 
         # ---- Summary by user ----
         W("<h2>Summary by user</h2>")
-        HEAD = ["AI Contrib","Retain","Rework","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Logged h","Bug h","Arch gain","DL gain","Bugs"]
+        HEAD = ["AI Contrib","Retain","Rework","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Total dev h","Logged h","Bug h","Arch gain","DL gain","Bugs"]
         W('<div class="tw"><table><thead><tr><th>User</th><th>Area</th><th class="r">Tickets</th>'
           + "".join(f'<th class="r">{e(h)}</th>' for h in HEAD) + "</tr></thead><tbody>")
         for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
@@ -629,7 +630,8 @@ def main():
               f'<td class="r">{pct(avg(u["contrib"]))}</td><td class="r">{pct(avg(u["retain"]))}</td>'
               f'<td class="r">{pct(avg(u["rework"]))}</td><td class="r">{u["utAdd"]}/{u["utMod"]}</td>'
               f'<td class="r">{u["pmTests"]}</td><td class="r">{u["turns"]}</td>'
-              f'<td class="r">{round(u["aEst"],1)}</td><td class="r">{round(u["dlEst"],1)}</td><td class="r">{round(u["logged"],1)}</td>'
+              f'<td class="r">{round(u["aEst"],1)}</td><td class="r">{round(u["dlEst"],1)}</td>'
+              f'<td class="r">{round(u["logged"] + u["bugLogged"],1)}</td><td class="r">{round(u["logged"],1)}</td>'
               f'<td class="r">{round(u["bugLogged"],1)}</td>'
               f'<td class="r {gain_cls(g)}">{gain_two(u["aEst"], u["logged"], u["bugLogged"])}</td>'
               f'<td class="r {gain_cls(gd)}">{gain_two(u["dlEst"], u["logged"], u["bugLogged"])}</td><td class="r">{u["bugs"]}</td></tr>')
@@ -637,7 +639,7 @@ def main():
 
         # ---- Detail per user, by ticket ----
         W("<h2>Detail per user</h2>")
-        DHEAD = ["Ticket","Date","Type","Area","Summary","AI Contrib","Retain","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Logged h","Bug h","Arch gain","DL gain","Bugs"]
+        DHEAD = ["Ticket","Date","Type","Area","Summary","AI Contrib","Retain","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Total dev h","Logged h","Bug h","Arch gain","DL gain","Bugs"]
         _left = ("Ticket", "Date", "Type", "Area", "Summary")
         for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
             W(f'<h3>{e(u["name"])}</h3>')
@@ -649,7 +651,8 @@ def main():
                 W(f'<tr><td class="key">{e(r["key"])}</td><td>{e(r["at"])}</td><td>{e(r["ttype"])}</td><td>{e(r["area"])}</td>'
                   f'<td>{e(r["summary"])}</td><td class="r">{r["contrib"]}%</td><td class="r">{r["retain"]}%</td>'
                   f'<td class="r">{r["utAdd"]}/{r["utMod"]}</td><td class="r">{r["pmTests"]}</td>'
-                  f'<td class="r">{r["turns"]}</td><td class="r">{r["aEst"]}</td><td class="r">{r["dlEst"]}</td><td class="r">{r["logged"]}</td>'
+                  f'<td class="r">{r["turns"]}</td><td class="r">{r["aEst"]}</td><td class="r">{r["dlEst"]}</td>'
+                  f'<td class="r">{round(r["logged"] + r["bugLogged"],1)}</td><td class="r">{r["logged"]}</td>'
                   f'<td class="r">{r["bugLogged"]}</td>'
                   f'<td class="r {gain_cls(g)}">{gain_two(r["aEst"], r["logged"], r["bugLogged"])}</td>'
                   f'<td class="r {gain_cls(gd)}">{gain_two(r["dlEst"], r["logged"], r["bugLogged"])}</td><td class="r">{r["bugs"]}</td></tr>')
