@@ -380,7 +380,7 @@ python "<SCRATCHPAD>/ai_report_html.py" --input "<SCRATCHPAD>/tickets.json" \
   --out "./docs/ai-usage-report-[TODAY].html" --csv "./docs/ai-usage-report-[TODAY].csv"
 ```
 
-The page is theme-aware (light/dark), leads with KPI cards, then the three sections mirroring the Markdown (totals by area → summary by user → detail per user). It embeds all CSS — no external assets — so it opens straight from disk. **Month grouping (HTML only):** *Totals by area* and *Summary by user* show the overall table, then an expandable `<details>` block per month (the date is the record's `at`); *Detail per user* groups each developer's tickets into expandable months, and the **latest month is further split into two-week halves** (days 01–15 / 16–end). The newest month opens by default. Tell the user the absolute path and that they can open it in a browser (Windows: `start "" "<path>"`).
+The page is theme-aware (light/dark), leads with KPI cards, then the three sections mirroring the Markdown (totals by area → summary by user → detail per user). It embeds all CSS — no external assets — so it opens straight from disk. **Month grouping (HTML only):** *Totals by area* and *Summary by user* show the overall table, then an expandable `<details>` block per month (the date is the record's `at`); *Detail per user* groups each developer's tickets into expandable months. The newest month opens by default. Tell the user the absolute path and that they can open it in a browser (Windows: `start "" "<path>"`).
 
 `--csv` additionally writes the **ticket-detail rows** (one row per ticket × developer, all detail columns plus both time-gain values) to a spreadsheet-friendly CSV (UTF-8 with BOM so Excel renders accented names). Default `./docs/ai-usage-report-<TODAY>.csv`. Report both file paths to the user.
 
@@ -630,10 +630,6 @@ def main():
 
         # period grouping keys off the AI record's `at` date
         def month_of(at): return (at or "")[:7] or "no-date"
-        def half_label(at):
-            try: d = int((at or "")[8:10])
-            except (ValueError, TypeError): return "unknown"
-            return "days 01–15" if d <= 15 else "days 16–end"
         latest_month = max((month_of(r["at"]) for r in rows), default=None)
 
         def totals_area_html(rs):
@@ -702,18 +698,12 @@ def main():
             h.append("</tbody></table></div>")
             return "".join(h)
 
-        def month_details(section_rows, render_fn, split_latest=False):
+        def month_details(section_rows, render_fn):
             for m in sorted({month_of(r["at"]) for r in section_rows}, reverse=True):
                 mr = [r for r in section_rows if month_of(r["at"]) == m]
                 op = " open" if m == latest_month else ""
                 W(f'<details{op}><summary>{e(m)} <span class="cnt">({len(mr)} record(s))</span></summary>')
-                if split_latest and m == latest_month:
-                    halves = {}
-                    for r in mr: halves.setdefault(half_label(r["at"]), []).append(r)
-                    for hl in sorted(halves):
-                        W(f'<h4>{e(hl)}</h4>'); W(render_fn(halves[hl]))
-                else:
-                    W(render_fn(mr))
+                W(render_fn(mr))
                 W('</details>')
 
         # ---- Totals by area (overall, then expandable by month) ----
@@ -726,11 +716,11 @@ def main():
         W(summary_user_html(rows))
         W('<p class="bm">By month</p>'); month_details(rows, summary_user_html)
 
-        # ---- Detail per user (grouped by month; latest month split into two-week halves) ----
+        # ---- Detail per user (grouped by month) ----
         W("<h2>Detail per user</h2>")
         for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
             W(f'<h3>{e(u["name"])}</h3>')
-            month_details(by_user[acc], detail_table_html, split_latest=True)
+            month_details(by_user[acc], detail_table_html)
     W('<p class="foot">AI metrics grouped by record domain. <b>A. Est h</b> (Architect) per area from the estimate '
       'custom fields (days &times;8), else the ticket estimate; <b>DL. Est h</b> (Dev-lead) from the ticket estimation '
       'field &mdash; a User Story sums its child sub-task estimates per area (sub-bugs excluded), a Bug/Enabler uses its '
