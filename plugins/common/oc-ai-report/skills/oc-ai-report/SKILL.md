@@ -380,7 +380,7 @@ python "<SCRATCHPAD>/ai_report_html.py" --input "<SCRATCHPAD>/tickets.json" \
   --out "./docs/ai-usage-report-[TODAY].html" --csv "./docs/ai-usage-report-[TODAY].csv"
 ```
 
-The page is theme-aware (light/dark), leads with KPI cards, then the three sections mirroring the Markdown (totals by area → summary by user → detail per user). It embeds all CSS — no external assets — so it opens straight from disk. Tell the user the absolute path and that they can open it in a browser (Windows: `start "" "<path>"`).
+The page is theme-aware (light/dark), leads with KPI cards, then the three sections mirroring the Markdown (totals by area → summary by user → detail per user). It embeds all CSS — no external assets — so it opens straight from disk. **Month grouping (HTML only):** *Totals by area* and *Summary by user* show the overall table, then an expandable `<details>` block per month (the date is the record's `at`); *Detail per user* groups each developer's tickets into expandable months, and the **latest month is further split into two-week halves** (days 01–15 / 16–end). The newest month opens by default. Tell the user the absolute path and that they can open it in a browser (Windows: `start "" "<path>"`).
 
 `--csv` additionally writes the **ticket-detail rows** (one row per ticket × developer, all detail columns plus both time-gain values) to a spreadsheet-friendly CSV (UTF-8 with BOM so Excel renders accented names). Default `./docs/ai-usage-report-<TODAY>.csv`. Report both file paths to the user.
 
@@ -623,58 +623,74 @@ def main():
             W(f'<div class="card"><div class="v">{e(val)}</div><div class="l">{e(label)}</div></div>')
         W('</div>')
 
-        # ---- Totals by area (shown first) ----
-        W("<h2>Totals by area <span class=\"sub\">(sum of detail rows)</span></h2>")
         AH = ["Rows","Avg AI contrib","Avg retain","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Total dev h","Logged h","Bug h","Arch gain","DL gain","Bugs"]
-        W('<div class="tw"><table><thead><tr><th>Area</th>'
-          + "".join(f'<th class="r">{e(h)}</th>' for h in AH) + "</tr></thead><tbody>")
-        for ar in AREAS:
-            g = areas[ar]
-            if not g["contrib"]: continue
-            gp = gain_pct(g["aEst"], g["logged"]); gpd = gain_pct(g["dlEst"], g["logged"])
-            W(f'<tr><td class="name">{e(ar.capitalize())}</td><td class="r">{len(g["contrib"])}</td>'
-              f'<td class="r">{pct(avg(g["contrib"]))}</td><td class="r">{pct(avg(g["retain"]))}</td>'
-              f'<td class="r">{g["utAdd"]}/{g["utMod"]}</td><td class="r">{g["pmTests"]}</td>'
-              f'<td class="r">{g["turns"]}</td><td class="r">{round(g["aEst"],1)}</td><td class="r">{round(g["dlEst"],1)}</td>'
-              f'<td class="r">{round(g["logged"] + g["bugLogged"],1)}</td><td class="r">{round(g["logged"],1)}</td><td class="r">{round(g["bugLogged"],1)}</td>'
-              f'<td class="r {gain_cls(gp)}">{gain_two(g["aEst"], g["logged"], g["bugLogged"])}</td>'
-              f'<td class="r {gain_cls(gpd)}">{gain_two(g["dlEst"], g["logged"], g["bugLogged"])}</td><td class="r">{g["bugs"]}</td></tr>')
-        W("</tbody></table></div>")
-
-        # ---- Summary by user ----
-        W("<h2>Summary by user</h2>")
         HEAD = ["AI Contrib","Retain","Rework","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Total dev h","Logged h","Bug h","Arch gain","DL gain","Bugs"]
-        W('<div class="tw"><table><thead><tr><th>User</th><th>Area</th><th class="r">Tickets</th>'
-          + "".join(f'<th class="r">{e(h)}</th>' for h in HEAD) + "</tr></thead><tbody>")
-        for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
-            g = gain_pct(u["aEst"], u["logged"]); gd = gain_pct(u["dlEst"], u["logged"])
-            W(f'<tr><td class="name">{e(u["name"])}</td><td>{e("/".join(sorted(u["areas"])))}</td>'
-              f'<td class="r">{len(u["tickets"])}</td>'
-              f'<td class="r{" low" if avg(u["contrib"]) < 60 else ""}">{pct(avg(u["contrib"]))}</td><td class="r">{pct(avg(u["retain"]))}</td>'
-              f'<td class="r">{pct(avg(u["rework"]))}</td><td class="r">{u["utAdd"]}/{u["utMod"]}</td>'
-              f'<td class="r">{u["pmTests"]}</td><td class="r">{u["turns"]}</td>'
-              f'<td class="r">{round(u["aEst"],1)}</td><td class="r">{round(u["dlEst"],1)}</td>'
-              f'<td class="r">{round(u["logged"] + u["bugLogged"],1)}</td><td class="r">{round(u["logged"],1)}</td>'
-              f'<td class="r">{round(u["bugLogged"],1)}</td>'
-              f'<td class="r {gain_cls(g)}">{gain_two(u["aEst"], u["logged"], u["bugLogged"])}</td>'
-              f'<td class="r {gain_cls(gd)}">{gain_two(u["dlEst"], u["logged"], u["bugLogged"])}</td><td class="r">{u["bugs"]}</td></tr>')
-        W("</tbody></table></div>")
-
-        # ---- Detail per user, by ticket ----
-        W("<h2>Detail per user</h2>")
         DHEAD = ["Ticket","Date","Type","Area","Summary","Status","Final","AI Contrib","Retain","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Total dev h","Logged h","Bug h","Arch gain","DL gain","Bugs"]
-        _left = ("Ticket", "Date", "Type", "Area", "Summary", "Status")
-        _cent = ("Final",)
-        for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
-            W(f'<h3>{e(u["name"])}</h3>')
-            W('<div class="tw"><table><thead><tr>'
-              + "".join(f'<th class="{ "c" if h in _cent else ("" if h in _left else "r") }">{e(h)}</th>' for h in DHEAD)
-              + "</tr></thead><tbody>")
-            for r in sorted(by_user[acc], key=lambda x: (x["at"], x["key"])):
+        _left = ("Ticket", "Date", "Type", "Area", "Summary", "Status"); _cent = ("Final",)
+
+        # period grouping keys off the AI record's `at` date
+        def month_of(at): return (at or "")[:7] or "no-date"
+        def half_label(at):
+            try: d = int((at or "")[8:10])
+            except (ValueError, TypeError): return "unknown"
+            return "days 01–15" if d <= 15 else "days 16–end"
+        latest_month = max((month_of(r["at"]) for r in rows), default=None)
+
+        def totals_area_html(rs):
+            ag = {ar: {"contrib": [], "retain": [], **{k: 0 for k in SUM}} for ar in AREAS}
+            for r in rs:
+                gg = ag[r["area"]]; gg["contrib"].append(r["contrib"]); gg["retain"].append(r["retain"])
+                for k in SUM: gg[k] += r[k]
+            h = ['<div class="tw"><table><thead><tr><th>Area</th>'
+                 + "".join(f'<th class="r">{e(x)}</th>' for x in AH) + "</tr></thead><tbody>"]
+            for ar in AREAS:
+                g = ag[ar]
+                if not g["contrib"]: continue
+                gp = gain_pct(g["aEst"], g["logged"]); gpd = gain_pct(g["dlEst"], g["logged"])
+                h.append(f'<tr><td class="name">{e(ar.capitalize())}</td><td class="r">{len(g["contrib"])}</td>'
+                  f'<td class="r">{pct(avg(g["contrib"]))}</td><td class="r">{pct(avg(g["retain"]))}</td>'
+                  f'<td class="r">{g["utAdd"]}/{g["utMod"]}</td><td class="r">{g["pmTests"]}</td>'
+                  f'<td class="r">{g["turns"]}</td><td class="r">{round(g["aEst"],1)}</td><td class="r">{round(g["dlEst"],1)}</td>'
+                  f'<td class="r">{round(g["logged"] + g["bugLogged"],1)}</td><td class="r">{round(g["logged"],1)}</td><td class="r">{round(g["bugLogged"],1)}</td>'
+                  f'<td class="r {gain_cls(gp)}">{gain_two(g["aEst"], g["logged"], g["bugLogged"])}</td>'
+                  f'<td class="r {gain_cls(gpd)}">{gain_two(g["dlEst"], g["logged"], g["bugLogged"])}</td><td class="r">{g["bugs"]}</td></tr>')
+            h.append("</tbody></table></div>")
+            return "".join(h)
+
+        def summary_user_html(rs):
+            uu = {}
+            for r in rs:
+                u = uu.setdefault(r["acc"], {"name": r["name"], "areas": set(), "tickets": set(),
+                     "contrib": [], "retain": [], "rework": [], **{k: 0 for k in SUM}})
+                u["name"] = r["name"]; u["areas"].add(r["area"]); u["tickets"].add(r["key"])
+                u["contrib"].append(r["contrib"]); u["retain"].append(r["retain"]); u["rework"].append(r["rework"])
+                for k in SUM: u[k] += r[k]
+            h = ['<div class="tw"><table><thead><tr><th>User</th><th>Area</th><th class="r">Tickets</th>'
+                 + "".join(f'<th class="r">{e(x)}</th>' for x in HEAD) + "</tr></thead><tbody>"]
+            for _acc, u in sorted(uu.items(), key=lambda kv: kv[1]["name"].lower()):
+                g = gain_pct(u["aEst"], u["logged"]); gd = gain_pct(u["dlEst"], u["logged"])
+                h.append(f'<tr><td class="name">{e(u["name"])}</td><td>{e("/".join(sorted(u["areas"])))}</td>'
+                  f'<td class="r">{len(u["tickets"])}</td>'
+                  f'<td class="r{" low" if avg(u["contrib"]) < 60 else ""}">{pct(avg(u["contrib"]))}</td><td class="r">{pct(avg(u["retain"]))}</td>'
+                  f'<td class="r">{pct(avg(u["rework"]))}</td><td class="r">{u["utAdd"]}/{u["utMod"]}</td>'
+                  f'<td class="r">{u["pmTests"]}</td><td class="r">{u["turns"]}</td>'
+                  f'<td class="r">{round(u["aEst"],1)}</td><td class="r">{round(u["dlEst"],1)}</td>'
+                  f'<td class="r">{round(u["logged"] + u["bugLogged"],1)}</td><td class="r">{round(u["logged"],1)}</td>'
+                  f'<td class="r">{round(u["bugLogged"],1)}</td>'
+                  f'<td class="r {gain_cls(g)}">{gain_two(u["aEst"], u["logged"], u["bugLogged"])}</td>'
+                  f'<td class="r {gain_cls(gd)}">{gain_two(u["dlEst"], u["logged"], u["bugLogged"])}</td><td class="r">{u["bugs"]}</td></tr>')
+            h.append("</tbody></table></div>")
+            return "".join(h)
+
+        def detail_table_html(rs):
+            h = ['<div class="tw"><table><thead><tr>'
+                 + "".join(f'<th class="{ "c" if x in _cent else ("" if x in _left else "r") }">{e(x)}</th>' for x in DHEAD)
+                 + "</tr></thead><tbody>"]
+            for r in sorted(rs, key=lambda x: (x["at"], x["key"])):
                 g = gain_pct(r["aEst"], r["logged"]); gd = gain_pct(r["dlEst"], r["logged"])
                 finalcell = '<span class="finalbadge">T</span>' if r["final"] else ""
                 low = isinstance(r["contrib"], (int, float)) and r["contrib"] < 60  # flag weak AI contribution
-                W(f'<tr><td class="key">{e(r["key"])}</td><td>{e(r["at"])}</td><td>{e(r["ttype"])}</td><td>{e(r["area"])}</td>'
+                h.append(f'<tr><td class="key">{e(r["key"])}</td><td>{e(r["at"])}</td><td>{e(r["ttype"])}</td><td>{e(r["area"])}</td>'
                   f'<td>{e(r["summary"])}</td><td>{e(r["status"])}</td><td class="c">{finalcell}</td>'
                   f'<td class="r{" low" if low else ""}">{r["contrib"]}%</td><td class="r">{r["retain"]}%</td>'
                   f'<td class="r">{r["utAdd"]}/{r["utMod"]}</td><td class="r">{r["pmTests"]}</td>'
@@ -683,7 +699,38 @@ def main():
                   f'<td class="r">{r["bugLogged"]}</td>'
                   f'<td class="r {gain_cls(g)}">{gain_two(r["aEst"], r["logged"], r["bugLogged"])}</td>'
                   f'<td class="r {gain_cls(gd)}">{gain_two(r["dlEst"], r["logged"], r["bugLogged"])}</td><td class="r">{r["bugs"]}</td></tr>')
-            W("</tbody></table></div>")
+            h.append("</tbody></table></div>")
+            return "".join(h)
+
+        def month_details(section_rows, render_fn, split_latest=False):
+            for m in sorted({month_of(r["at"]) for r in section_rows}, reverse=True):
+                mr = [r for r in section_rows if month_of(r["at"]) == m]
+                op = " open" if m == latest_month else ""
+                W(f'<details{op}><summary>{e(m)} <span class="cnt">({len(mr)} record(s))</span></summary>')
+                if split_latest and m == latest_month:
+                    halves = {}
+                    for r in mr: halves.setdefault(half_label(r["at"]), []).append(r)
+                    for hl in sorted(halves):
+                        W(f'<h4>{e(hl)}</h4>'); W(render_fn(halves[hl]))
+                else:
+                    W(render_fn(mr))
+                W('</details>')
+
+        # ---- Totals by area (overall, then expandable by month) ----
+        W("<h2>Totals by area <span class=\"sub\">(sum of detail rows)</span></h2>")
+        W(totals_area_html(rows))
+        W('<p class="bm">By month</p>'); month_details(rows, totals_area_html)
+
+        # ---- Summary by user (overall, then expandable by month) ----
+        W("<h2>Summary by user</h2>")
+        W(summary_user_html(rows))
+        W('<p class="bm">By month</p>'); month_details(rows, summary_user_html)
+
+        # ---- Detail per user (grouped by month; latest month split into two-week halves) ----
+        W("<h2>Detail per user</h2>")
+        for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
+            W(f'<h3>{e(u["name"])}</h3>')
+            month_details(by_user[acc], detail_table_html, split_latest=True)
     W('<p class="foot">AI metrics grouped by record domain. <b>A. Est h</b> (Architect) per area from the estimate '
       'custom fields (days &times;8), else the ticket estimate; <b>DL. Est h</b> (Dev-lead) from the ticket estimation '
       'field &mdash; a User Story sums its child sub-task estimates per area (sub-bugs excluded), a Bug/Enabler uses its '
@@ -728,6 +775,13 @@ tbody tr:last-child td {{ border-bottom:0; }}
 .c {{ text-align:center; }}
 .low {{ color:var(--neg); font-weight:700; }}
 .finalbadge {{ display:inline-block; font-size:.7rem; font-weight:700; color:#fff; background:#16a34a; border-radius:4px; padding:.05rem .4rem; }}
+details {{ border:1px solid var(--line); border-radius:10px; margin:.4rem 0; padding:0 .6rem; background:var(--card); }}
+details[open] {{ padding-bottom:.5rem; }}
+summary {{ cursor:pointer; font-weight:600; padding:.5rem .2rem; }}
+summary .cnt {{ color:var(--muted); font-weight:400; font-size:.85em; }}
+details .tw {{ margin:.35rem 0 .4rem; }}
+.bm {{ color:var(--muted); font-size:.72rem; margin:.6rem 0 .2rem; text-transform:uppercase; letter-spacing:.05em; }}
+h4 {{ margin:.55rem 0 .3rem; font-size:.88rem; color:var(--muted); }}
 .name {{ font-weight:600; }}
 .key {{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--accent); font-weight:600; }}
 .pos {{ color:var(--pos); font-weight:600; }}
