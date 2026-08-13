@@ -772,11 +772,20 @@ def main():
         W(f'<section class="panel panel-bugfinal">{render_body(bug_final_rows)}</section>')
         W(f'<section class="panel panel-other">{render_body(other_rows)}</section>')
         W('</div>')
-    W('<p class="foot">AI metrics grouped by record domain. <b>A. Est h</b> (Architect) per area from the estimate '
+    W('<p class="foot">AI metrics are recorded per developer per ticket by <code>/oc-be-calculate-ai-use</code> and grouped here by record domain (backend / frontend / QA). '
+      '<b>AI Contrib</b> = share of the delivered work that came from AI (Claude Code); '
+      '<b>Retain</b> = share of the AI\'s output that survived to the final code (higher is better); '
+      '<b>Rework</b> = share the reviewer had to rework afterwards; '
+      '<b>U.tests +/~</b> = unit tests added / modified; '
+      '<b>P.tests</b> = Postman assertion test cases exercised; '
+      '<b>Requests</b> = substantive developer&harr;AI interactions in the session. '
+      'The area aggregates show the average AI Contrib / Retain and the summed counts. '
+      '<b>A. Est h</b> (Architect) per area from the estimate '
       'custom fields (days &times;8), else the ticket estimate; <b>DL. Est h</b> (Dev-lead) from the ticket estimation '
       'field &mdash; a User Story sums its child sub-task estimates per area (sub-bugs excluded), a Bug/Enabler uses its '
-      'own estimate. Bug count &amp; <b>Sub-bug h</b> (logged on child Bug/Sub-bugs) per area. Logged hours per user &amp; '
-      'ticket (Tempo per-user &rarr; Jira worklog &rarr; ticket total). <b>Arch gain</b> = (A.Est&minus;Logged)/A.Est and '
+      'own estimate. Bug count &amp; <b>Sub-bug h</b> (hours logged on child Bug/Sub-bugs) per area. '
+      '<b>Logged h</b> = hours booked on the ticket per user (Tempo per-user &rarr; Jira worklog &rarr; ticket total); '
+      '<b>Total dev h</b> = Logged h + Sub-bug h (all development effort). <b>Arch gain</b> = (A.Est&minus;Logged)/A.Est and '
       '<b>DL gain</b> = (DL.Est&minus;Logged)/DL.Est, each shown <b>without / with</b> bug hours; a dash (&mdash;) marks a '
       'meaningless gain &mdash; a placeholder estimate (&le;0.5h), no logged time, or a magnitude beyond &plusmn;1000%. '
       'In the detail tables, <b>Status</b> is the ticket\'s Jira status and <b>Final</b> (T) marks a terminal status for its type '
