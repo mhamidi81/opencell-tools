@@ -380,7 +380,7 @@ python "<SCRATCHPAD>/ai_report_html.py" --input "<SCRATCHPAD>/tickets.json" \
   --out "./docs/ai-usage-report-[TODAY].html" --csv "./docs/ai-usage-report-[TODAY].csv"
 ```
 
-The page is theme-aware (light/dark), leads with KPI cards, then the three sections mirroring the Markdown (totals by area → summary by user → detail per user). It embeds all CSS — no external assets — so it opens straight from disk. **Month grouping (HTML only):** *Totals by area* and *Summary by user* show the overall table, then an expandable `<details>` block per month (the date is the record's `at`); *Detail per user* groups each developer's tickets into expandable months. The newest month opens by default. Tell the user the absolute path and that they can open it in a browser (Windows: `start "" "<path>"`).
+The page is theme-aware (light/dark), leads with KPI cards, then the three sections mirroring the Markdown (totals by area → summary by user → detail per user). It embeds all CSS — no external assets — so it opens straight from disk. **Grouping (HTML only):** *Totals by area* shows the overall table, then an expandable `<details>` block per month (the date is the record's `at`, newest open). *Summary by user* shows the overall one-row-per-user table, then an expandable `<details>` block **per user**, each holding that developer's month-by-month breakdown (user → month). *Detail per user* groups each developer's tickets into expandable months. Tell the user the absolute path and that they can open it in a browser (Windows: `start "" "<path>"`).
 
 `--csv` additionally writes the **ticket-detail rows** (one row per ticket × developer, all detail columns plus both time-gain values) to a spreadsheet-friendly CSV (UTF-8 with BOM so Excel renders accented names). Default `./docs/ai-usage-report-<TODAY>.csv`. Report both file paths to the user.
 
@@ -678,6 +678,31 @@ def main():
             h.append("</tbody></table></div>")
             return "".join(h)
 
+        MHEAD = ["Month","Tickets","AI Contrib","Retain","Rework","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Total dev h","Logged h","Bug h","Arch gain","DL gain","Bugs"]
+        def user_month_html(user_rows):
+            """One row per month for a single user (used under the per-user Summary groups)."""
+            h = ['<div class="tw"><table><thead><tr>'
+                 + "".join(f'<th class="{ "" if x == "Month" else "r" }">{e(x)}</th>' for x in MHEAD)
+                 + "</tr></thead><tbody>"]
+            for m in sorted({month_of(r["at"]) for r in user_rows}, reverse=True):
+                rs = [r for r in user_rows if month_of(r["at"]) == m]
+                contrib = [r["contrib"] for r in rs]; retain = [r["retain"] for r in rs]; rework = [r["rework"] for r in rs]
+                agg = {k: 0 for k in SUM}
+                for r in rs:
+                    for k in SUM: agg[k] += r[k]
+                g = gain_pct(agg["aEst"], agg["logged"]); gd = gain_pct(agg["dlEst"], agg["logged"])
+                h.append(f'<tr><td class="name">{e(m)}</td><td class="r">{len({r["key"] for r in rs})}</td>'
+                  f'<td class="r{" low" if avg(contrib) < 60 else ""}">{pct(avg(contrib))}</td>'
+                  f'<td class="r">{pct(avg(retain))}</td><td class="r">{pct(avg(rework))}</td>'
+                  f'<td class="r">{agg["utAdd"]}/{agg["utMod"]}</td><td class="r">{agg["pmTests"]}</td><td class="r">{agg["turns"]}</td>'
+                  f'<td class="r">{round(agg["aEst"],1)}</td><td class="r">{round(agg["dlEst"],1)}</td>'
+                  f'<td class="r">{round(agg["logged"] + agg["bugLogged"],1)}</td><td class="r">{round(agg["logged"],1)}</td>'
+                  f'<td class="r">{round(agg["bugLogged"],1)}</td>'
+                  f'<td class="r {gain_cls(g)}">{gain_two(agg["aEst"], agg["logged"], agg["bugLogged"])}</td>'
+                  f'<td class="r {gain_cls(gd)}">{gain_two(agg["dlEst"], agg["logged"], agg["bugLogged"])}</td><td class="r">{agg["bugs"]}</td></tr>')
+            h.append("</tbody></table></div>")
+            return "".join(h)
+
         def detail_table_html(rs):
             h = ['<div class="tw"><table><thead><tr>'
                  + "".join(f'<th class="{ "c" if x in _cent else ("" if x in _left else "r") }">{e(x)}</th>' for x in DHEAD)
@@ -711,10 +736,17 @@ def main():
         W(totals_area_html(rows))
         W('<p class="bm">By month</p>'); month_details(rows, totals_area_html)
 
-        # ---- Summary by user (overall, then expandable by month) ----
+        # ---- Summary by user (overall, then expandable per user -> month) ----
         W("<h2>Summary by user</h2>")
         W(summary_user_html(rows))
-        W('<p class="bm">By month</p>'); month_details(rows, summary_user_html)
+        W('<p class="bm">By user &rarr; month</p>')
+        for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
+            ur = by_user[acc]
+            ac = avg([r["contrib"] for r in ur])
+            W(f'<details><summary>{e(u["name"])} '
+              f'<span class="cnt">({len(u["tickets"])} ticket(s), avg contrib {pct(ac)})</span></summary>')
+            W(user_month_html(ur))
+            W('</details>')
 
         # ---- Detail per user (grouped by month) ----
         W("<h2>Detail per user</h2>")
