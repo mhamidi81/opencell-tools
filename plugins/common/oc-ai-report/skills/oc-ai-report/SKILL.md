@@ -380,7 +380,7 @@ python "<SCRATCHPAD>/ai_report_html.py" --input "<SCRATCHPAD>/tickets.json" \
   --out "./docs/ai-usage-report-[TODAY].html" --csv "./docs/ai-usage-report-[TODAY].csv"
 ```
 
-The page is theme-aware (light/dark) and embeds all CSS — no external assets — so it opens straight from disk. **Four tabs (HTML only):** an **All** tab (every ticket, the default), a **User Stories** tab (US only), a **US (final)** tab (US whose status is terminal, i.e. Final = T) and an **Other types** tab (every non-US ticket); each tab holds the full report (KPI cards + the three sections) filtered to that ticket set. Tabs are pure CSS (`<input type="radio">` + `:checked` sibling selectors) — no JavaScript. Within each tab, KPI cards lead, then the three sections mirroring the Markdown. **Grouping (HTML only):** *Totals by area* shows the overall table, then an expandable `<details>` block per month (the date is the record's `at`, newest open). *Summary by user* shows the overall one-row-per-user table, then an expandable `<details>` block **per user**, each holding that developer's month-by-month breakdown (user → month). *Detail per user* groups each developer's tickets into expandable months. Tell the user the absolute path and that they can open it in a browser (Windows: `start "" "<path>"`).
+The page is theme-aware (light/dark) and embeds all CSS — no external assets — so it opens straight from disk. **Five tabs (HTML only):** an **All** tab (every ticket, the default), a **User Stories** tab (US only), a **US (final)** tab (US whose status is terminal, Final = T), a **Bugs (final)** tab (Bug/Sub-bug tickets in a terminal status) and an **Other types** tab (every non-US ticket); each tab holds the full report (KPI cards + the three sections) filtered to that ticket set. Tabs are pure CSS (`<input type="radio">` + `:checked` sibling selectors) — no JavaScript. Within each tab, KPI cards lead, then the three sections mirroring the Markdown. **Grouping (HTML only):** *Totals by area* shows the overall table, then an expandable `<details>` block per month (the date is the record's `at`, newest open). *Summary by user* shows the overall one-row-per-user table, then an expandable `<details>` block **per user**, each holding that developer's month-by-month breakdown (user → month). *Detail per user* groups each developer's tickets into expandable months. Tell the user the absolute path and that they can open it in a browser (Windows: `start "" "<path>"`).
 
 `--csv` additionally writes the **ticket-detail rows** (one row per ticket × developer, all detail columns plus both time-gain values) to a spreadsheet-friendly CSV (UTF-8 with BOM so Excel renders accented names). Default `./docs/ai-usage-report-<TODAY>.csv`. Report both file paths to the user.
 
@@ -749,23 +749,27 @@ def main():
                 w(f'<h3>{e(u["name"])}</h3>'); w(month_details(by_user_x[acc], detail_table_html))
             return "".join(h)
 
-        # Tabs: All (default), User Stories, US (final only), and every other ticket type
+        # Tabs: All (default), User Stories, US (final), Bugs (final), and every other ticket type
         us_rows = [r for r in rows if r["ttype"] == "US"]
         us_final_rows = [r for r in us_rows if r["final"]]
+        bug_final_rows = [r for r in rows if r["ttype"] == "Bug" and r["final"]]
         other_rows = [r for r in rows if r["ttype"] != "US"]
         W('<div class="tabs">')
         W('<input type="radio" name="aitab" id="tab-all" checked>')
         W('<input type="radio" name="aitab" id="tab-us">')
         W('<input type="radio" name="aitab" id="tab-usfinal">')
+        W('<input type="radio" name="aitab" id="tab-bugfinal">')
         W('<input type="radio" name="aitab" id="tab-other">')
         W('<div class="tabbar">'
           f'<label for="tab-all">All <span class="cnt">({len(rows)})</span></label>'
           f'<label for="tab-us">User Stories <span class="cnt">({len(us_rows)})</span></label>'
           f'<label for="tab-usfinal">US (final) <span class="cnt">({len(us_final_rows)})</span></label>'
+          f'<label for="tab-bugfinal">Bugs (final) <span class="cnt">({len(bug_final_rows)})</span></label>'
           f'<label for="tab-other">Other types <span class="cnt">({len(other_rows)})</span></label></div>')
         W(f'<section class="panel panel-all">{render_body(rows)}</section>')
         W(f'<section class="panel panel-us">{render_body(us_rows)}</section>')
         W(f'<section class="panel panel-usfinal">{render_body(us_final_rows)}</section>')
+        W(f'<section class="panel panel-bugfinal">{render_body(bug_final_rows)}</section>')
         W(f'<section class="panel panel-other">{render_body(other_rows)}</section>')
         W('</div>')
     W('<p class="foot">AI metrics grouped by record domain. <b>A. Est h</b> (Architect) per area from the estimate '
@@ -826,12 +830,14 @@ details .tw {{ margin:.35rem 0 .4rem; }}
 #tab-all:checked ~ .tabbar label[for="tab-all"],
 #tab-us:checked ~ .tabbar label[for="tab-us"],
 #tab-usfinal:checked ~ .tabbar label[for="tab-usfinal"],
+#tab-bugfinal:checked ~ .tabbar label[for="tab-bugfinal"],
 #tab-other:checked ~ .tabbar label[for="tab-other"] {{ color:var(--fg); background:var(--card);
   border-color:var(--line); border-bottom:2px solid var(--card); }}
 .panel {{ display:none; padding-top:.5rem; }}
 #tab-all:checked ~ .panel-all {{ display:block; }}
 #tab-us:checked ~ .panel-us {{ display:block; }}
 #tab-usfinal:checked ~ .panel-usfinal {{ display:block; }}
+#tab-bugfinal:checked ~ .panel-bugfinal {{ display:block; }}
 #tab-other:checked ~ .panel-other {{ display:block; }}
 h4 {{ margin:.55rem 0 .3rem; font-size:.88rem; color:var(--muted); }}
 .name {{ font-weight:600; }}
