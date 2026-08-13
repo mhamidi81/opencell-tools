@@ -380,7 +380,7 @@ python "<SCRATCHPAD>/ai_report_html.py" --input "<SCRATCHPAD>/tickets.json" \
   --out "./docs/ai-usage-report-[TODAY].html" --csv "./docs/ai-usage-report-[TODAY].csv"
 ```
 
-The page is theme-aware (light/dark) and embeds all CSS — no external assets — so it opens straight from disk. **Two tabs (HTML only):** the report is split into a **User Stories** tab (US tickets only) and an **Other types** tab (every non-US ticket); each tab holds the full report (KPI cards + the three sections) filtered to that ticket type. Tabs are pure CSS (`<input type="radio">` + `:checked` sibling selectors) — no JavaScript. Within each tab, KPI cards lead, then the three sections mirroring the Markdown. **Grouping (HTML only):** *Totals by area* shows the overall table, then an expandable `<details>` block per month (the date is the record's `at`, newest open). *Summary by user* shows the overall one-row-per-user table, then an expandable `<details>` block **per user**, each holding that developer's month-by-month breakdown (user → month). *Detail per user* groups each developer's tickets into expandable months. Tell the user the absolute path and that they can open it in a browser (Windows: `start "" "<path>"`).
+The page is theme-aware (light/dark) and embeds all CSS — no external assets — so it opens straight from disk. **Three tabs (HTML only):** an **All** tab (every ticket, the default), a **User Stories** tab (US only) and an **Other types** tab (every non-US ticket); each tab holds the full report (KPI cards + the three sections) filtered to that ticket type. Tabs are pure CSS (`<input type="radio">` + `:checked` sibling selectors) — no JavaScript. Within each tab, KPI cards lead, then the three sections mirroring the Markdown. **Grouping (HTML only):** *Totals by area* shows the overall table, then an expandable `<details>` block per month (the date is the record's `at`, newest open). *Summary by user* shows the overall one-row-per-user table, then an expandable `<details>` block **per user**, each holding that developer's month-by-month breakdown (user → month). *Detail per user* groups each developer's tickets into expandable months. Tell the user the absolute path and that they can open it in a browser (Windows: `start "" "<path>"`).
 
 `--csv` additionally writes the **ticket-detail rows** (one row per ticket × developer, all detail columns plus both time-gain values) to a spreadsheet-friendly CSV (UTF-8 with BOM so Excel renders accented names). Default `./docs/ai-usage-report-<TODAY>.csv`. Report both file paths to the user.
 
@@ -749,15 +749,18 @@ def main():
                 w(f'<h3>{e(u["name"])}</h3>'); w(month_details(by_user_x[acc], detail_table_html))
             return "".join(h)
 
-        # Two tabs: User Stories vs. every other ticket type (same report, filtered)
+        # Three tabs: All (everything, default), User Stories, and every other ticket type
         us_rows = [r for r in rows if r["ttype"] == "US"]
         other_rows = [r for r in rows if r["ttype"] != "US"]
         W('<div class="tabs">')
-        W('<input type="radio" name="aitab" id="tab-us" checked>')
+        W('<input type="radio" name="aitab" id="tab-all" checked>')
+        W('<input type="radio" name="aitab" id="tab-us">')
         W('<input type="radio" name="aitab" id="tab-other">')
         W('<div class="tabbar">'
+          f'<label for="tab-all">All <span class="cnt">({len(rows)})</span></label>'
           f'<label for="tab-us">User Stories <span class="cnt">({len(us_rows)})</span></label>'
           f'<label for="tab-other">Other types <span class="cnt">({len(other_rows)})</span></label></div>')
+        W(f'<section class="panel panel-all">{render_body(rows)}</section>')
         W(f'<section class="panel panel-us">{render_body(us_rows)}</section>')
         W(f'<section class="panel panel-other">{render_body(other_rows)}</section>')
         W('</div>')
@@ -816,10 +819,12 @@ details .tw {{ margin:.35rem 0 .4rem; }}
 .tabbar label {{ padding:.5rem 1rem; cursor:pointer; color:var(--muted); font-weight:600;
   border:1px solid transparent; border-bottom:none; border-radius:8px 8px 0 0; margin-bottom:-2px; }}
 .tabbar label .cnt {{ font-weight:400; }}
+#tab-all:checked ~ .tabbar label[for="tab-all"],
 #tab-us:checked ~ .tabbar label[for="tab-us"],
 #tab-other:checked ~ .tabbar label[for="tab-other"] {{ color:var(--fg); background:var(--card);
   border-color:var(--line); border-bottom:2px solid var(--card); }}
 .panel {{ display:none; padding-top:.5rem; }}
+#tab-all:checked ~ .panel-all {{ display:block; }}
 #tab-us:checked ~ .panel-us {{ display:block; }}
 #tab-other:checked ~ .panel-other {{ display:block; }}
 h4 {{ margin:.55rem 0 .3rem; font-size:.88rem; color:var(--muted); }}
