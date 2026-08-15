@@ -54,7 +54,9 @@ These roll up to an **effort band — Low / Medium / High** (thresholds are seed
 Alongside line counts, the analyzer reports concrete test counts (independent of AI attribution — computed from the commit itself):
 
 - **Unit tests** — `@Test` methods in changed `src/test` `.java` files, split into **added** (method not in the base version) and **modified** (present before, body changed), plus `methods_total` in the final files.
-- **Postman** — every request in changed `*.postman_collection.json`, split into **assertion requests** (a `test` script containing `pm.test` / `pm.expect` / `pm.response.to` / `tests[...]` — the actual tests) and **setup/cleanup requests** (no assertions — data prep/teardown). Also `added_requests` / `added_assertion_requests` vs the base collection, so you see what this commit introduced rather than the whole collection. And `test_cases_total` / `added_test_cases` — the number of **individual tests** (`pm.test(...)` blocks, plus legacy `tests[...] =`) *inside* the assertion requests, since one request can hold several test cases.
+- **Postman** — every request in changed `*.postman_collection.json`, split into **verification requests** (carrying at least one test case that asserts something beyond the HTTP status) and **setup/cleanup requests** (data prep, job launches, teardown — including the very common request whose only assertion is `Status code is 200`). Also `added_requests` / `added_assertion_requests` vs the base collection, so you see what this commit introduced rather than the whole collection. And `test_cases_total` / `added_test_cases` — the number of **individual business tests** (`pm.test(...)` blocks, plus legacy `tests[...] =`) inside them, since one request can hold several; `blocks_total` / `added_blocks` give the raw block count including status checks, so the comment can show both.
+
+  > **Why status checks do not count.** An Opencell collection asserts `is.success` (`200/201/202/204`) at the **collection level** for every request whose name does not end in `fail`, so a per-request `Status code is 200` is a near-duplicate of a check the harness already performs — it verifies the call went through, not that the feature works. Counting them made data-setup calls indistinguishable from real tests (on one ticket: 21 "asserting" requests / 35 "test cases" where only **6 requests / 14 assertions** tested the feature). The exception is the collection's own negative-test convention — a request whose name ends in `fail` gets no `is.success`, so there its status check *is* the assertion and every block counts. Blocks with a computed (non-literal) name also always count, since their intent cannot be read.
 
 ### Interactions (engagement)
 
@@ -141,7 +143,7 @@ Every source flag except `--repo` is optional. Planning reconstruction and inter
 - `work_type` is `code`, `planning-dominant` (< 20 lines added but planning effort detected), or `minimal-change`.
 - `planning` carries `detected`, `source` (`manifest`/`transcript`), `effort_band` (Low/Medium/High), `revision_rounds`, `analysis_tool_calls`, `plan_word_count`, `duration_minutes`, `assistant_turns`.
 - `by_category[c].added` is the added **line count** per artifact category (production/migration/tests/postman/docs/other).
-- `artifacts.tests` = `{files, methods_total, added, modified}` (unit-test methods, via `@Test` method-body diff of base-vs-final). `artifacts.postman` = `{files, requests_total, assertion_requests, setup_requests, added_requests, added_assertion_requests, test_cases_total, added_test_cases}` — `assertion_requests` are real-test requests; `setup_requests` are non-asserting setup/cleanup calls; `test_cases_total`/`added_test_cases` count the individual `pm.test(...)` tests inside them.
+- `artifacts.tests` = `{files, methods_total, added, modified}` (unit-test methods, via `@Test` method-body diff of base-vs-final). `artifacts.postman` = `{files, requests_total, assertion_requests, setup_requests, added_requests, added_assertion_requests, test_cases_total, added_test_cases, blocks_total, added_blocks}` — `assertion_requests` are verification requests (at least one non-status assertion); `setup_requests` are data prep / job launches / teardown, including requests that only check their own HTTP status; `test_cases_total`/`added_test_cases` count the individual business tests inside them, while `blocks_total`/`added_blocks` are the raw `pm.test` counts including status checks.
 - `interactions` = `{sessions, exchanges, substantive, avg_per_session, per_session[{session, exchanges, substantive}]}` — developer↔AI messages on the commit's sessions (see two-tier definition above).
 - `provenance.reviewer_rework_pct` — share of AI lines from the post-review phase (see Metrics).
 - `suggested_tags` ⊆ `{ai_Dev_back, ai_test_back_dev}` — see Task 6b.
@@ -386,8 +388,16 @@ def java_test_stats(repo, mode, ref, changed):
             elif base_m[name] != body: modified += 1
     return {"files": len(files), "methods_total": total, "added": added, "modified": modified}
 
-_PM_ASSERT = re.compile(r'pm\.test\s*\(|pm\.expect\s*\(|pm\.response\.to\b|\btests\s*\[')
-_PM_TEST = re.compile(r'pm\.test\s*\(|tests\s*\[[^\]]*\]\s*=')  # individual named tests (pm.test + legacy)
+# Almost every request in an Opencell collection asserts its own HTTP status, and the
+# collection-level test script already asserts is.success (200/201/202/204) for every request
+# whose name does not end in "fail". Those status checks verify that the call went through, not
+# that the feature works, so they do NOT count as test cases: a block counts only when its name
+# is not a bare status check. Exception — on a negative scenario (request name ends in "fail",
+# the collection's own convention, where is.success is deliberately skipped) the status check IS
+# the assertion, so every block counts. A block with a computed (non-literal) name always counts.
+_PM_CALL = re.compile(r'''pm\.test\s*\(\s*(?:(['"`])(?P<name>.*?)\1)?''', re.S)
+_PM_LEGACY = re.compile(r'''tests\s*\[\s*(['"`])(?P<name>.*?)\1\s*\]\s*=''')
+_PM_STATUS_NAME = re.compile(r'^\s*(is\.success|status\s*code|response\s*status|http\s*status)', re.I)
 def _pm_requests(items):
     for it in items or []:
         if not isinstance(it, dict): continue
@@ -402,17 +412,35 @@ def _pm_scripts(item):
             ex = (ev.get("script") or {}).get("exec") or []
             yield "\n".join(ex) if isinstance(ex, list) else str(ex)
 
-def _pm_has_assertion(item):
-    return any(_PM_ASSERT.search(s) for s in _pm_scripts(item))
+def _pm_blocks(item):
+    """Yield the name of every individual test block (pm.test / legacy tests[...] =) in a
+    request's test scripts. A block whose name is not a string literal yields ''."""
+    for s in _pm_scripts(item):
+        for m in _PM_CALL.finditer(s):
+            yield m.group("name") if m.group("name") is not None else ""
+        for m in _PM_LEGACY.finditer(s):
+            yield m.group("name")
+
+def _pm_block_count(item):
+    """Every test block, HTTP-status checks included — reported for context."""
+    return sum(1 for _ in _pm_blocks(item))
 
 def _pm_test_count(item):
-    """Count individual test cases (pm.test / legacy tests[...] =) in a request's test scripts."""
-    return sum(len(_PM_TEST.findall(s)) for s in _pm_scripts(item))
+    """Business test cases: blocks that assert something other than the HTTP status (see the
+    rule above the regexes). On a negative scenario the status check is the assertion."""
+    negative = item.get("name", "").strip().lower().endswith("fail")
+    return sum(1 for n in _pm_blocks(item) if negative or not _PM_STATUS_NAME.match(n))
+
+def _pm_has_assertion(item):
+    """A verification request: one carrying at least one business test case. Requests that only
+    check their own status (data setup, job launches) and script-less teardowns are not tests."""
+    return _pm_test_count(item) > 0
 
 def postman_stats(repo, mode, ref, changed):
     files = [p for p in changed if category(p) == "postman"]
     total = assertion = added = added_assertion = 0
     test_cases = added_test_cases = 0
+    blocks = added_blocks = 0
     for rel in files:
         base_src, final_src = file_versions(repo, rel, mode, ref)
         try: final = json.loads(final_src) if final_src else {}
@@ -422,18 +450,21 @@ def postman_stats(repo, mode, ref, changed):
         base_names = {r.get("name", "") for r in _pm_requests(base.get("item"))}
         for r in _pm_requests(final.get("item")):
             total += 1
-            has = _pm_has_assertion(r)
             tc = _pm_test_count(r)
-            if has: assertion += 1
+            blk = _pm_block_count(r)
+            if tc: assertion += 1
             test_cases += tc
+            blocks += blk
             if r.get("name", "") not in base_names:
                 added += 1
                 added_test_cases += tc
-                if has: added_assertion += 1
+                added_blocks += blk
+                if tc: added_assertion += 1
     return {"files": len(files), "requests_total": total, "assertion_requests": assertion,
             "setup_requests": total - assertion, "added_requests": added,
             "added_assertion_requests": added_assertion,
-            "test_cases_total": test_cases, "added_test_cases": added_test_cases}
+            "test_cases_total": test_cases, "added_test_cases": added_test_cases,
+            "blocks_total": blocks, "added_blocks": added_blocks}
 
 # ---- planning / analysis effort axis (non-code) ----
 def _words(s): return len((s or "").split())
@@ -827,7 +858,7 @@ Breakdown by artifact (lines · AI-contribution · retention):
   • Production code   980 lines   100%   85%     ← headline
   • DB migration      210 lines   100%   98%
   • Unit tests        340 lines   100%   95%    (17 tests added, 11 modified)
-  • Postman         2,600 lines   100%    —     (80 reqs added: 56 asserting / 124 test cases; 47 setup/cleanup)
+  • Postman         2,600 lines   100%    —     (80 reqs added: 24 verification / 124 business assertions; 56 setup+teardown, 180 blocks incl. status checks)
   • docs/other          0 lines     —     —
   ────────────────────────────────────────────
   ALL             4,130 lines   100%   96%     (context only)
@@ -847,7 +878,7 @@ Warnings:
   - <any warnings from the analyzer>
 ```
 
-Pull the line counts from `by_category[c].added`; the test/postman detail from `artifacts.tests` (`added`, `modified`, `methods_total`) and `artifacts.postman` (`added_requests`, `added_assertion_requests`, `added_test_cases`, `setup_requests`); the engagement line from `interactions`.
+Pull the line counts from `by_category[c].added`; the test/postman detail from `artifacts.tests` (`added`, `modified`, `methods_total`) and `artifacts.postman` (`added_requests`, `added_assertion_requests`, `added_test_cases`, `added_blocks`); the engagement line from `interactions`. For Postman, `added_requests − added_assertion_requests` is the setup/teardown share — state it, because it is usually the majority.
 
 **Postman retention is always reported** (never `—`) — but treat it as **low-confidence, developer-adjustable**. Two caveats to state and then have the developer correct: (a) it is only meaningful when the collection is **pretty-printed** (one field per line — see the TESTING guideline; a minified collection makes every "line" a whole-folder blob and the number meaningless); and (b) the metric compares the AI's *captured* lines (final snapshot) to the final file, so on a collection that was **rebuilt several times** the automated figure trends toward ~100% ("matches itself") and *understates* the churn. When the Postman work went through heavy iteration, the developer should set a lower retention that reflects how much of the early drafts survived (a rebuilt-from-scratch collection is often ~40–60%, not 100%). Always surface the computed value **and** invite the developer to adjust it, exactly like the production headline.
 
@@ -886,7 +917,7 @@ Breakdown by artifact:
 - Production code: <p_lines> lines — contribution <pc>%, retention <pr>%
 - DB migration: <m_lines> lines — contribution <mc>%, retention <mr>%
 - Unit tests: <t_lines> lines, <t_added> test(s) added / <t_mod> modified — contribution <tc>%, retention <tr>%
-- Postman: <pm_lines> lines, <pm_add> request(s) added (<pm_add_assert> asserting / <pm_add_tc> test cases; <pm_setup> setup/cleanup) — contribution <pmc>%
+- Postman: <pm_lines> lines, <pm_add> request(s) added — <pm_add_assert> verification request(s) carrying <pm_add_tc> business assertion(s), <pm_setup> setup/teardown request(s); <pm_add_blocks> pm.test block(s) in total, the remainder being plain HTTP-status checks (the collection also asserts is.success globally) — contribution <pmc>%, retention <pmr>%
 
 Planning/analysis effort: [PLANNING-BAND]
 - <rounds> plan iteration(s) with the developer
@@ -991,7 +1022,7 @@ The field holds one JSON document per ticket: an envelope with a `records` **map
       "at": "2026-07-28", "ver": "1.7.0", "scope": "6529c39", "work": "code",
       "contrib": 100, "retain": 95, "rework": 20, "lines": 1534,
       "cat": { "prod": {"l":676,"c":100,"r":95}, "mig": {"l":83,"c":100,"r":100}, "test": {"l":397,"c":100,"r":95}, "pm": {"l":378,"c":100,"r":50} },
-      "utAdd": 17, "utMod": 11, "pmAdd": 80, "pmAssert": 56, "pmTests": 79,
+      "utAdd": 17, "utMod": 11, "pmAdd": 80, "pmAssert": 24, "pmTests": 79,
       "plan": "High", "planRounds": 1, "planWords": 520, "planMin": 150,
       "turns": 58, "subReq": 21, "sessions": 3,
       "useful": 4, "adj": true
@@ -1006,7 +1037,7 @@ Key legend (all per (domain,user), latest run only):
 |-----|---------|-----|---------|
 | `at` | measured date (YYYY-MM-DD) | `cat` | per category (`prod`/`mig`/`test`/`pm`): `{l: added lines, c: contribution%, r: retention%}` — `r` is **always present, including for Postman** (developer-confirmed; low-confidence for Postman, see the retention note in Task 5) |
 | `ver` | tool version | `utAdd`/`utMod` | unit tests added / modified |
-| `scope` | commit ref (or `working`) | `pmAdd`/`pmAssert`/`pmTests` | Postman requests added / of which asserting / test cases added |
+| `scope` | commit ref (or `working`) | `pmAdd`/`pmAssert`/`pmTests` | Postman requests added / of which **verification** requests / **business** test cases added — plain HTTP-status checks excluded from the last two (see the Postman note above; recorded this way from v1.15.0, earlier tickets counted any `pm.test`) |
 | `work` | `code`/`planning-dominant`/`minimal-change` | `plan` | planning effort band |
 | `contrib` | AI contribution % (production headline) | `planRounds`/`planWords`/`planMin` | plan iterations / words / minutes |
 | `retain` | AI retention % | `turns`/`subReq`/`sessions` | exchanges / substantive requests / sessions that worked on the commit (the report shows `subReq`) |
@@ -1040,7 +1071,7 @@ Key legend (all per (domain,user), latest run only):
 - **Contribution vs. retention.** Contribution is complete with manifests; retention is content-based and defined for files whose line content was captured — the sub-agent first-pass **snapshot** (`snapshots/*.diff`), the main-context transcript, or file-history. A sub-agent file with none of these (e.g. an old run created before snapshots existed) is counted for contribution and reported as retention-unknown.
 - **Attribution.** A final line is `fix` if it appears in a main-context edit, else `agent` if the file is in a manifest or the line is in file-history, else `human`. Whitespace-normalized, pure-punctuation lines ignored, distinct-line based per file (heavy rewrites de-duplicated).
 - **Squashed / cross-branch commits.** When many sessions/branches are squashed into one commit, file-history alone under-covers it; manifests restore coverage for the parts built via `/oc-be-implement`.
-- **Artifact counts are commit-derived, not AI-attributed.** Unit-test add/modify counts come from a heuristic `@Test` method-body diff (base vs final); overloaded names and unusual formatting can be miscounted slightly. Postman assertion detection keys off `test`-event scripts; a request whose assertions live elsewhere (or a pure `console.log` test script) may be misclassified. `added_*` compares request **names** against the base collection, so a renamed request reads as added. Good enough for the ticket record; the developer can correct.
+- **Artifact counts are commit-derived, not AI-attributed.** Unit-test add/modify counts come from a heuristic `@Test` method-body diff (base vs final); overloaded names and unusual formatting can be miscounted slightly. Postman assertion detection keys off `test`-event scripts; a request whose assertions live elsewhere (or a pure `console.log` test script) may be misclassified. A verification request is one with at least one non-status assertion, so a genuine test that checks *only* an HTTP status reads as setup unless its name ends in `fail` — and a status check named something else ("Batch was accepted") counts as a business assertion. `added_*` compares request **names** against the base collection, so a renamed request reads as added. Good enough for the ticket record; the developer can correct.
 - **Tag semantics.** `ai_test_back_dev` triggers on newly *added* tests/Postman requests (not modifications). A commit that only edits existing tests gets `ai_Dev_back` (if it also touches code) but not `ai_test_back_dev` — adjust in review if that is not what you want.
 - **AI-usage field (reporting).** The canonical machine-readable store is the JSON document in the **"AI metrics"** field (`customfield_10745`; payload schema `opencell.ai-usage/v1`), keyed by `domain/accountId/name` (accountId is the stable identity, name is for readability) so backend, frontend and multiple developers coexist on one ticket; the comment is only for humans. It is latest-only (no history) and uses read-merge-upsert. **The field must be a multi-line Text Field** (a single-line field's 255-char cap is too small) and may be **rich-text (ADF)** on this instance — the write is renderer-agnostic (plain string, then an ADF `codeBlock` fallback) and the read accepts either. If two developers write the same ticket within the same moment, last-write-wins could drop one record; the per-run comment is the audit fallback.
 - **Planning effort is effort, not a percentage.** The requirements-gathering and architecture-plan work produces no committed artifact, so it can only be quantified as activity (rounds, lookups, plan size, time) rolled into a Low/Medium/High band. The band thresholds are seed values in `planning_band()` — tune them against your real runs. Reconstruction from the transcript is a fallback; the `/oc-be-implement` planning manifest is authoritative for revision rounds and plan size.
