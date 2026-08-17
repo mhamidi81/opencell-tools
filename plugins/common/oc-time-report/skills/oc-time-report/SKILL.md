@@ -612,7 +612,7 @@ if __name__ == "__main__":
 
 ## Notes & limitations
 
-- **Tempo token visibility (important).** A personal `TEMPO_API_TOKEN` only returns the worklogs that token's owner is permitted to see — on this instance a token scoped to one team (e.g. backend) returns **only that team's** worklogs, so developers from other areas silently produce **zero rows**. Always report which areas actually appeared, and warn if a roster area is entirely missing. For full-team coverage use a token with organisation-wide worklog-view permission, or run once per team and merge.
+- **Tempo token visibility.** On this instance `TEMPO_API_TOKEN` has **organisation-wide** worklog visibility — the per-user endpoint (`/worklogs/user/{accountId}`) returns worklogs for **every** roster area (backend, frontend, QA), verified across all 27 developers. There is **no backend-only restriction**; report all areas. (A missing area therefore means those developers had no in-window worklogs or the roster name failed to resolve to an accountId — not a Tempo permission gap.)
 - **Point-in-time.** Logged hours reflect the Tempo state when you run it. It requires `TEMPO_API_TOKEN`.
 - **Area is per developer** (from the roster), not the ticket — a backend dev's rows are all `backend` even on a cross-area story.
 - **Roll-up.** A developer's worklogs on a Story's non-bug sub-tasks fold into that Story's Logged h; worklogs on its Bug/Sub-bug sub-tasks fold into Bug h. A top-level Bug the developer logged on is its own row (all time = Logged h, Bugs = 0).
