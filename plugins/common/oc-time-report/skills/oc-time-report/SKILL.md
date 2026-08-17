@@ -18,7 +18,7 @@ A team **estimation-vs-actual** report. Unlike `/oc-ai-report`, this one is **no
 - **Total dev h** — total development time on the ticket = **Logged h + Bug h** (the sum of all effort, bug-fixing included). Shown immediately before Logged h.
 - **Logged h** — the **whole ticket's** Tempo hours on the ticket + its **non-bug** sub-tasks, summed across **all contributors** (subtasks rolled up to the parent).
 - **Bug h** — the whole ticket's Tempo hours on its child **Bug/Sub-bug** sub-tasks, across all contributors.
-- **Arch gain / DL gain** — two time gains, `(Est − Logged)/Est` and `(Est − (Logged+Bug h))/Est`, `without / with` bug hours, computed against the **Architect** and **Dev-lead** estimate respectively. A gain shows as **`-`** when it is meaningless: a placeholder estimate (≤0.5h, e.g. a 0.01-day field), no logged time, or a magnitude beyond ±1000%.
+- **Arch gain / DL gain** — two time gains, `(Est − Logged)/Est` and `(Est − (Logged+Bug h))/Est`, `without / with` bug hours, computed against the **Architect** and **Dev-lead** estimate respectively. A gain shows as **`-`** when it is meaningless: a placeholder estimate (≤0.5h, e.g. a 0.01-day field), no logged time, or a magnitude beyond ±1000%. In the HTML, each gain is coloured **green** (positive, under estimate) / **red** (negative) — in both the detail table and the finished-US summary.
 - **AI** — a badge marking a ticket **developed with AI assistance** (it, or any rolled-up sub-issue, carries the "AI metrics" field `customfield_10745`). Aggregates show **AI tk** = AI-assisted / total.
 - **Bugs** — count of the ticket's child **Bug/Sub-bug** sub-issues; **only for Story / Enabler** tickets.
 - **Contributors** — every roster developer who logged on the ticket, `Name total (logged+bug)`, sorted by total.
@@ -337,6 +337,12 @@ def gain_pct(est, logged):
 def gain_str(g): return "-" if (g is None or abs(g) > GAIN_CAP) else (f"+{g}%" if g >= 0 else f"{g}%")
 def gain_two(est, logged, bug):
     return f"{gain_str(gain_pct(est, logged))} / {gain_str(gain_pct(est, logged + bug))}"
+def gain_cls(g): return "" if (g is None or abs(g) > GAIN_CAP) else ("pos" if g >= 0 else "neg")  # HTML: green/red
+def gain_span(g):
+    c = gain_cls(g)
+    return f'<span class="{c}">{gain_str(g)}</span>' if c else gain_str(g)
+def gain_two_html(est, logged, bug):  # HTML: each side coloured green/red
+    return f"{gain_span(gain_pct(est, logged))} / {gain_span(gain_pct(est, logged + bug))}"
 def gain_cell(est, logged):  # CSV: capped integer or "-"
     g = gain_pct(est, logged)
     return "-" if (g is None or abs(g) > GAIN_CAP) else g
@@ -459,7 +465,7 @@ def write_us_summary(rows, html_path, csv_path, project, since, until):
         out = []
         for k, _ in COLS:
             if k in ("gainNoBug", "gainBug"):
-                out.append(f'<td class="r">{gain_str(d[k])}</td>')
+                out.append(f'<td class="r {gain_cls(d[k])}">{gain_str(d[k])}</td>')
             elif k == "dev":
                 out.append(f'<td class="name">{e(d[k])}</td>')
             else:
@@ -497,9 +503,9 @@ def write_us_summary(rows, html_path, csv_path, project, since, until):
 <title>Finished US summary — {e(project)} {e(since or '')}…{e(until or '')}</title>
 <style>
 :root {{ color-scheme: light dark; --bg:#f7f8fa; --fg:#1a1d21; --muted:#6b7280; --line:#e3e6ea;
-  --head:#eef1f5; --accent:#2563eb; --zebra:#fafbfc; }}
+  --head:#eef1f5; --accent:#2563eb; --pos:#16a34a; --neg:#dc2626; --zebra:#fafbfc; }}
 @media (prefers-color-scheme: dark) {{ :root {{ --bg:#0f1216; --fg:#e6e8eb; --muted:#9aa3ad;
-  --line:#242a31; --head:#171b21; --accent:#6ea8fe; --zebra:#12161c; }} }}
+  --line:#242a31; --head:#171b21; --accent:#6ea8fe; --pos:#4ade80; --neg:#f87171; --zebra:#12161c; }} }}
 * {{ box-sizing:border-box; }}
 body {{ margin:0; padding:2rem 1.25rem 3rem; background:var(--bg); color:var(--fg);
   font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }}
@@ -513,6 +519,8 @@ th, td {{ padding:.5rem .7rem; text-align:left; white-space:nowrap; border-botto
 thead th {{ background:var(--head); font-weight:600; position:sticky; top:0; }}
 tbody tr:nth-child(even) {{ background:var(--zebra); }}
 .r {{ text-align:right; }}
+.pos {{ color:var(--pos); font-weight:600; }}
+.neg {{ color:var(--neg); font-weight:600; }}
 .name {{ font-weight:600; }}
 tr.total td {{ font-weight:700; border-top:2px solid var(--line); background:var(--head); }}
 .foot {{ color:var(--muted); font-size:.8rem; margin-top:2rem; border-top:1px solid var(--line); padding-top:1rem; }}
@@ -642,8 +650,8 @@ def main():
               f'<td>{e(r["title"])}</td><td>{e(r["status"])}</td><td class="c">{finalcell}</td><td class="name">{e(r["main"])}</td><td class="r">{r["aEst"]}</td><td class="r">{r["dlEst"]}</td>'
               f'<td class="r">{round(r["logged"] + r["bugLogged"], 1)}</td><td class="r">{r["logged"]}</td><td class="r">{r["bugLogged"]}</td>'
               f'<td class="c">{aicell}</td>'
-              f'<td class="r">{gain_two(r["aEst"], r["logged"], r["bugLogged"])}</td>'
-              f'<td class="r">{gain_two(r["dlEst"], r["logged"], r["bugLogged"])}</td><td class="r">{r["bugs"]}</td>'
+              f'<td class="r">{gain_two_html(r["aEst"], r["logged"], r["bugLogged"])}</td>'
+              f'<td class="r">{gain_two_html(r["dlEst"], r["logged"], r["bugLogged"])}</td><td class="r">{r["bugs"]}</td>'
               f'<td class="sm">{e(contrib_str(r["contrib"]))}</td></tr>')
         W("</tbody></table></div>")
     W('<p class="foot">One row per ticket, owned by its <b>main developer</b> (most total hours). Logged h &amp; Bug h are the '
@@ -663,9 +671,9 @@ def main():
 <title>Estimation vs logged — {e(a.project)} {e(a.since or '')}…{e(a.until or '')}</title>
 <style>
 :root {{ color-scheme: light dark; --bg:#f7f8fa; --fg:#1a1d21; --muted:#6b7280; --line:#e3e6ea;
-  --head:#eef1f5; --accent:#2563eb; --zebra:#fafbfc; }}
+  --head:#eef1f5; --accent:#2563eb; --pos:#16a34a; --neg:#dc2626; --zebra:#fafbfc; }}
 @media (prefers-color-scheme: dark) {{ :root {{ --bg:#0f1216; --fg:#e6e8eb; --muted:#9aa3ad;
-  --line:#242a31; --head:#171b21; --accent:#6ea8fe; --zebra:#12161c; }} }}
+  --line:#242a31; --head:#171b21; --accent:#6ea8fe; --pos:#4ade80; --neg:#f87171; --zebra:#12161c; }} }}
 * {{ box-sizing:border-box; }}
 body {{ margin:0; padding:2rem 1.25rem 3rem; background:var(--bg); color:var(--fg);
   font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }}
@@ -679,6 +687,8 @@ th, td {{ padding:.5rem .7rem; text-align:left; white-space:nowrap; border-botto
 thead th {{ background:var(--head); font-weight:600; position:sticky; top:0; }}
 tbody tr:nth-child(even) {{ background:var(--zebra); }}
 .r {{ text-align:right; }}
+.pos {{ color:var(--pos); font-weight:600; }}
+.neg {{ color:var(--neg); font-weight:600; }}
 .c {{ text-align:center; }}
 .aibadge {{ display:inline-block; font-size:.7rem; font-weight:700; letter-spacing:.03em; color:#fff;
   background:var(--accent); border-radius:4px; padding:.05rem .35rem; }}
