@@ -1,6 +1,6 @@
 ---
 name: oc-time-report
-description: Produce an estimation-vs-logged-hours report over a period, independent of the AI-usage JSON. Tempo-worklog driven, TICKET-based — one row per ticket owned by its main developer (most total hours), with type, area, title, Architect & Dev-lead estimates, total logged & bug hours (all contributors, subtasks rolled up), time gain (without/with bugs), child-bug count, and a contributor breakdown. A ticket counts once, under its main developer. Prints Markdown and writes a styled, date-stamped HTML file and a CSV to ./docs/. Reads Jira (Atlassian MCP) + Tempo (TEMPO_API_TOKEN).
+description: Produce an estimation-vs-logged-hours report over a period, independent of the AI-usage JSON. Tempo-worklog driven, TICKET-based — one row per ticket owned by its main developer (most total hours), with type, area, title, Architect & Dev-lead estimates, total logged & bug hours (all contributors, subtasks rolled up), time gain (without/with bugs), child-bug count, and a contributor breakdown. A ticket counts once, under its main developer. Prints Markdown and writes a styled, date-stamped HTML file and a CSV to ./docs/. Fetches Jira via direct REST (mandatory JIRA_API_TOKEN) and Tempo per-user (mandatory TEMPO_API_TOKEN) — no Atlassian MCP.
 argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD] [--out PATH] [--csv PATH]"
 ---
 
@@ -29,8 +29,10 @@ Output: Markdown in-session, plus a styled **HTML** file and a **CSV** of the de
 
 ## Access
 
-- **Atlassian MCP** (site `opencellsoft.atlassian.net`, cloudId `648ef912-b483-4da2-91af-73ea1e3fdad8`) for Jira reads. If not connected, tell the user to run `/mcp` and stop.
-- **Tempo** via `TEMPO_API_TOKEN` (each developer's own token, *Tempo → Settings → API keys*, worklog **read** scope). This report **requires** Tempo — logged hours are its whole point. The token is read from the environment, never passed on the command line.
+Both tokens are **mandatory** and read from the environment (never passed on the command line). If either is missing, tell the user how to create it and **stop**.
+
+- **`JIRA_API_TOKEN`** (+ **`JIRA_EMAIL`**, default `andrius.karpavicius@opencellsoft.com`) — an Atlassian API token from *id.atlassian.com → Security → API tokens*. All Jira reads go through the **Jira Cloud REST enhanced search** (`POST https://opencellsoft.atlassian.net/rest/api/3/search/jql`, Basic auth `email:token`) via `jira_fetch.py` below. **Do not use the Atlassian MCP `searchJiraIssuesUsingJql` in this report** — it force-includes each issue's full `description` and caps at ~5 issues/call with no cursor, which cannot fetch the thousands of tickets a real window needs. Direct REST honours the `fields` list (excludes `description`), returns 100/page and paginates via `nextPageToken`, so the whole fetch is one scripted job.
+- **`TEMPO_API_TOKEN`** (each developer's own token, *Tempo → Settings → API keys*, worklog **read** scope) — logged hours are the whole point. Fetched **per-user** (`/worklogs/user/{accountId}`), which has org-wide visibility across all areas.
 
 ## Arguments
 
@@ -46,7 +48,7 @@ Compute dates with `date -u +%Y-%m-%d` etc.; echo the resolved window back to th
 
 ## Developer roster (name → area)
 
-Area is per developer. Resolve each name to a Jira **accountId** with `lookupJiraAccountId` (names below may differ slightly from the Jira display name — use the closest match, and warn on any you cannot resolve). Write the resolved map to `devmap.json` as `{ "<accountId>": {"name": "<display>", "area": "backend|frontend|qa"} }`.
+Area is per developer. Resolve each name to a Jira **accountId** via Jira REST user search — `GET https://opencellsoft.atlassian.net/rest/api/3/user/search?query=<name>` (Basic auth `JIRA_EMAIL:JIRA_API_TOKEN`), pick the active `@opencellsoft.com` account whose `displayName` best matches (names below may differ slightly; warn on any you cannot resolve). Write the resolved map to `devmap.json` as `{ "<accountId>": {"name": "<display>", "area": "backend|frontend|qa"} }`. (If a `devmap.json` from a previous run already covers the roster, reuse it — accountIds are stable.)
 
 | Developer | Area |
 |---|---|
@@ -80,34 +82,35 @@ Area is per developer. Resolve each name to a Jira **accountId** with `lookupJir
 
 ## Task 1 — Resolve the roster to accountIds
 
-For each roster name call `lookupJiraAccountId`; build `devmap.json`. Keep only successfully resolved developers; list any unresolved names in the report's Notes. Collect the set of resolved accountIds as `ACCTS` (used to filter Tempo).
+Resolve each roster name via Jira REST user search (`GET /rest/api/3/user/search?query=<name>`, Basic auth `JIRA_EMAIL:JIRA_API_TOKEN`) and build `devmap.json`; or reuse an existing `devmap.json` (accountIds are stable). Keep only successfully resolved developers and list any unresolved names in the report's Notes. (Tempo is fetched per-user directly from `devmap.json`, so no separate accountId list is needed.)
 
 ## Task 2 — Fetch Tempo worklogs for the window (Pass T)
 
-Write `fetch_tempo_all.py` (below) to scratchpad and run it. It pages `GET https://api.tempo.io/4/worklogs?from=<SINCE>&to=<UNTIL-1day>` (Tempo `to` is inclusive; pass the last in-window day), keeps only worklogs whose `author.accountId` is in `ACCTS`, and writes:
+Fetch **per-user** (not the bulk `/worklogs` endpoint — that only surfaces some authors). Write `fetch_tempo_users.py` (below) to scratchpad and run it against `devmap.json`. It iterates each roster accountId, pages `GET https://api.tempo.io/4/worklogs/user/{accountId}?from=<SINCE>&to=<UNTIL-1day>` (Tempo `to` is inclusive; pass the last in-window day, following `metadata.next`), and writes:
 - `tempo.json` — `{ "<issueId>": { "<accountId>": seconds } }`
 - `worklog_ids.txt` — the distinct worklogged **issue ids**, comma-separated.
 
 ```bash
-python "<SCRATCHPAD>/fetch_tempo_all.py" --from [SINCE] --to [UNTIL] --accounts "<acc1,acc2,...>" \
-  --out "<SCRATCHPAD>/tempo.json" --ids-out "<SCRATCHPAD>/worklog_ids.txt"
+python "<SCRATCHPAD>/fetch_tempo_users.py" --devmap "<SCRATCHPAD>/devmap.json" \
+  --from [SINCE] --to [UNTIL-1day] --out "<SCRATCHPAD>/tempo.json" --ids-out "<SCRATCHPAD>/worklog_ids.txt"
 ```
 
-If Tempo returns nothing, tell the user and stop.
+It prints a per-developer worklog/issue count to stderr; report which developers actually had worklogs. If Tempo returns nothing, tell the user and stop. (Most logged time is cross-project — INTRD + SUPS support + others; the aggregator keeps only project-`INTRD` tickets, so the ticket report is a subset of the raw logged hours.)
 
-## Task 3 — Fetch ticket metadata (Jira)
+## Task 3 — Fetch ticket metadata (Jira, direct REST)
 
-The rows are at **parent-ticket** granularity, so we need each worklogged issue plus its parent chain and the parents' full sub-task lists.
+The rows are at **parent-ticket** granularity, so we need each worklogged issue plus its parent chain and the parents' full sub-task lists. Write `jira_fetch.py` (below) to scratchpad and run it — it does all three fetch phases against the Jira REST enhanced-search endpoint (fields-limited, `description` excluded, 100/page, `nextPageToken` paging) and writes `issues.json`:
 
-1. **Worklogged issues** — `searchJiraIssuesUsingJql` `key in (<worklog_ids as keys>)` — but Tempo gives numeric ids; instead query by id: `issue in (<ids>)` is not valid, so use `id in (<ids>)` via JQL `id in (12345,...)` (Jira accepts numeric ids in `id in (...)`). Fields: `["summary","issuetype","components","timeoriginalestimate","parent","status","customfield_10157","customfield_10158","customfield_10189","customfield_10745"]`. Batch ≤ ~80 ids. Collect nodes.
-   - `status` drives the **Status** column and the **Final** flag: a ticket is *final* when its Jira status (case-insensitive) is terminal for its type — **Bug**: Done / Invalid; **US**: Ready for Sprint review / Need documentation / Ready for release / Released; **any other type**: Done. The finished-User-Story summary (below) counts only US with Final = true.
-   - `customfield_10745` is the **"AI metrics"** field. Its presence (non-empty) marks a ticket as **developed with AI assistance** — the aggregator renders an **AI** badge per ticket and an **AI tk** (AI-assisted / total) count in the aggregates. A ticket is flagged if it *or any of its rolled-up sub-issues* carries the field, so a sub-bug's AI record surfaces on its parent row. Steps 2 & 3 fetch the **same fields**, so children carry it too.
-2. **Parents** — from those nodes, collect every `fields.parent.key` not already fetched; fetch them (same fields) so every rolled-up ticket is present.
-3. **All sub-tasks of the tickets** — for the set of parent-ticket keys (the union of top-level worklogged issues and the parents from step 2), fetch `parent in (<ticketKeys>)` (same fields) so Dev-lead estimate and bug counts see every sub-task, not only worklogged ones.
+```bash
+python "<SCRATCHPAD>/jira_fetch.py" --ids "<SCRATCHPAD>/worklog_ids.txt" --project [PROJECT] \
+  --out "<SCRATCHPAD>/issues.json"
+```
 
-Merge all nodes into one `issues.json` (`{issues:{nodes:[…]}}`; dedupe by key). Keep the numeric `id` on each node (the aggregator joins Tempo by id).
+The script: (1) fetches metadata for every worklogged issue id (`id in (…)`, batched by 100), (2) fetches any `fields.parent.key` not already present (for roll-up), (3) fetches all sub-tasks of the project's Story/Enabler parents (`parent in (…)`) so Dev-lead estimate & bug counts see every sub-task. It requests fields `["summary","issuetype","status","components","timeoriginalestimate","timespent","parent","customfield_10157","customfield_10158","customfield_10189","customfield_10745"]` and writes `{issues:{nodes:[…]}}` keyed with the numeric `id` (the aggregator joins Tempo by id).
 
-> On this project the estimate custom fields are `customfield_10157` = *Architect estimate back*, `customfield_10158` = *front*, `customfield_10189` = *QA estimate* (days).
+- `status` drives the **Status** column and the **Final** flag: a ticket is *final* when its Jira status (case-insensitive) is terminal for its type — **Bug**: Done / Invalid; **US**: Ready for Sprint review / Need documentation / Ready for release / Released; **any other type**: Done. The finished-User-Story summary counts only US with Final = true.
+- `customfield_10745` is the **"AI metrics"** field: its presence marks a ticket as **developed with AI assistance** (AI badge + AI tk count); a ticket is flagged if it *or any rolled-up sub-issue* carries it.
+- Estimate custom fields are `customfield_10157` = *Architect estimate back*, `customfield_10158` = *front*, `customfield_10189` = *QA estimate* (days).
 
 ## Task 4 — Aggregate & render
 
@@ -121,51 +124,144 @@ python "<SCRATCHPAD>/time_report.py" --tempo "<SCRATCHPAD>/tempo.json" --issues 
 
 Show the Markdown (`report.md`) to the user and report the HTML + CSV paths.
 
-### `fetch_tempo_all.py`
+### `fetch_tempo_users.py`
+
+```python
+import json, os, sys, time, urllib.request, urllib.error, urllib.parse
+BASE="https://api.tempo.io/4"
+def fetch_user(acc, tok, frm, to):
+    per_issue={}  # issueId -> seconds
+    url=f"{BASE}/worklogs/user/{urllib.parse.quote(acc,safe='')}?from={frm}&to={to}&limit=1000"
+    n=0
+    while url:
+        req=urllib.request.Request(url, headers={"Authorization":f"Bearer {tok}"})
+        try:
+            with urllib.request.urlopen(req,timeout=60) as r: data=json.load(r)
+        except urllib.error.HTTPError as ex:
+            sys.stderr.write(f"  {acc}: HTTP {ex.code}\n"); return per_issue, n, ex.code
+        for w in data.get("results") or []:
+            iid=str(((w.get("issue") or {}).get("id")))
+            sec=w.get("timeSpentSeconds") or 0
+            if iid and iid!="None":
+                per_issue[iid]=per_issue.get(iid,0)+sec; n+=1
+        url=(data.get("metadata") or {}).get("next")
+    return per_issue, n, 200
+
+def main():
+    import argparse
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--devmap",required=True); ap.add_argument("--from",dest="frm",required=True)
+    ap.add_argument("--to",required=True); ap.add_argument("--out",required=True); ap.add_argument("--ids-out",required=True)
+    a=ap.parse_args()
+    tok=os.environ.get("TEMPO_API_TOKEN")
+    if not tok: sys.stderr.write("no token\n"); sys.exit(1)
+    dev=json.load(open(a.devmap,encoding="utf-8"))
+    tempo={}  # issueId -> {acc: secs}
+    for acc,info in dev.items():
+        per,cnt,code=fetch_user(acc,tok,a.frm,a.to)
+        for iid,sec in per.items():
+            tempo.setdefault(iid,{})[acc]=tempo.get(iid,{}).get(acc,0)+sec
+        sys.stderr.write(f"{info['area']:8} {info['name']:26} {cnt:5} worklogs, {len(per):4} issues\n")
+    json.dump(tempo, open(a.out,"w"))
+    open(a.ids_out,"w").write(",".join(tempo.keys()))
+    sys.stderr.write(f"TOTAL distinct worklogged issues: {len(tempo)}\n")
+
+if __name__=="__main__": main()
+```
+
+### `jira_fetch.py`
 
 ```python
 #!/usr/bin/env python3
-"""Fetch all Tempo worklogs in a window and roll up to {issueId: {accountId: seconds}},
-keeping only the given author accountIds. Reads TEMPO_API_TOKEN from the environment."""
-import argparse, json, os, sys, urllib.request, urllib.error
+"""Fetch INTRD ticket metadata via direct Jira Cloud REST (enhanced JQL search).
+Honours `fields` (excludes description), paginates via nextPageToken. Auth: email:JIRA_API_TOKEN."""
+import os, sys, json, time, base64, urllib.request, urllib.error
+BASE="https://opencellsoft.atlassian.net"
+EMAIL=os.environ.get("JIRA_EMAIL") or "andrius.karpavicius@opencellsoft.com"
+TOK=os.environ["JIRA_API_TOKEN"]
+AUTH=base64.b64encode(f"{EMAIL}:{TOK}".encode()).decode()
+FIELDS=["summary","issuetype","status","components","timeoriginalestimate","timespent","parent",
+        "customfield_10157","customfield_10158","customfield_10189","customfield_10745"]
 
-BASE = "https://api.tempo.io/4"
+def post(path, body):
+    for attempt in range(5):
+        req=urllib.request.Request(BASE+path, data=json.dumps(body).encode(),
+            headers={"Authorization":f"Basic {AUTH}","Accept":"application/json","Content-Type":"application/json"})
+        try:
+            with urllib.request.urlopen(req,timeout=60) as r: return json.load(r)
+        except urllib.error.HTTPError as ex:
+            if ex.code in (429,503):
+                time.sleep(2*(attempt+1)); continue
+            sys.stderr.write(f"HTTP {ex.code}: {ex.read()[:200]}\n"); raise
+    raise RuntimeError("retries exhausted")
+
+def fetch_jql(jql):
+    nodes=[]; token=None
+    while True:
+        body={"jql":jql,"fields":FIELDS,"maxResults":100}
+        if token: body["nextPageToken"]=token
+        d=post("/rest/api/3/search/jql", body)
+        nodes+= d.get("issues") or []
+        if d.get("isLast") or not d.get("nextPageToken"): break
+        token=d["nextPageToken"]
+    return nodes
+
+def slim(n):
+    f=n.get("fields") or {}
+    p=f.get("parent") or {}
+    return {"id":n["id"],"key":n["key"],"fields":{
+        "summary":f.get("summary"),"issuetype":{"name":(f.get("issuetype") or {}).get("name")},
+        "status":{"name":(f.get("status") or {}).get("name")},"components":f.get("components") or [],
+        "timeoriginalestimate":f.get("timeoriginalestimate"),"timespent":f.get("timespent"),
+        "parent":{"key":p.get("key")} if p.get("key") else None,
+        "customfield_10157":f.get("customfield_10157"),"customfield_10158":f.get("customfield_10158"),
+        "customfield_10189":f.get("customfield_10189"),"customfield_10745":f.get("customfield_10745")}}
+
+def batched(seq,n):
+    for i in range(0,len(seq),n): yield seq[i:i+n]
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--from", dest="frm", required=True)
-    ap.add_argument("--to", required=True)   # exclusive end (we query to=to-1day is caller's job; here inclusive)
-    ap.add_argument("--accounts", default="")
-    ap.add_argument("--out", required=True); ap.add_argument("--ids-out", required=True)
-    a = ap.parse_args()
-    token = os.environ.get("TEMPO_API_TOKEN")
-    if not token:
-        sys.stderr.write("TEMPO_API_TOKEN not set — cannot build a time report.\n"); sys.exit(2)
-    keep = {x.strip() for x in a.accounts.split(",") if x.strip()}
-    out = {}; n = 0
-    url = f"{BASE}/worklogs?from={a.frm}&to={a.to}&limit=1000"
-    while url:
-        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-        try:
-            with urllib.request.urlopen(req, timeout=60) as r:
-                data = json.load(r)
-        except urllib.error.HTTPError as ex:
-            sys.stderr.write(f"Tempo HTTP {ex.code}: {ex.read()[:300]}\n"); sys.exit(3)
-        for w in data.get("results") or []:
-            acc = (w.get("author") or {}).get("accountId")
-            if keep and acc not in keep: continue
-            iid = str((w.get("issue") or {}).get("id"))
-            if not iid or iid == "None": continue
-            out.setdefault(iid, {})
-            out[iid][acc] = out[iid].get(acc, 0) + (w.get("timeSpentSeconds") or 0)
-            n += 1
-        url = (data.get("metadata") or {}).get("next")
-    json.dump(out, open(a.out, "w"))
-    open(a.ids_out, "w").write(",".join(sorted(out.keys())))
-    sys.stderr.write(f"Tempo: {n} worklogs kept across {len(out)} issues.\n")
+    import argparse
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--ids", required=True)      # file: comma-separated worklogged issue ids
+    ap.add_argument("--out", required=True)       # issues.json
+    ap.add_argument("--project", default="INTRD")
+    a=ap.parse_args()
+    PROJ=a.project
+    wl=[x for x in open(a.ids).read().split(",") if x]
+    by_id={}
+    # Phase 1: metadata for every worklogged issue (all projects) by id
+    for i,b in enumerate(batched(wl,100)):
+        for n in fetch_jql("id in ("+",".join(b)+")"):
+            by_id[str(n["id"])]=slim(n)
+        if i%10==0: sys.stderr.write(f"  worklog batch {i}: {len(by_id)} nodes\n")
+    sys.stderr.write(f"Phase1 done: {len(by_id)} worklogged issues\n")
+    by_key={v["key"]:v for v in by_id.values()}
+    # Phase 2: parents (for roll-up) not already fetched
+    pkeys=set()
+    for v in by_id.values():
+        pk=(v["fields"].get("parent") or {}).get("key")
+        if pk and pk not in by_key: pkeys.add(pk)
+    pkeys=sorted(pkeys)
+    for i,b in enumerate(batched(pkeys,100)):
+        for n in fetch_jql("key in ("+",".join(b)+")"):
+            s=slim(n); by_id[str(n["id"])]=s; by_key[s["key"]]=s
+    sys.stderr.write(f"Phase2 done: +{len(pkeys)} parents, total {len(by_id)}\n")
+    # Phase 3: all sub-tasks of PROJECT Story/Enabler parents (for DL est + bug counts)
+    story_parents=sorted({v["key"] for v in list(by_id.values())
+        if v["key"].startswith(PROJ+"-") and (v["fields"]["issuetype"]["name"] or "") in ("Story","Enabler")})
+    seen=set(by_id)
+    for i,b in enumerate(batched(story_parents,60)):
+        for n in fetch_jql("parent in ("+",".join(b)+")"):
+            if str(n["id"]) not in seen:
+                s=slim(n); by_id[str(n["id"])]=s
+        if i%10==0: sys.stderr.write(f"  subtask batch {i}: total {len(by_id)}\n")
+    sys.stderr.write(f"Phase3 done: total {len(by_id)} nodes\n")
+    json.dump({"issues":{"nodes":list(by_id.values())}}, open(a.out,"w",encoding="utf-8"))
+    inp=sum(1 for v in by_id.values() if v["key"].startswith(PROJ+"-"))
+    sys.stderr.write(f"WROTE {a.out}: {len(by_id)} total, {inp} {PROJ}\n")
 
-if __name__ == "__main__":
-    main()
+if __name__=="__main__": main()
 ```
 
 ### `time_report.py`
@@ -617,4 +713,4 @@ if __name__ == "__main__":
 - **Area is per developer** (from the roster), not the ticket — a backend dev's rows are all `backend` even on a cross-area story.
 - **Roll-up.** A developer's worklogs on a Story's non-bug sub-tasks fold into that Story's Logged h; worklogs on its Bug/Sub-bug sub-tasks fold into Bug h. A top-level Bug the developer logged on is its own row (all time = Logged h, Bugs = 0).
 - **Estimates.** A. Est needs the per-area estimate custom fields on the Story; DL. Est needs child sub-task estimates (Story) or the ticket estimate (Bug/Enabler). Rows for tickets with no estimate show `0` / `–` time gain.
-- **Read-only** — the command never writes to Jira; the only outbound call is the read-only Tempo fetch.
+- **Read-only** — the command never writes to Jira; outbound calls are read-only: the Jira REST enhanced-search reads (Task 3) and the Tempo per-user fetch (Task 2).

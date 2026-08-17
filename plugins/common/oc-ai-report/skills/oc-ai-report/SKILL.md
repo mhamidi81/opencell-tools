@@ -1,6 +1,6 @@
 ---
 name: oc-ai-report
-description: Produce a cross-ticket AI-usage report over a period. AI metrics grouped by developer domain (backend/frontend/QA); per-area Architect estimate (custom fields) and Dev-lead estimate (ticket field / sum of child sub-task estimates); ticket type; bug counts and hours-logged-on-bugs per area; logged hours per user & ticket via the Tempo API (fallback Jira worklogs); time gain without/with bug hours; sections ordered Totals → Summary → Detail. Reads Jira (read-only) + optional Tempo. Prints Markdown and writes a styled, date-stamped HTML file to ./docs/ai-usage-report-<date>.html.
+description: Produce a cross-ticket AI-usage report over a period. AI metrics grouped by developer domain (backend/frontend/QA); per-area Architect estimate (custom fields) and Dev-lead estimate (ticket field / sum of child sub-task estimates); ticket type; bug counts and hours-logged-on-bugs per area; logged hours per user & ticket via the Tempo API (fallback Jira worklogs); time gain without/with bug hours; sections ordered Totals → Summary → Detail. Fetches Jira via direct Cloud REST (enhanced /search/jql, fields-limited, no descriptions, paginated) using a mandatory JIRA_API_TOKEN — no Atlassian MCP; Tempo optional. Prints Markdown and writes a styled, date-stamped HTML file to ./docs/ai-usage-report-<date>.html.
 argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD] [--out PATH]"
 ---
 
@@ -15,7 +15,7 @@ This command is **read-only** — it only queries Jira. It needs **no** Bitbucke
 
 ## Access
 
-Requires the **Atlassian MCP** (the official `atlassian` / claude.ai Atlassian Rovo connector), site `opencellsoft.atlassian.net`, cloudId `648ef912-b483-4da2-91af-73ea1e3fdad8`. If it is not connected, tell the user to run `/mcp` and connect it, then stop.
+Requires **`JIRA_API_TOKEN`** (+ **`JIRA_EMAIL`**, default `andrius.karpavicius@opencellsoft.com`) — an Atlassian API token (*id.atlassian.com → Security → API tokens*). All Jira reads go through the **Jira Cloud REST enhanced search** (`POST https://opencellsoft.atlassian.net/rest/api/3/search/jql`, Basic auth `email:token`) via `ai_jira_fetch.py` below. The token is **mandatory** and read from the environment (never on the command line); if unset, tell the user to create one and stop. **Do not use the Atlassian MCP `searchJiraIssuesUsingJql`** — it force-includes each issue's full `description` and caps at ~5 issues/call with no cursor. Direct REST honours the `fields` list (excludes `description`), returns 100/page and paginates via `nextPageToken`.
 
 > **Tempo (per-user logged time).** Tempo syncs its worklogs into Jira under the **Tempo app account**, so Jira alone can't attribute logged time per developer. For true per-user hours, set **`TEMPO_API_TOKEN`** (each developer makes their own in *Tempo → Settings → API keys*, worklog **read** scope) and the report calls the Tempo REST API (`api.tempo.io/4`) in Pass C. It is **optional**: without the token the report falls back to the Jira `worklog` / `timespent` fields (ticket total). The token is read from the environment, never passed on the command line.
 
@@ -37,24 +37,19 @@ Only Jira dates are JQL-filterable (the record's `at` lives *inside* the text fi
 
 **Why two passes.** AI metrics are grouped by the record key's **domain** (`backend`/`frontend`/`qa`, per developer). The **Architect estimate (A. Est h)** is on the parent (per-area custom fields). But the **Dev-lead estimate (DL. Est h)** for a User Story is the **sum of its child sub-tasks' estimates** per area, and **bug counts / bug-logged hours** come from its child **Bug / Sub-bug** sub-issues — neither the subtasks' estimates nor their `timespent`/area are in the parent payload, so a second fetch of the children is needed.
 
-> **⚠️ The fetch tool caps every response — you MUST loop with `key NOT IN`.** `searchJiraIssuesUsingJql` **force-includes each issue's full `description`** (the `fields` list does *not* exclude it) and returns only as many issues as fit a fixed size budget — often just **~5** when descriptions are long — with **no usable page cursor** (`pageInfo.endCursor` is `null`). It reports how many it dropped in **`issues.remainingCount`**. So one call silently truncates, and a small `nodes` count with `remainingCount > 0` is **not** the full result. To fetch **completely**, loop: after each call, collect the returned issue keys, then re-run the **same JQL** with an added `AND key NOT IN (<every key collected so far>)`, repeating until a call returns **0 nodes** (or omits `remainingCount`). Merge all nodes and dedupe by key. Large responses are auto-saved to a file — parse the file; **never assume the first call was complete** (`hasNextPage:false` here means "no cursor", not "no more rows").
+**Both passes in one script.** Write `ai_jira_fetch.py` (below) to scratchpad and run it — it does Pass A and Pass B via the Jira REST enhanced-search endpoint (fields-limited, `description` excluded, 100/page, `nextPageToken` paging) and writes `tickets.json` + `children.json`:
 
-**Pass A — parent tickets (carry the AI record):**
-1. JQL:
-   ```
-   project = [PROJECT] AND cf[10745] IS NOT EMPTY AND updated >= "[SINCE]" ORDER BY updated DESC
-   ```
-2. `searchJiraIssuesUsingJql` with fields:
-   `["summary","assignee","issuetype","status","resolutiondate","updated","timeoriginalestimate","timespent","worklog","issuelinks","subtasks","components","customfield_10157","customfield_10158","customfield_10189","customfield_10745","customfield_10613"]`
-   - `status` drives the **Status** column and the **Final** flag in the *Detail per user* tables: a ticket is *final* when its Jira status (case-insensitive) is terminal for its type — **Bug**: Done/Invalid; **US**: Ready for Sprint review / Need documentation / Ready for release / Released; **any other type**: Done. **AI Contrib below 60% is shown in red** in both the *Summary by user* and *Detail per user* tables.
-   - The three estimate custom fields (**days**) are the per-area estimates on a User Story: `customfield_10157` = *Architect estimate back*, `customfield_10158` = *Architect estimate front*, `customfield_10189` = *QA estimate*. The aggregator converts days → hours (×8) and, if none are set (e.g. a standalone Bug), falls back to the ticket's own `timeoriginalestimate`. Sub-issue estimates are **never summed**.
-   - **Loop until complete** using the `key NOT IN (…)` technique above: keep re-running the JQL with the growing exclusion list until a call returns 0 nodes (`remainingCount` on the first call tells you how many are still missing). Accumulate every parent node, dedupe by key, and write the merged set to scratchpad as `tickets.json` (shape `{issues:{nodes:[…]}}` or `{issues:[…]}` — both accepted). If a response was auto-saved to a file, parse the file rather than the truncated inline text.
+```bash
+python "<SCRATCHPAD>/ai_jira_fetch.py" --since [SINCE] --project [PROJECT] \
+  --out-tickets "<SCRATCHPAD>/tickets.json" --out-children "<SCRATCHPAD>/children.json"
+```
 
-If no issues match, tell the user "No tickets with AI-metrics data found for [PROJECT] since [SINCE]" and stop.
+- **Pass A** runs `project = [PROJECT] AND cf[10745] IS NOT EMPTY AND updated >= "[SINCE]"` with fields `["summary","assignee","issuetype","status","resolutiondate","updated","timeoriginalestimate","timespent","worklog","components","customfield_10157","customfield_10158","customfield_10189","customfield_10745","customfield_10613"]` → `tickets.json`. If it returns 0 tickets, tell the user "No tickets with AI-metrics data found for [PROJECT] since [SINCE]" and stop.
+- **Pass B** fetches every child sub-issue of those parents (`parent in (<keys>)`, batched) with `["summary","issuetype","components","timeoriginalestimate","timespent","parent"]` → `children.json`. Both regular sub-tasks and Bug/Sub-bug sub-tasks are needed: non-bug sub-tasks feed the Dev-lead estimate, Bug/Sub-bug ones feed the bug count and Sub-bug h. **Issue links are deliberately NOT used.**
 
-**Pass B — child sub-issues (for Dev-lead estimate, bug counts & bug-logged hours):**
-3. Fetch children **directly by parent** (don't rely on the parents' `subtasks` arrays — those can be truncated in a capped Pass-A payload): `searchJiraIssuesUsingJql` with JQL `parent in (<all parent keys from Pass A>)` and fields `["summary","issuetype","components","timeoriginalestimate","timespent","parent"]`. Both regular sub-tasks and Bug/Sub-bug sub-tasks are needed: non-bug sub-tasks feed the Dev-lead estimate, Bug/Sub-bug ones feed the bug count and Sub-bug h. **Issue links are deliberately NOT used** (a "Relates" link pulls in duplicate/related bugs and unrelated tickets).
-4. **This response caps the same way** — sub-bugs carry long descriptions too, so one call returns only ~5 with `remainingCount > 0`. Apply the identical loop: re-run `parent in (…) AND key NOT IN (<every child key collected so far>)` until a call returns 0 nodes. Merge, dedupe by key, and write to scratchpad as `children.json` (same shape). Each node's `id`, `issuetype`, `components`/title (area), `timeoriginalestimate` (Dev-lead estimate) and `timespent` (Sub-bug h) drive the per-area estimate/bug math. A parent with no children simply contributes none.
+Notes on the fields:
+- `status` drives the **Status** column and the **Final** flag in the *Detail per user* tables: a ticket is *final* when its Jira status (case-insensitive) is terminal for its type — **Bug**: Done/Invalid; **US**: Ready for Sprint review / Need documentation / Ready for release / Released; **any other type**: Done. **AI Contrib below 60% is shown in red** in both the *Summary by user* and *Detail per user* tables.
+- The three estimate custom fields (**days**) are the per-area estimates on a User Story: `customfield_10157` = *Architect estimate back*, `customfield_10158` = *front*, `customfield_10189` = *QA estimate*. The aggregator converts days → hours (×8) and, if none are set (a standalone Bug), falls back to the ticket's own `timeoriginalestimate`. Sub-issue estimates are **never summed**.
 
 **Pass C — per-user logged time from Tempo (optional but preferred):**
 5. Tempo Timesheets syncs its worklogs into the Jira `worklog` field **under the Tempo app account**, so Jira alone cannot split logged time per developer. Tempo's own REST API keeps the real `author.accountId`. If the environment variable **`TEMPO_API_TOKEN`** is set (each developer creates their own token in *Tempo → Settings → API keys*, worklog **read** scope), fetch true per-user hours; otherwise skip and the aggregator falls back to Jira worklogs / ticket total.
@@ -63,6 +58,67 @@ If no issues match, tell the user "No tickets with AI-metrics data found for [PR
    python "<SCRATCHPAD>/fetch_tempo.py" --ids "93179,107118,109478,<bug-ids…>" --out "<SCRATCHPAD>/tempo.json"
    ```
    It reads `TEMPO_API_TOKEN` from the environment (never pass the token on the command line), calls `GET https://api.tempo.io/4/worklogs/issue/{id}` (paginated via `metadata.next`), and writes `{"<issueId>": {"<accountId>": seconds}}`. On a missing token or a 401 it writes `{}` and the report still runs (logged falls back to Jira worklog / ticket total; Bug h to the bug's `timespent`).
+
+### `ai_jira_fetch.py`
+
+```python
+#!/usr/bin/env python3
+"""Fetch the AI-usage report's tickets via direct Jira Cloud REST (enhanced JQL search).
+Pass A = tickets carrying an AI-metrics record; Pass B = their child sub-issues.
+Honours `fields` (excludes description), paginates via nextPageToken. Auth: JIRA_EMAIL:JIRA_API_TOKEN."""
+import os, sys, json, time, base64, argparse, urllib.request, urllib.error
+BASE="https://opencellsoft.atlassian.net"
+EMAIL=os.environ.get("JIRA_EMAIL") or "andrius.karpavicius@opencellsoft.com"
+TOK=os.environ["JIRA_API_TOKEN"]
+AUTH=base64.b64encode(f"{EMAIL}:{TOK}".encode()).decode()
+# Pass A carries the AI record + estimates + worklog (Jira fallback) + AI tag
+FIELDS_A=["summary","assignee","issuetype","status","resolutiondate","updated","timeoriginalestimate",
+          "timespent","worklog","components","customfield_10157","customfield_10158","customfield_10189",
+          "customfield_10745","customfield_10613"]
+FIELDS_B=["summary","issuetype","components","timeoriginalestimate","timespent","parent"]
+
+def post(path, body):
+    for attempt in range(5):
+        req=urllib.request.Request(BASE+path, data=json.dumps(body).encode(),
+            headers={"Authorization":f"Basic {AUTH}","Accept":"application/json","Content-Type":"application/json"})
+        try:
+            with urllib.request.urlopen(req,timeout=60) as r: return json.load(r)
+        except urllib.error.HTTPError as ex:
+            if ex.code in (429,503): time.sleep(2*(attempt+1)); continue
+            sys.stderr.write(f"HTTP {ex.code}: {ex.read()[:200]}\n"); raise
+    raise RuntimeError("retries exhausted")
+
+def fetch_jql(jql, fields):
+    nodes=[]; token=None
+    while True:
+        body={"jql":jql,"fields":fields,"maxResults":100}
+        if token: body["nextPageToken"]=token
+        d=post("/rest/api/3/search/jql", body)
+        nodes+=d.get("issues") or []
+        if d.get("isLast") or not d.get("nextPageToken"): break
+        token=d["nextPageToken"]
+    return nodes
+
+def main():
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--since", required=True); ap.add_argument("--project", default="INTRD")
+    ap.add_argument("--out-tickets", required=True); ap.add_argument("--out-children", required=True)
+    a=ap.parse_args()
+    # Pass A — parent tickets that carry an AI-metrics record (customfield_10745 not empty)
+    jqlA=f'project = {a.project} AND cf[10745] IS NOT EMPTY AND updated >= "{a.since}" ORDER BY updated DESC'
+    parents=fetch_jql(jqlA, FIELDS_A)
+    json.dump({"issues":{"nodes":parents}}, open(a.out_tickets,"w",encoding="utf-8"))
+    sys.stderr.write(f"Pass A: {len(parents)} tickets with AI records\n")
+    # Pass B — every child sub-issue of those parents (for Dev-lead estimate, bug counts, Sub-bug h)
+    keys=[n["key"] for n in parents]
+    children=[]
+    for i in range(0,len(keys),100):
+        children+=fetch_jql("parent in ("+",".join(keys[i:i+100])+")", FIELDS_B)
+    json.dump({"issues":{"nodes":children}}, open(a.out_children,"w",encoding="utf-8"))
+    sys.stderr.write(f"Pass B: {len(children)} child sub-issues\n")
+
+if __name__=="__main__": main()
+```
 
 ### `fetch_tempo.py`
 
@@ -877,7 +933,7 @@ if __name__ == "__main__":
 - **Date = the AI record's `at`** (the day the metric was measured/confirmed). The JQL `updated >=` window is only a pre-filter; precise period membership is decided by `at` in the aggregator.
 - **Logged hours** (per user & ticket, booked on the parent): **Tempo per-user** (`TEMPO_API_TOKEN`, real author) → **Jira worklog** author → **ticket-total** `timespent`. Shown in **hours** (8h/day). **Time gain** is shown as **two numbers, `without / with` bug hours**: `(estimate − logged)/estimate` first, then `(estimate − (logged + Bug h))/estimate` — so you see the gain on the ticket work alone and the gain once the time spent on its bugs is folded in. Positive = under estimate. (When logged falls back to a ticket total rather than Tempo per-user, the estimate is per-area while logged is whole-ticket, so the value can read oddly.)
 - **Bugs & Sub-bug h** = the ticket's **own child sub-issues** of type `Bug` or `Sub-bug` — **issue links are not counted** (a "Relates" link would pull in duplicate/related bugs not raised against this ticket's work). Attributed to an area by the bug's own Component/title (else the parent's area). **Sub-bug h** is the hours logged on those bugs (Tempo per-user → the bug's `timespent`), shown as a **separate** column from the ticket's Logged h.
-- **Read-only to Jira** — the command never writes to Jira, Bitbucket, or git; the only outbound call is the read-only Tempo worklog fetch (Pass C) when a token is set.
+- **Read-only** — the command never writes to Jira, Bitbucket, or git; outbound calls are read-only: the Jira REST enhanced-search reads (Passes A/B) and the Tempo worklog fetch (Pass C) when a token is set.
 - The AI records are **latest-only per developer×domain**, so the report reflects the most recent measurement per person per ticket, not a full history.
 
 ## Examples
