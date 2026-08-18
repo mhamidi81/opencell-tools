@@ -56,7 +56,7 @@
     {
       "name": "oc-fe-calculate-ai-use",
       "source": "./plugins/frontend/oc-fe-calculate-ai-use",
-      "description": "Estimate AI contribution and retention on the OpenCell Portal (/oc-fe-calculate-ai-use) from the frontend sub-agent manifests, first-pass snapshots, session transcript and file-history — per-category breakdown (components, i18n, unit tests, e2e, styles), Vitest/Playwright test counts, reviewer-rework provenance, planning-effort band, ai_Dev_Front / ai_test_front_dev Jira tagging, and the shared machine-readable JSON record for cross-team reporting"
+      "description": "Estimate AI contribution and retention on the OpenCell Portal (/oc-fe-calculate-ai-use) from the frontend sub-agent manifests, first-pass snapshots, session transcript and file-history — per-category breakdown (components, i18n, unit tests, e2e, styles), Vitest/Playwright test counts, reviewer-rework provenance, planning-effort band, ai_Dev_Front / ai_test_front_dev Jira tagging, and the shared machine-readable JSON record for cross-team reporting; runs automatically at the end of /oc-pull-request on opencell-portal"
     },
     {
       "name": "oc-be-tools",
@@ -86,7 +86,7 @@
     {
       "name": "oc-pull-request",
       "source": "./plugins/common/oc-pull-request",
-      "description": "Push changes and create a pull request for a JIRA ticket with automatic squash and PR creation"
+      "description": "Push changes and create a pull request for a JIRA ticket with automatic squash and PR creation, then records the ticket's AI usage via /oc-fe-calculate-ai-use on the squashed commit — opencell-portal only, idempotent, and non-fatal"
     },
     {
       "name": "oc-review-pr",

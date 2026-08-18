@@ -1,6 +1,6 @@
 ---
 name: oc-pull-request
-description: Push changes and create a pull request for the JIRA ticket
+description: Push changes and create a pull request for the JIRA ticket, then — for opencell-portal only — record the AI usage on the ticket via /oc-fe-calculate-ai-use
 argument-hint: JIRA Ticket ID (e.g., INTRD-36922)
 ---
 
@@ -282,6 +282,44 @@ If the Bitbucket credentials are not set or the call returns `401`:
 - Inform user: "Unknown remote type. Please create PR manually."
 - Display the PR title and description for reference
 
+### 9. Record AI usage (frontend only — `opencell-portal`)
+
+**Run this step only when [REPO-NAME] contains `opencell-portal`.** For **any** other repository —
+including `opencell-core` — skip it entirely and say nothing about it. Backend AI-usage recording is
+deliberately **not** wired into this command; it stays a manual `/oc-be-tools:oc-be-calculate-ai-use`
+run owned by the backend team.
+
+This is the one point in the workflow where the measurement scope is right: **step 3 squashed the
+branch into a single commit**, so `HEAD` now holds the *whole ticket's* diff — exactly what
+`/oc-fe-calculate-ai-use` measures in its default commit mode. Measuring earlier (once per commit)
+would measure a fragment *and* record a commit sha that step 3's squash then discards.
+
+Invoke it **automatically, without asking**:
+
+```
+/oc-fe-calculate-ai-use --commit HEAD --if-not-recorded
+```
+
+The skill keeps its own decision points — it presents the computed numbers for the developer to
+adjust and confirms before writing anything to JIRA — so "automatic" here means *the measurement
+starts by itself*, not that anything is posted unreviewed.
+
+- `--commit HEAD` — the post-squash commit, never the working tree.
+- `--if-not-recorded` — makes the call idempotent. This command also runs on **PR updates** (step 3),
+  and a JIRA comment cannot be un-posted (`addCommentToJiraIssue` is append-only; only
+  `customfield_10745` is an upsert), so the flag makes the skill exit silently when the ticket
+  already carries an AI-usage record for this exact commit. A manual `/oc-fe-calculate-ai-use`
+  without the flag always re-measures and overwrites.
+
+**This step is non-fatal.** The PR already exists by the time it runs. If the plugin is not
+installed, the analyzer fails, or JIRA rejects a write, report it as a warning and finish the command
+successfully — never retry the PR creation, never unwind the push:
+
+```
+AI usage not recorded: <reason>.
+Run /oc-fe-calculate-ai-use manually when convenient — the PR itself was created successfully.
+```
+
 ## Examples
 
 ```bash
@@ -290,4 +328,8 @@ If the Bitbucket credentials are not set or the call returns `401`:
 
 # Example: If current branch is "mhamidi/feature/dev/INTRD-36922-claude-integration"
 # PR will target "dev" branch automatically
+#
+# On opencell-portal, step 9 then runs
+#   /oc-fe-calculate-ai-use --commit HEAD --if-not-recorded
+# automatically. On any other repository (including opencell-core) that step is skipped.
 ```

@@ -1,7 +1,7 @@
 ---
 name: oc-fe-calculate-ai-use
 description: Estimate how much of the current OpenCell Portal work came from AI (Claude Code) and how much of the AI's suggestions survived, using this session's transcript, the frontend sub-agent manifests and first-pass snapshots, and file-history vs. the last commit (or uncommitted changes). Breaks the numbers down by artifact category (components, i18n, unit tests, e2e, styles) and by provenance (a reviewer-rework figure), counts Vitest and Playwright/Cypress tests added/modified and new i18n keys, and — for planning-heavy tickets with little code — reports the AI's planning/analysis effort as a separate band. Lets the developer adjust, then posts a human comment, tags the ticket (customfield_10613) as ai_Dev_Front / ai_test_front_dev, and records the shared machine-readable JSON record (keyed by domain/user, latest-only) in the AI-metrics field for reporting.
-argument-hint: "[--working | --commit <ref>] [--run <RUN_ID>]"
+argument-hint: "[--working | --commit <ref>] [--run <RUN_ID>] [--if-not-recorded]"
 ---
 
 # Calculate AI Use — Frontend (`/oc-fe-calculate-ai-use`)
@@ -16,6 +16,8 @@ You estimate how much of the current piece of work on the **OpenCell Portal** ca
   4. **File-history** (`~/.claude/file-history/<session>/`) — full versioned snapshots of tracked files; a backstop that also captures sub-agent edits to *existing* files.
 - **Final code** → the **last commit** by default, or the **uncommitted working tree** if that is what is being measured.
 - **Planning / analysis effort** (non-code) → from the planning manifest (`.claude/cache/ai-stats/<RUN_ID>/_planning.json`) if present, otherwise reconstructed from the transcript. Reported as an effort band, never a percentage (see Metrics).
+
+> **Invocation.** `/oc-pull-request` runs this command automatically as its final step — but **only on `opencell-portal`**, and only after it has squashed the branch, so `HEAD` is the whole ticket's diff (`--commit HEAD --if-not-recorded`). It stays fully usable on its own; a manual run without `--if-not-recorded` always re-measures and overwrites the ticket's record.
 
 > **Cross-team contract.** This command is the frontend twin of `/oc-be-tools:oc-be-calculate-ai-use`. The **JSON record schema (`opencell.ai-usage/v1`), the field it is written to (`customfield_10745`) and the record-key layout (`<domain>/<accountId>/<name>`) are identical across backend, frontend and QA** — only the `domain` value (`frontend`), the artifact categories and the tag names differ. Do not diverge from the shared parts: one reporting tool reads every team's data from one field.
 
@@ -88,7 +90,14 @@ Parse `$ARGUMENTS` (all optional):
 
 - `--working` → measure the **uncommitted working tree** (`git diff HEAD`) instead of the last commit.
 - `--commit <ref>` → measure the given commit instead of `HEAD`.
-- `--run <RUN_ID>` → use the manifests in `.claude/cache/ai-stats/<RUN_ID>/`. If omitted, use the **most recently modified** `RUN_ID` directory (and warn if none is found).
+- `--run <RUN_ID>` → use the manifests in `.claude/cache/ai-stats/<RUN_ID>/`. If omitted, resolve it **from the ticket** (in Task 3, once Task 2 has resolved `[TICKET-NUMBER]`): the most recently modified directory whose name starts with `[TICKET-NUMBER]-` — run dirs are named `{TICKET}-{yyyymmdd-HHMMSS}`, so this is a prefix match:
+
+  ```bash
+  ls -1dt .claude/cache/ai-stats/[TICKET-NUMBER]-*/ 2>/dev/null | head -1
+  ```
+
+  Only if the ticket has **no** run directory at all, fall back to the most recently modified directory of any ticket — and **name the ticket it belongs to in a warning**. Picking another ticket's run silently attributes that ticket's sub-agent files and planning effort to this one, which is the single failure mode that corrupts the numbers without leaving a trace. Warn if none is found at all.
+- `--if-not-recorded` → **exit silently** if the ticket already carries an AI-usage record for this exact commit (see Task 2b). Intended for automated callers — `/oc-pull-request` step 9, which also runs on PR updates — so a repeat cannot post a second JIRA comment. Without the flag the skill always measures and overwrites, because a manual re-run is normally deliberate.
 - No mode arguments → **auto**: if the working tree is dirty, ask whether to measure the *last commit* (default) or the *uncommitted changes*; if clean, measure the last commit.
 
 There is intentionally **no ticket argument** — see Task 2.
@@ -124,13 +133,41 @@ There is intentionally **no ticket argument** — see Task 2.
 
 ---
 
+## Task 2b — Skip if already recorded (`--if-not-recorded` only)
+
+**Skip this whole task unless `--if-not-recorded` was passed.**
+
+Automated callers can fire more than once for the same work (`/oc-pull-request` runs its step 9 on PR
+updates too), and `addCommentToJiraIssue` is **append-only** — only `customfield_10745` is an upsert.
+This check is the only thing standing between an automated re-run and a second AI-usage comment on
+the ticket.
+
+1. **Working mode never skips.** The tree is by definition still moving, so there is no stable scope
+   to compare — continue with the measurement.
+2. `git rev-parse --short [COMMIT-REF]` → `[SCOPE]` (the same value Task 6c stores as `scope`).
+3. `atlassianUserInfo` → `[ACCOUNT-ID]`.
+4. `getJiraIssue` with `fields: ["customfield_10745"]`, parsed exactly as in Task 6c — the value may be
+   a plain string or an ADF document whose JSON lives in the first `codeBlock`/`paragraph` text node.
+5. If any key starting with `frontend/[ACCOUNT-ID]/` holds a record whose `scope` equals `[SCOPE]`,
+   print one line and **stop — measure nothing, write nothing**:
+
+   ```
+   AI usage already recorded for [TICKET-NUMBER] @ [SCOPE] (frontend/<name>, measured <at>) — nothing to do.
+   ```
+
+6. **Fail open.** If the identity call or the field read fails, or the field is unparseable, or no
+   record matches, continue with the normal flow. A duplicate comment is a cosmetic cost; skipping on
+   a transient read error would lose the measurement entirely.
+
+---
+
 ## Task 3 — Locate the AI sources
 
 **Slug & session.** Claude Code stores per-session transcripts as JSONL at `~/.claude/projects/<PROJECT-SLUG>/<session-id>.jsonl`, where `<PROJECT-SLUG>` is the absolute repo path with `:`, `/`, `\` each replaced by `-`. For the portal repo (`/home/mhamidi/workspace/oc/portal/source/opencell-portal`) that is `-home-mhamidi-workspace-oc-portal-source-opencell-portal`. **Derive it from `git rev-parse --show-toplevel` rather than hardcoding it** — other developers check the portal out elsewhere. The current session id is the folder name segment just before `scratchpad` in your scratchpad path (or `$CLAUDE_SESSION_ID` if set).
 
 Collect these paths for the analyzer (each is optional — pass what exists):
 
-1. **Manifests** — `.claude/cache/ai-stats/<RUN_ID>/` (resolve `<RUN_ID>` per Argument Parsing). This dir carries the sub-agent authorship (`*.json` with a `files` list), the planning effort (`_planning.json`, `type: "planning"`), **and** the sub-agent first-pass **snapshots** (`snapshots/<phase>.diff`) used for retention. Pass the dir with `--manifests`; the analyzer reads all three. If it is missing (work not done through an instrumented skill, or an older run), warn and continue — planning is reconstructed from the transcript, and sub-agent files fall back to contribution-only.
+1. **Manifests** — `.claude/cache/ai-stats/<RUN_ID>/` (resolve `<RUN_ID>` per Argument Parsing — **ticket-prefix match first**, newest-of-any-ticket only as a warned fallback). This dir carries the sub-agent authorship (`*.json` with a `files` list), the planning effort (`_planning.json`, `type: "planning"`), **and** the sub-agent first-pass **snapshots** (`snapshots/<phase>.diff`) used for retention. Pass the dir with `--manifests`; the analyzer reads all three. If it is missing (work not done through an instrumented skill, or an older run), warn and continue — planning is reconstructed from the transcript, and sub-agent files fall back to contribution-only.
 2. **Transcripts** — pass the whole `~/.claude/projects/<PROJECT-SLUG>/` directory. The analyzer keeps only tool calls whose `file_path` is inside the repo, so unrelated sessions are naturally excluded, and post-review fixes from any of this ticket's sessions are captured.
 3. **File-history root** — `~/.claude/file-history/`. The analyzer maps each session's `file-history-snapshot` entries (found in the transcripts) to the backup blobs here.
 
@@ -1078,6 +1115,10 @@ Key legend (all per (domain,user), latest run only):
 
 # Use a specific run's manifests and a specific commit
 /oc-fe-calculate-ai-use --commit 3434f57 --run INTRD-36922-20260811-101500
+
+# How /oc-pull-request step 9 calls it on opencell-portal (idempotent: a second
+# PR update for the same commit exits silently instead of posting another comment)
+/oc-fe-calculate-ai-use --commit HEAD --if-not-recorded
 ```
 
 ## Notes & limitations
@@ -1091,4 +1132,6 @@ Key legend (all per (domain,user), latest run only):
 - **Tag semantics.** `ai_test_front_dev` triggers on newly *added* tests (not modifications). A commit that only edits existing tests gets `ai_Dev_Front` (if it also touches code) but not `ai_test_front_dev` — adjust in review if that is not what you want.
 - **AI-metrics field (reporting).** The canonical machine-readable store is the JSON document in `customfield_10745` (schema `opencell.ai-usage/v1`), keyed by `domain/accountId/name` so backend, frontend, QA and multiple developers coexist on one ticket; the comment is only for humans. It is latest-only (no history) and uses read-merge-upsert. If two developers write the same ticket within the same moment, last-write-wins could drop one record; the per-run comment is the audit fallback.
 - **Planning effort is effort, not a percentage.** It produces no committed artifact, so it can only be quantified as activity (rounds, lookups, plan size, time) rolled into a Low/Medium/High band. The band thresholds are seed values in `planning_band()` — tune them against your real runs.
+- **Run-directory resolution is ticket-scoped.** `--run` defaults to the newest `.claude/cache/ai-stats/[TICKET-NUMBER]-*` directory, not the newest directory overall. Automatic invocation from `/oc-pull-request` made the old behaviour dangerous: a developer who worked ticket A and then ticket B in the same checkout would have had B's manifests, snapshots and planning effort silently attributed to A. The newest-of-any-ticket fallback still exists for hand-made run dirs, but it always warns and names the ticket it took.
+- **Automated invocation is non-fatal and idempotent.** `/oc-pull-request` step 9 runs this command with `--if-not-recorded` after its squash, and treats any failure here as a warning — the PR is already created, so nothing is retried or unwound. The flag exists because that step also runs on PR updates and JIRA comments cannot be withdrawn. Nothing about the manual path changed: no flag, always re-measure, always overwrite (the `customfield_10745` record is latest-only anyway).
 - Always defer to the developer's adjusted numbers — the automatic figures are a starting point, not an audit.
