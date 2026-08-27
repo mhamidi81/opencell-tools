@@ -20,7 +20,8 @@ Read ALL guideline files for comprehensive review criteria:
 - `${CLAUDE_PLUGIN_ROOT}/guidelines/API_GUIDELINES.md`
 - `${CLAUDE_PLUGIN_ROOT}/guidelines/DATABASE_GUIDELINES.md`
 - `${CLAUDE_PLUGIN_ROOT}/guidelines/CODE_QUALITY.md`
-- `${CLAUDE_PLUGIN_ROOT}/guidelines/TESTING.md`
+- `${CLAUDE_PLUGIN_ROOT}/guidelines/UNIT_TESTING.md`
+- `${CLAUDE_PLUGIN_ROOT}/guidelines/POSTMAN_TESTING.md`
 
 ## Input — How to Obtain the Diff
 
@@ -129,7 +130,7 @@ When you have only a diff (no working tree), review the diff hunks directly; use
 - Use ArgumentCaptor in API tests
 - Test validation methods with valid data (don't mock them)
 - Exception tests verify message contains context
-- Postman collection for API changes with dynamically generated codes
+- Postman collection for API changes, with codes built from a per-domain `iteration_nr` sequence + inline literals (never `{{$timestamp}}`); negative tests named `" - fail"` (see POSTMAN_TESTING.md)
 
 ### Version Control Checks
 

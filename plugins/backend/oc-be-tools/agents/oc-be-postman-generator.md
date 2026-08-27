@@ -12,7 +12,7 @@ You create Postman collection JSON files for Opencell REST API testing.
 ## Before You Start
 
 Read the following guideline files for patterns and conventions:
-- `${CLAUDE_PLUGIN_ROOT}/guidelines/TESTING.md` — Postman collection guidelines (from "Integration test guidelines" section onward)
+- `${CLAUDE_PLUGIN_ROOT}/guidelines/POSTMAN_TESTING.md` — Postman / integration collection guidelines
 - `${CLAUDE_PLUGIN_ROOT}/guidelines/CRITICAL_RULES.md` — rules that apply to all code
 
 ## Input
@@ -72,10 +72,11 @@ You will receive file paths of REST resource interfaces.
 
 6. **Create Postman collection** using ONLY the extracted endpoint map and field lists:
    - Collection name matching the entity/feature
-   - Basic Auth at collection level: `{{opencell.username}}` / `{{opencell.password}}`
+   - OAuth2 auth at collection level (Keycloak) — do NOT use Basic Auth
+   - **For a NEW collection file, copy the collection-level OAuth2 `auth` block AND the collection-level pre-request and post-response (test) `event` scripts verbatim from `US-Tests/Opencell_Setup.postman_collection.json`** (token / `401`-retry handling, the `[SKIP]` convention, per-run initialisation, and the `" - fail"` success/expected-failure assertion). See POSTMAN_TESTING.md "Authorization".
    - Environment variable: `{{opencell.url}}` for base URL
-   - Dynamically generated codes using timestamps: `"code": "ENTITY_{{$timestamp}}"`
-   - Pre-request scripts to set variables
+   - Test-data codes: follow the "Test Data Variables" rules in POSTMAN_TESTING.md — a per-domain `iteration_nr` sequence counter (incremented in a pre-request script) with codes built as an inline literal prefix + `{{iteration_nr}}` written directly in the body. Never use `Date.now()` / `{{$timestamp}}`, and never hide codes behind per-code variables. Static/reference codes are written as literals.
+   - Pre-request scripts to set the per-domain `iteration_nr` sequence counter
    - **Every URL must match the endpoint map exactly — no guessing**
    - **Every request body must use only the fields from the DTO field list — no guessing**
 
@@ -85,13 +86,13 @@ You will receive file paths of REST resource interfaces.
    - **List**: GET with `searchResults` array assertions
    - **Update**: PUT with all updatable fields, NO status/disabled fields
    - **Custom operations**: POST/PUT for lifecycle actions (close, publish, enable, disable)
-   - **Error scenarios**: Missing required fields, invalid status, non-existent entity
+   - **Error scenarios**: Missing required fields, invalid status, non-existent entity — a negative test's name MUST end in `" - fail"` and assert the specific error status (see POSTMAN_TESTING.md "Error Scenario Tests")
    - **Delete**: DELETE in reverse dependency order
 
 8. **Test assertions**:
    - Assert specific values, NOT just existence: `pm.expect(jsonData.status).to.eql("DRAFT")`
    - Verify HTTP status codes
-   - Store IDs/codes in environment variables for reuse
+   - Store ONLY server-generated runtime IDs (invoice id, line id, ...) in variables for reuse; codes are inline literals (see POSTMAN_TESTING.md "Test Data Variables")
 
 9. **MANDATORY: Final verification pass**
 

@@ -12,7 +12,7 @@ You create unit tests for Opencell service and API layer classes.
 ## Before You Start
 
 Read the following guideline files for patterns and conventions:
-- `${CLAUDE_PLUGIN_ROOT}/guidelines/TESTING.md` — unit test patterns, mocking, assertions, service and API test patterns
+- `${CLAUDE_PLUGIN_ROOT}/guidelines/UNIT_TESTING.md` — unit test patterns, mocking, assertions, service and API test patterns
 - `${CLAUDE_PLUGIN_ROOT}/guidelines/CRITICAL_RULES.md` — rules that apply to all code
 
 ## Input
