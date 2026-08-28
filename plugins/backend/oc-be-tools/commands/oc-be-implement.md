@@ -253,6 +253,6 @@ Present summary:
 
 Build the "Files Created/Modified" list by aggregating the manifests in `.claude/cache/ai-stats/{RUN_ID}/*.json` (union with anything you edited directly in this context). Group by layer as shown.
 
-Suggest commit message: `{TICKET}: {brief description}`
+Suggest commit message: `{TICKET}: {brief description}` (no `Co-Authored-By:`/AI-attribution trailer — see CODE_QUALITY.md → Commit Messages).
 
 Then remind the user they can run **`/oc-be-calculate-ai-use`** to record AI-usage stats on the Jira ticket — it reads these manifests (so sub-agent work and the planning effort are attributed) plus this session's transcript (for your post-review fixes), and reports contribution/retention broken down by artifact category as well as the planning/analysis effort captured in `_planning.json`.

@@ -311,6 +311,7 @@ Use descriptive branch names that include username, ticket type, and number.
 - Use imperative mood
 - Keep under 72 characters
 - Be descriptive but concise
+- **Do NOT append a `Co-Authored-By:` trailer** (or any AI-attribution/tool trailer) to commit messages. AI usage is tracked separately on the Jira ticket via `/oc-be-calculate-ai-use`, not in git metadata.
 
 **Example:** `INTRD-34243: Add Indexation and IndexationValue entities`
 
