@@ -212,9 +212,28 @@ Use the `oc-fe-reviewer:oc-fe-reviewer` agent to perform a comprehensive review.
 - The list of `[CHANGED-FILES]`.
 - Context: "This is a PR review for [TICKET-NUMBER]: [TICKET-SUMMARY]".
 - The test count from Step 5b: "This PR adds [VITEST-ADDED] Vitest test case(s) across [VITEST-FILES] spec file(s) ([VITEST-FILE-LIST])" — so the reviewer judges the **Testing** category against the actual coverage the PR brings.
-- Instruction: "Review the following pull request diff. Focus on the changed code only. For each issue found, provide the exact file path and line context. Suggest concrete fixes with code snippets."
+- Instruction: "Review the following pull request diff against your full 13-category Review Checklist and
+  score it with your Scoring rubric. Give every category a verdict and return the Category Verdicts
+  table. For each issue found, provide the exact file path and line context. Suggest concrete fixes with
+  code snippets."
 
-The reviewer should evaluate: TypeScript quality and type safety; React component patterns; state management; import conventions and path aliases; naming conventions; widget structure; API usage patterns; i18n completeness (EN + FR); testing coverage; accessibility; performance; error handling; security.
+The reviewer evaluates all thirteen categories — TypeScript quality and type safety; React component
+patterns; state management; import conventions and path aliases; naming conventions; widget structure;
+API usage patterns; i18n completeness (EN + FR); testing coverage; accessibility; performance; error
+handling; security.
+
+> **The score comes from the agent's rubric, not from this command.** `oc-fe-reviewer`'s **Scoring**
+> section is the single source of truth for how `[REVIEW-SCORE]` is derived: verdict per category,
+> defined deductions, the `Fail` ceilings, floor to an integer 1–10. `/oc-commit` runs that same agent
+> over the same branch scope with the same rubric before the PR exists, which is what makes the two
+> scores comparable — **a developer who saw 9/10 pre-commit should see 9/10 here.**
+>
+> So: do not add criteria of your own, do not re-weight anything, and do not adjust the number the agent
+> returns. If the score does not follow from the returned Category Verdicts table, send it back to the
+> agent rather than patching the figure — this command *declines PRs* on that number (Step 10b).
+>
+> One legitimate reason the two scores differ: the developer changed the code between the commit and the
+> PR. Any other gap means one of the two callers drifted from the rubric — fix the caller.
 
 ### 8. Generate the review report
 
@@ -328,6 +347,12 @@ Where [SCORE-BADGE] is:
 | Security              | [status-icon] | [brief note]            |
 
 Where [status-icon] is: PASS "Pass" | WARN "Warn" | FAIL "Fail" | N/A "N/A".
+
+These are the agent's per-category verdicts, copied through unchanged — all 13 rows, always.
+`[REVIEW-SCORE]` must be recomputable from this table with the agent's rubric; state the
+arithmetic under the table (`10 − [total cost] = [raw]` → floor → [ceiling, if any] → `X/10`).
+`N/A` is never valid for **Testing**: a PR that changes production code and adds zero Vitest
+tests is a `Fail` there, which caps the score at 7.
 
 ---
 

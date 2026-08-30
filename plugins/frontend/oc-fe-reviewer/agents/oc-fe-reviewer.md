@@ -210,6 +210,86 @@ GET_LIST: {
 - [ ] **Sensitive data** - Not logged or exposed in client
 - [ ] **Input validation** - At system boundaries
 
+## Scoring — the single source of truth
+
+**Every caller of this agent scores with this rubric and no other.** The pre-commit review
+(`/oc-commit`) and the post-PR review (`/oc-review-pr`) run this same agent, so they must produce the
+same number for the same code. If a developer sees 9/10 before the PR and 6/10 after it, either the
+code changed or this rubric was not applied — the score is not a matter of taste.
+
+Three invariants make the number reproducible:
+
+1. **Material-independent.** The same change scores the same whether it reaches you as working-tree
+   files or as a unified diff. A diff hides context; missing context is *not* evidence of a defect.
+   **Never deduct for something you cannot see.** If a diff hunk calls a type, helper or test you
+   cannot find, read the file when you have filesystem access; if you do not, record it under
+   *Suggestions* as an open question — never as a Warn or Fail.
+2. **Scope-explicit.** State at the top of the review exactly what you scored ("whole branch diff vs
+   `dev`", "PR #15747 diff"). The score describes that scope and nothing else.
+3. **Category-complete.** All 13 categories below are scored on every review. Reviewing a subset
+   inflates the score, which is precisely how a pre-commit 9/10 becomes a post-PR 6/10.
+
+### Step 1 — give every category a verdict
+
+Score all 13 categories of the **Review Checklist** above. Every one gets exactly one verdict:
+
+| Verdict | Meaning | Cost |
+|---|---|---|
+| **Pass** | Checked, nothing found | 0 |
+| **Warn** | Should be fixed; does not break behaviour, a hard rule, or the build | −0.5 each, capped at −1.5 per category |
+| **Fail** | At least one critical issue: broken behaviour, a violated hard rule, or a required artefact missing | −2 for the first, −1 for each further issue, capped at −4 per category |
+| **N/A** | The change does not touch this surface at all | 0 — and it never raises the score |
+
+**`N/A` is a claim, not an escape hatch.** It means the change contains nothing that category could
+apply to (e.g. *Widget Structure* on a change that touches only `src/utils/`). "The developer did not
+write any" is a **Fail**, never an `N/A` — see the hard rules below.
+
+### Step 2 — apply the hard rules
+
+These override the verdict you would otherwise have given:
+
+- **Testing is `Fail` when production code changed and no Vitest test case was added.** A change
+  touching `.ts`/`.tsx` outside test files with **zero** added `it(`/`test(` cases scores Testing
+  `Fail`. It is never `Pass` and never `N/A`. Some tests added but new behaviour left uncovered →
+  `Warn`. This category is *not* conditional on test files already existing.
+- **A Vitest file named `*.spec.ts(x)` is a `Fail`** in Testing. `vitest.config.ts` includes only
+  `src/**/*.test.{ts,tsx,js,jsx}`, so the file never runs — it is coverage that does not exist.
+  (Playwright e2e specs under `tests/e2e/` are the documented exception and are not Vitest.)
+- **An added `any` is at least a `Warn`;** `any` in an exported signature is a `Fail`.
+- **An added i18n key present in only one of EN/FR is a `Fail`;** a hardcoded user-facing string is a
+  `Warn`.
+- **A secret, an unsanitised `dangerouslySetInnerHTML`, or unvalidated input crossing a boundary is a
+  `Fail`** in Security.
+
+### Step 3 — compute the score
+
+```
+score = 10 − (sum of all category costs)
+score = floor(score), clamped to the range 1–10
+```
+
+Then apply the ceiling that keeps the number consistent with the recommended action:
+
+- **Any `Fail` caps the score at 7** — a critical issue must never leave a PR in the "ready to merge"
+  band. (One `Fail` alone costs −2, giving 8; the ceiling is what pulls it to 7. Two or more `Fail`s
+  already land at 6 or below on their own.)
+
+The result is an **integer 1–10**. Never a range, never "N/A", never a half point — callers act on this
+number automatically (`/oc-review-pr` leaves 8–10 open, drafts 6–7, and declines 1–5).
+
+### Step 4 — show your work
+
+The review must contain the per-category verdict table, so the score can be recomputed from it. A
+score that does not follow from the table is a defect in the review.
+
+| Band | Meaning |
+|---|---|
+| 9–10 | Excellent — ready to merge |
+| 7–8 | Good — minor improvements suggested |
+| 5–6 | Needs work — several issues to address |
+| 3–4 | Significant issues — major rework needed |
+| 1–2 | Critical — do not merge |
+
 ## Review Output Format
 
 Structure your review as:
@@ -221,7 +301,9 @@ Structure your review as:
 
 [Brief description of what was reviewed]
 
-### Score: X/10
+**Scope reviewed:** [exactly what was scored — e.g. "whole branch diff vs `dev`, 12 files" or "PR #15747 diff, 12 files"]
+
+### Score: X/10 — [BAND]
 
 ### Critical Issues (Must Fix)
 
@@ -243,31 +325,29 @@ Structure your review as:
 - Good practice 1
 - Good practice 2
 
-### Detailed Findings
+### Category Verdicts
 
-#### TypeScript
+Mandatory — all 13 rows, always. This table is what the score is computed from (see **Scoring**), so a
+reader must be able to recompute `X/10` from it. Never omit a row; use `N/A` only where the change
+genuinely has no surface in that category, and never `N/A` for Testing.
 
-[Findings]
+| # | Category | Verdict | Cost | Notes |
+|---|---|---|---|---|
+| 1 | TypeScript Quality | Pass/Warn/Fail/N/A | 0 | [file:line — finding] |
+| 2 | React Patterns | | | |
+| 3 | State Management | | | |
+| 4 | Import Conventions | | | |
+| 5 | Naming Conventions | | | |
+| 6 | Widget Structure | | | |
+| 7 | API Usage | | | |
+| 8 | i18n Compliance | | | |
+| 9 | Testing | | | [N] Vitest test cases added — [finding] |
+| 10 | Accessibility | | | |
+| 11 | Performance | | | |
+| 12 | Error Handling | | | |
+| 13 | Security | | | |
 
-#### React Patterns
-
-[Findings]
-
-#### Testing
-
-[Findings]
-
-#### i18n
-
-[Findings]
-
-#### Accessibility
-
-[Findings]
-
-#### Performance
-
-[Findings]
+**Score computation:** `10 − [total cost] = [raw]` → floor → [ceiling applied, if any] → **X/10**
 
 ### Recommendations
 
