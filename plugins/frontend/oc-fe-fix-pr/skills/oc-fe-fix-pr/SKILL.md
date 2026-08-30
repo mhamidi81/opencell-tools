@@ -174,6 +174,17 @@ git diff HEAD -- <files from <phase>.json> > .claude/cache/ai-stats/[RUN_ID]/sna
 
 A snapshot taken after your edits equals the final code and makes retention a meaningless 100%. Best-effort and non-blocking.
 
+### Step 8b: Playwright Regression Tests for the Fixed Screens
+
+Directly after the Vitest step, protect the screens the remarks touched:
+
+- Run `/oc-fe-regression-test [PR-DEST-BRANCH]`.
+- It stays on the PR's own source branch, so the specs are pushed with the fixes.
+- It skips itself on any repository other than opencell-portal, and when no changed file
+  resolves to a screen.
+- **This step is blocking.** If it reports a genuine application regression, stop and fix the
+  regression before committing and pushing — do not weaken the spec.
+
 ### Step 9: Commit & Push to the PR Branch
 
 Commit the fixes to [PR-SOURCE-BRANCH] and push so the PR updates.

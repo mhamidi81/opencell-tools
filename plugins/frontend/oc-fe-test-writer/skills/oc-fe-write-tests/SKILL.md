@@ -95,6 +95,18 @@ Relay the agent's report to the user, including:
 
 If the agent surfaced a real defect rather than a test bug, highlight it so the user can decide how to proceed.
 
+### Step 4b: Playwright Regression Tests
+
+Directly after the Vitest run, cover the screens the changed code renders:
+
+- Run `/oc-fe-regression-test [BASE-BRANCH]`. In file mode, pass the same paths through:
+  `/oc-fe-regression-test --files [FILES]`.
+- It stays on the current branch.
+- It skips itself on any repository other than opencell-portal, and when no changed file
+  resolves to a screen.
+- **This step is blocking.** If it reports a genuine application regression, stop and report
+  it rather than weakening the spec.
+
 ### Step 5: Mark the Ticket as Tested by the Frontend AI Test Writer
 
 After the tests are written and verified, set the JIRA **AI field** (`customfield_10613`) to `ai_test_front_dev` to record that the frontend AI test writer added coverage.
