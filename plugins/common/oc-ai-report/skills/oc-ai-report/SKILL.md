@@ -388,12 +388,12 @@ def main():
         g["rows"].append(r)
         for k in SUM: g[k] += r[k]
     P("## Totals by area (sum of detail rows)\n")
-    P("| Area | Rows | AI Contrib | Retain | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Total dev h | Logged h | Sub-bug h | Arch gain | DL gain | Sub-bugs |")
-    P("|---|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
+    P("| Area | Rows | AI Contrib | Retain | Review phase | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Total dev h | Logged h | Sub-bug h | Arch gain | DL gain | Sub-bugs |")
+    P("|---|--:|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
     for ar in AREAS:
         g = areas[ar]
         if not g["contrib"]: continue
-        P(f"| {ar.capitalize()} | {len(g['contrib'])} | {avg(g['contrib'])}% | {avg(g['retain'])}% | "
+        P(f"| {ar.capitalize()} | {len(g['contrib'])} | {avg(g['contrib'])}% | {avg(g['retain'])}% | {avg([r['rework'] for r in g['rows']])}% | "
           f"{g['utAdd']}/{g['utMod']} | {g['pmTests']} | {g['turns']} | {round(g['aEst'],1)} | {round(g['dlEst'],1)} | "
           f"{round(g['logged'] + g['bugLogged'],1)} | {round(g['logged'],1)} | {round(g['bugLogged'],1)} | {gain_two(*gain_basis(g['rows'], 'aEst'))} | "
           f"{gain_two(*gain_basis(g['rows'], 'dlEst'))} | {g['bugs']} |")
@@ -407,7 +407,7 @@ def main():
         u["contrib"].append(r["contrib"]); u["retain"].append(r["retain"]); u["rework"].append(r["rework"])
         for k in SUM: u[k] += r[k]
     P("\n## Summary by user\n")
-    P("| User | Area | Tickets | AI Contrib | Retain | Rework | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Total dev h | Logged h | Sub-bug h | Arch gain | DL gain | Sub-bugs |")
+    P("| User | Area | Tickets | AI Contrib | Retain | Review phase | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Total dev h | Logged h | Sub-bug h | Arch gain | DL gain | Sub-bugs |")
     P("|---|---|--:|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
     for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
         ac = avg(u['contrib']); acc_cell = f"**{ac}%**" if ac < 60 else f"{ac}%"  # <60% flagged (red in HTML)
@@ -422,12 +422,12 @@ def main():
     for r in rows: by_user[r["acc"]].append(r)
     for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
         P(f"\n### {u['name']}\n")
-        P("| Ticket | Date | Type | Area | Summary | Status | Final | AI Contrib | Retain | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Total dev h | Logged h | Sub-bug h | Arch gain | DL gain | Sub-bugs |")
-        P("|---|---|---|---|---|---|:--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
+        P("| Ticket | Date | Type | Area | Summary | Status | Final | AI Contrib | Retain | Review phase | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Total dev h | Logged h | Sub-bug h | Arch gain | DL gain | Sub-bugs |")
+        P("|---|---|---|---|---|---|:--:|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
         for r in sorted(by_user[acc], key=lambda x: (x["at"], x["key"])):
             c = r['contrib']
             cc = f"**{c}%**" if isinstance(c, (int, float)) and c < 60 else f"{c}%"  # <60% flagged (red in HTML)
-            P(f"| [{r['key']}]({JIRA_BROWSE}{r['key']}) | {r['at']} | {r['ttype']} | {r['area']} | {r['summary']} | {r['status']} | {'T' if r['final'] else ''} | {cc} | {r['retain']}% | "
+            P(f"| [{r['key']}]({JIRA_BROWSE}{r['key']}) | {r['at']} | {r['ttype']} | {r['area']} | {r['summary']} | {r['status']} | {'T' if r['final'] else ''} | {cc} | {r['retain']}% | {r['rework']}% | "
               f"{r['utAdd']}/{r['utMod']} | {r['pmTests']} | {r['turns']} | {r['aEst']} | {r['dlEst']} | {round(r['logged'] + r['bugLogged'],1)} | {r['logged']} | "
               f"{r['bugLogged']} | {gain_two(r['aEst'], r['logged'], r['bugLogged'])} | {gain_two(r['dlEst'], r['logged'], r['bugLogged'])} | {r['bugs']} |")
     print("\n".join(out))
@@ -622,7 +622,7 @@ def build_rows(parents, children, tempo, since, until):
 CSV_COLS = [
     ("key", "Ticket"), ("at", "Date"), ("ttype", "Type"), ("area", "Area"),
     ("name", "User"), ("summary", "Summary"), ("status", "Status"), ("finalTxt", "Final status"),
-    ("contrib", "AI Contrib %"), ("retain", "Retain %"), ("rework", "Rework %"),
+    ("contrib", "AI Contrib %"), ("retain", "Retain %"), ("rework", "Review phase %"),
     ("utAdd", "U.tests added"), ("utMod", "U.tests modified"), ("pmTests", "P.tests"),
     ("turns", "Requests"), ("aEst", "A. Est h"), ("dlEst", "DL. Est h"),
     ("totalDev", "Total dev h"), ("logged", "Logged h"), ("bugLogged", "Sub-bug h"),
@@ -675,9 +675,9 @@ def main():
     if not rows:
         W('<p class="empty">No AI-usage records in this window.</p>')
     else:
-        AH = ["Rows","Avg AI contrib","Avg retain","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Total dev h","Logged h","Sub-bug h","Arch gain","DL gain","Sub-bugs"]
-        HEAD = ["AI Contrib","Retain","Rework","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Total dev h","Logged h","Sub-bug h","Arch gain","DL gain","Sub-bugs"]
-        DHEAD = ["Ticket","Date","Type","Area","Summary","Status","Final","AI Contrib","Retain","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Total dev h","Logged h","Sub-bug h","Arch gain","DL gain","Sub-bugs"]
+        AH = ["Rows","Avg AI contrib","Avg retain","Avg review phase","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Total dev h","Logged h","Sub-bug h","Arch gain","DL gain","Sub-bugs"]
+        HEAD = ["AI Contrib","Retain","Review phase","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Total dev h","Logged h","Sub-bug h","Arch gain","DL gain","Sub-bugs"]
+        DHEAD = ["Ticket","Date","Type","Area","Summary","Status","Final","AI Contrib","Retain","Review phase","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Total dev h","Logged h","Sub-bug h","Arch gain","DL gain","Sub-bugs"]
         _left = ("Ticket", "Date", "Type", "Area", "Summary", "Status"); _cent = ("Final",)
 
         # period grouping keys off the AI record's `at` date
@@ -698,6 +698,7 @@ def main():
                 gp = gain_pct(ba[0], ba[1]); gpd = gain_pct(bd[0], bd[1])
                 h.append(f'<tr><td class="name">{e(ar.capitalize())}</td><td class="r">{len(g["contrib"])}</td>'
                   f'<td class="r">{pct(avg(g["contrib"]))}</td><td class="r">{pct(avg(g["retain"]))}</td>'
+                  f'<td class="r">{pct(avg([r["rework"] for r in g["rows"]]))}</td>'
                   f'<td class="r">{g["utAdd"]}/{g["utMod"]}</td><td class="r">{g["pmTests"]}</td>'
                   f'<td class="r">{g["turns"]}</td><td class="r">{round(g["aEst"],1)}</td><td class="r">{round(g["dlEst"],1)}</td>'
                   f'<td class="r">{round(g["logged"] + g["bugLogged"],1)}</td><td class="r">{round(g["logged"],1)}</td><td class="r">{round(g["bugLogged"],1)}</td>'
@@ -733,7 +734,7 @@ def main():
             h.append("</tbody></table></div>")
             return "".join(h)
 
-        MHEAD = ["Month","Tickets","AI Contrib","Retain","Rework","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Total dev h","Logged h","Sub-bug h","Arch gain","DL gain","Sub-bugs"]
+        MHEAD = ["Month","Tickets","AI Contrib","Retain","Review phase","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Total dev h","Logged h","Sub-bug h","Arch gain","DL gain","Sub-bugs"]
         def user_month_html(user_rows):
             """One row per month for a single user (used under the per-user Summary groups)."""
             h = ['<div class="tw"><table><thead><tr>'
@@ -769,7 +770,7 @@ def main():
                 low = isinstance(r["contrib"], (int, float)) and r["contrib"] < 60  # flag weak AI contribution
                 h.append(f'<tr><td class="key"><a href="{JIRA_BROWSE}{e(r["key"])}" target="_blank" rel="noopener">{e(r["key"])}</a></td><td>{e(r["at"])}</td><td>{e(r["ttype"])}</td><td>{e(r["area"])}</td>'
                   f'<td>{e(r["summary"])}</td><td>{e(r["status"])}</td><td class="c">{finalcell}</td>'
-                  f'<td class="r{" low" if low else ""}">{r["contrib"]}%</td><td class="r">{r["retain"]}%</td>'
+                  f'<td class="r{" low" if low else ""}">{r["contrib"]}%</td><td class="r">{r["retain"]}%</td><td class="r">{r["rework"]}%</td>'
                   f'<td class="r">{r["utAdd"]}/{r["utMod"]}</td><td class="r">{r["pmTests"]}</td>'
                   f'<td class="r">{r["turns"]}</td><td class="r">{r["aEst"]}</td><td class="r">{r["dlEst"]}</td>'
                   f'<td class="r">{round(r["logged"] + r["bugLogged"],1)}</td><td class="r">{r["logged"]}</td>'
@@ -860,11 +861,11 @@ def main():
     W('<p class="foot">AI metrics are recorded per developer per ticket by <code>/oc-be-calculate-ai-use</code> and grouped here by record domain (backend / frontend / QA). '
       '<b>AI Contrib</b> = share of the delivered work that came from AI (Claude Code); '
       '<b>Retain</b> = share of the AI\'s output that survived to the final code (higher is better); '
-      '<b>Rework</b> = share the reviewer had to rework afterwards; '
+      '<b>Review phase</b> = of the AI-authored lines, the share written during the review-and-fix phase (main context, after the reviewer) rather than the sub-agent\'s first pass (from <code>reviewer_rework_pct</code>) &mdash; a timing split, <i>not</i> a redo/discard rate, so it is unrelated to Contrib&minus;Retain; '
       '<b>U.tests +/~</b> = unit tests added / modified; '
       '<b>P.tests</b> = Postman assertion test cases exercised; '
       '<b>Requests</b> = substantive developer&harr;AI interactions in the session. '
-      'The area aggregates show the average AI Contrib / Retain and the summed counts. '
+      'The area aggregates show the average AI Contrib / Retain / Review phase and the summed counts. '
       '<b>A. Est h</b> (Architect) per area from the estimate '
       'custom fields (days &times;8), else the ticket estimate; <b>DL. Est h</b> (Dev-lead) from the ticket estimation '
       'field &mdash; a User Story sums its child sub-task estimates per area (sub-bugs excluded), a Bug/Enabler uses its '
