@@ -447,7 +447,7 @@ python "<SCRATCHPAD>/ai_report_html.py" --input "<SCRATCHPAD>/tickets.json" \
   --out "./docs/ai-usage-report-[TODAY].html" --csv "./docs/ai-usage-report-[TODAY].csv"
 ```
 
-The page is theme-aware (light/dark) and embeds all CSS — no external assets — so it opens straight from disk. **Five tabs (HTML only):** an **All** tab (every ticket, the default), a **User Stories** tab (US only), a **US (final)** tab (US whose status is terminal, Final = T), a **Bugs (final)** tab (Bug/Sub-bug tickets in a terminal status) and a **Bugs and others** tab (every non-US ticket); each tab holds the full report (KPI cards + the three sections) filtered to that ticket set. Tabs are pure CSS (`<input type="radio">` + `:checked` sibling selectors) — no JavaScript. Within each tab, KPI cards lead, then the three sections mirroring the Markdown. **Grouping (HTML only):** *Totals by area* shows the overall table, then an expandable `<details>` block per month (the date is the record's `at`, newest open). *Summary by user* shows the overall one-row-per-user table, then an expandable `<details>` block **per user**, each holding that developer's month-by-month breakdown (user → month). *Detail per user* groups each developer's tickets into expandable months, and every ticket key is a link to its Jira issue. Tell the user the absolute path and that they can open it in a browser (Windows: `start "" "<path>"`).
+The page is theme-aware (light/dark) and embeds all CSS — no external assets — so it opens straight from disk. **Five tabs (HTML only):** an **All** tab (every ticket, the default), a **User Stories** tab (US only), a **US (final)** tab (US whose status is terminal, Final = T), a **Bugs (final)** tab (Bug/Sub-bug tickets in a terminal status) and a **Bugs and others** tab (every non-US ticket); each tab holds the full report (KPI cards + the three sections) filtered to that ticket set. Tabs are pure CSS (`<input type="radio">` + `:checked` sibling selectors) — no JavaScript. Within each tab, KPI cards lead, then the three sections mirroring the Markdown. **Grouping (HTML only):** *Totals by area* shows the overall table, then an expandable `<details>` block per month (the date is the record's `at`, newest open). *Summary by user* shows the overall one-row-per-user table (each developer's name **links down to their Detail-per-user section** in the same tab), then an expandable `<details>` block **per user**, each holding that developer's month-by-month breakdown (user → month). *Detail per user* groups each developer's tickets into expandable months, and every ticket key is a link to its Jira issue. (Anchor ids are prefixed per tab, so the same developer is uniquely addressable in each tab.) Tell the user the absolute path and that they can open it in a browser (Windows: `start "" "<path>"`).
 
 `--csv` additionally writes the **ticket-detail rows** (one row per ticket × developer, all detail columns, both time-gain values and a trailing **URL** column with the ticket's Jira link) to a spreadsheet-friendly CSV (UTF-8 with BOM so Excel renders accented names). Default `./docs/ai-usage-report-<TODAY>.csv`. Report both file paths to the user.
 
@@ -706,7 +706,7 @@ def main():
             h.append("</tbody></table></div>")
             return "".join(h)
 
-        def summary_user_html(rs):
+        def summary_user_html(rs, pfx=""):
             uu = {}
             for r in rs:
                 u = uu.setdefault(r["acc"], {"name": r["name"], "areas": set(), "tickets": set(),
@@ -719,7 +719,8 @@ def main():
             for _acc, u in sorted(uu.items(), key=lambda kv: kv[1]["name"].lower()):
                 ba = gain_basis(u["rows"], "aEst"); bd = gain_basis(u["rows"], "dlEst")
                 g = gain_pct(ba[0], ba[1]); gd = gain_pct(bd[0], bd[1])
-                h.append(f'<tr><td class="name">{e(u["name"])}</td><td>{e("/".join(sorted(u["areas"])))}</td>'
+                namecell = f'<a href="#{pfx}-user-{e(_acc)}">{e(u["name"])}</a>' if pfx else e(u["name"])
+                h.append(f'<tr><td class="name">{namecell}</td><td>{e("/".join(sorted(u["areas"])))}</td>'
                   f'<td class="r">{len(u["tickets"])}</td>'
                   f'<td class="r{" low" if avg(u["contrib"]) < 60 else ""}">{pct(avg(u["contrib"]))}</td><td class="r">{pct(avg(u["retain"]))}</td>'
                   f'<td class="r">{pct(avg(u["rework"]))}</td><td class="r">{u["utAdd"]}/{u["utMod"]}</td>'
@@ -778,7 +779,7 @@ def main():
             h.append("</tbody></table></div>")
             return "".join(h)
 
-        def render_body(rs):
+        def render_body(rs, pfx=""):
             """Full report body (KPI cards + Totals + Summary + Detail) for a subset of rows."""
             if not rs:
                 return '<p class="empty">No records of this ticket type in this window.</p>'
@@ -821,7 +822,7 @@ def main():
             w(totals_area_html(rs)); w('<p class="bm">By month</p>'); w(month_details(rs, totals_area_html))
             # Summary by user (overall, then expandable per user -> month)
             w("<h2>Summary by user</h2>")
-            w(summary_user_html(rs)); w('<p class="bm">By user &rarr; month</p>')
+            w(summary_user_html(rs, pfx)); w('<p class="bm">By user &rarr; month</p>')
             for acc, u in sorted(users_x.items(), key=lambda kv: kv[1]["name"].lower()):
                 ur = by_user_x[acc]; ac = avg([r["contrib"] for r in ur])
                 w(f'<details><summary>{e(u["name"])} '
@@ -830,7 +831,7 @@ def main():
             # Detail per user (grouped by month)
             w("<h2>Detail per user</h2>")
             for acc, u in sorted(users_x.items(), key=lambda kv: kv[1]["name"].lower()):
-                w(f'<h3>{e(u["name"])}</h3>'); w(month_details(by_user_x[acc], detail_table_html))
+                w(f'<h3 id="{pfx}-user-{e(acc)}">{e(u["name"])}</h3>'); w(month_details(by_user_x[acc], detail_table_html))
             return "".join(h)
 
         # Tabs: All (default), User Stories, US (final), Bugs (final), and every other ticket type
@@ -850,11 +851,11 @@ def main():
           f'<label for="tab-usfinal">US (final) <span class="cnt">({len(us_final_rows)})</span></label>'
           f'<label for="tab-bugfinal">Bugs (final) <span class="cnt">({len(bug_final_rows)})</span></label>'
           f'<label for="tab-other">Bugs and others <span class="cnt">({len(other_rows)})</span></label></div>')
-        W(f'<section class="panel panel-all">{render_body(rows)}</section>')
-        W(f'<section class="panel panel-us">{render_body(us_rows)}</section>')
-        W(f'<section class="panel panel-usfinal">{render_body(us_final_rows)}</section>')
-        W(f'<section class="panel panel-bugfinal">{render_body(bug_final_rows)}</section>')
-        W(f'<section class="panel panel-other">{render_body(other_rows)}</section>')
+        W(f'<section class="panel panel-all">{render_body(rows, "all")}</section>')
+        W(f'<section class="panel panel-us">{render_body(us_rows, "us")}</section>')
+        W(f'<section class="panel panel-usfinal">{render_body(us_final_rows, "usf")}</section>')
+        W(f'<section class="panel panel-bugfinal">{render_body(bug_final_rows, "bugf")}</section>')
+        W(f'<section class="panel panel-other">{render_body(other_rows, "other")}</section>')
         W('</div>')
     W('<p class="foot">AI metrics are recorded per developer per ticket by <code>/oc-be-calculate-ai-use</code> and grouped here by record domain (backend / frontend / QA). '
       '<b>AI Contrib</b> = share of the delivered work that came from AI (Claude Code); '
@@ -937,6 +938,9 @@ details .tw {{ margin:.35rem 0 .4rem; }}
 #tab-other:checked ~ .panel-other {{ display:block; }}
 h4 {{ margin:.55rem 0 .3rem; font-size:.88rem; color:var(--muted); }}
 .name {{ font-weight:600; }}
+td.name a {{ color:var(--accent); text-decoration:none; }}
+td.name a:hover {{ text-decoration:underline; }}
+h3 {{ scroll-margin-top:.5rem; }}
 .key {{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--accent); font-weight:600; }}
 .key a {{ color:inherit; text-decoration:none; }}
 .key a:hover {{ text-decoration:underline; }}
