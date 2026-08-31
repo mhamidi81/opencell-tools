@@ -38,6 +38,7 @@ claude
 | **oc-fe-fix-pr** | `/oc-fe-fix-pr` | Fix a pull request's review remarks — read its unresolved Bitbucket comments, fix them on the PR branch via `oc-fe-engineer`, write tests, then reply, resolve, and push |
 | **oc-fe-test-writer** | `/oc-fe-write-tests` | Write Vitest tests for changed code (git diff) or specific files via the `oc-fe-test-writer` sub-agent |
 | **oc-fe-create-e2e-test** | `/oc-fe-create-e2e-test` | Create Playwright E2E tests from Jira ticket requirements via the `oc-fe-e2e-expert` sub-agent |
+| **oc-fe-regression-test** | `/oc-fe-regression-test` | Diff-driven Playwright regression specs for changed OpenCell Portal screens, written on the current branch right after the Vitest step so they ship in the PR |
 | **oc-ar-tools** | `/oc-ar-tech-design` | Analyze a user story and produce a technical design for Opencell Core |
 | **oc-ar-ai-tools** | `/oc-ar-ai-tech-design` | Technical design tailored for AI-assisted (Claude) development |
 

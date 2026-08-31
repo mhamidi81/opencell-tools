@@ -41,7 +41,7 @@ skill/agent name (e.g. plugin `oc-fe-engineer` holds agent `oc-fe-engineer`).
 
 There are three kinds of plugins:
 
-1. **Skills & commands** — Slash commands users invoke directly: `/oc-cache-jira`, `/oc-commit`, `/oc-pull-request`, `/oc-review-pr`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr`, `/oc-fe-create-ui`, `/oc-fe-write-tests`, `/oc-fe-create-e2e-test`, `/oc-fe-calculate-ai-use`, `/oc-ar-tech-design`, `/oc-be-implement`, `/oc-be-review`, the backend guide skills (`/oc-be-api-guide`, `/oc-be-db-guide`, `/oc-be-entity-guide`, `/oc-be-service-guide`), and the MCP skills (`/oc-figma`, `/oc-playwright`, `/oc-opencell`). Defined in `SKILL.md` files (or `commands/*.md` for `oc-be-tools`).
+1. **Skills & commands** — Slash commands users invoke directly: `/oc-cache-jira`, `/oc-commit`, `/oc-pull-request`, `/oc-review-pr`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr`, `/oc-fe-create-ui`, `/oc-fe-write-tests`, `/oc-fe-create-e2e-test`, `/oc-fe-regression-test`, `/oc-fe-calculate-ai-use`, `/oc-ar-tech-design`, `/oc-be-implement`, `/oc-be-review`, the backend guide skills (`/oc-be-api-guide`, `/oc-be-db-guide`, `/oc-be-entity-guide`, `/oc-be-service-guide`), and the MCP skills (`/oc-figma`, `/oc-playwright`, `/oc-opencell`). Defined in `SKILL.md` files (or `commands/*.md` for `oc-be-tools`).
 2. **Sub-agents** — Specialized AI personas spawned by skills or the main agent: `oc-fe-engineer`, `oc-fe-reviewer`, `oc-fe-designer`, `oc-fe-test-writer`, `oc-fe-cypress-expert`, `oc-fe-e2e-expert`, and the backend agents `oc-be-entity-builder`, `oc-be-service-builder`, `oc-be-api-builder`, `oc-be-test-generator`, `oc-be-postman-generator`, `oc-be-pr-reviewer`. Defined in `.md` files under `agents/` with YAML frontmatter (`name`, `color`, `model`).
 3. **MCP Servers** — External service integrations configured in `plugin.json` under `mcpServers` (Figma, Playwright, Opencell, SonarQube, PostgreSQL), all under `plugins/mcp/`. **Atlassian is not one of them** — Jira/Confluence come from the official `atlassian` plugin in Anthropic's `claude-plugins-official` marketplace, which this repo does not vendor.
 
@@ -63,16 +63,27 @@ There are three kinds of plugins:
 The skills chain together into a standard workflow:
 
 ```
-/oc-cache-jira TICKET  →  /oc-fe-fix-bug TICKET  →  [fix code]  →  [write tests]  →  /oc-commit TICKET  →  /oc-pull-request TICKET (+ auto /oc-fe-calculate-ai-use)  →  /oc-review-pr TICKET  →  /oc-fe-fix-pr PR-ID
+/oc-cache-jira TICKET  →  /oc-fe-fix-bug TICKET  →  [fix code]  →  [Vitest tests]  →  [Playwright regression specs]  →  /oc-commit TICKET  →  /oc-pull-request TICKET (+ auto /oc-fe-calculate-ai-use)  →  /oc-review-pr TICKET  →  /oc-fe-fix-pr PR-ID
 ```
 
 - `/oc-cache-jira` stores ticket data in `.claude/cache/jira-tickets.json` (1-hour TTL). Other commands read from this cache.
 - `/oc-fe-fix-bug` transitions the Jira ticket to "In Progress" and creates a `fix/TICKET` branch, writes Vitest tests on the fix via the `oc-fe-test-writer` agent (before review in `/oc-commit`), then appends `ai_Dev_Front` to the Jira AI field (`customfield_10613`).
-- `/oc-commit` runs the appropriate reviewer agent before committing.
+- `/oc-commit` runs `oc-fe-reviewer` before committing — over the **whole branch diff** (`git diff $(git merge-base <base> HEAD)`, so committed work plus what is being staged), not just the staged files, and with the agent's **full 13-category checklist and Scoring rubric**. That is what makes its score comparable to the one `/oc-review-pr` produces later; see the scoring convention below.
 - `/oc-pull-request` squashes commits and creates a PR (auto-detects Bitbucket vs GitHub). On **opencell-portal only**, its final step then invokes `/oc-fe-calculate-ai-use --commit HEAD --if-not-recorded` — the squash is what makes `HEAD` the whole ticket's diff, which is the scope that command measures. The step is skipped on every other repository (**including opencell-core** — backend AI-usage recording stays a manual `/oc-be-tools:oc-be-calculate-ai-use` run) and is non-fatal: the PR is already created, so a failure is a warning, never a retry.
 - `/oc-review-pr` selects the reviewer agent based on repository: `oc-fe-reviewer` for opencell-portal, `oc-be-tools:oc-be-pr-reviewer` for opencell-core. It reads the ticket **live from Jira** (it deliberately does not use the `/oc-cache-jira` cache). When the ticket has several PRs (one per target branch), it reviews **exactly one** — the PR targeting `dev` wins; if none targets `dev` and there are several, it asks rather than guessing. For frontend reviews the report **opens with the number of Vitest test cases the PR adds** — counted from the diff (added `it(`/`test(` lines in `*.spec.ts(x)`/`*.test.ts(x)`, Cypress/E2E specs excluded, `it.each` counted once, never executed) so it stays visible at the head of the Bitbucket comment. For frontend (opencell-portal) reviews it then, automatically and without asking: posts the full report as a comment on the selected PR, appends `ai_code_review_Front` to the Jira AI field (`customfield_10613`), and sets the PR status **from the review score** — **8-10 left open, 6-7 marked Draft, 1-5 declined** (`POST …/decline`). A status change only happens on an `OPEN` PR, and a decline is withheld if the review comment failed to post, so a PR is never closed without a stated reason (declining is reversible — the author can reopen). Marking a PR draft is undocumented in the Bitbucket REST spec, so the skill verifies the `draft` flag afterwards and falls back to telling the user to use the PR action menu; it also re-sends the existing `reviewers` on the `PUT`, because omitted fields can be reset.
 - `/oc-fe-fix-pr` closes the review loop: given a PR id (or a Jira ticket whose PR is found on Bitbucket), it reads the PR's **unresolved** Bitbucket comments, checks out the PR's own source branch, fixes each remark via the `oc-fe-engineer` agent, writes Vitest tests via `oc-fe-test-writer`, commits and pushes to the PR branch, appends `ai_Dev_Front` to the Jira AI field (`customfield_10613`), then replies to and resolves each addressed comment.
 - `/oc-fe-write-tests` invokes the `oc-fe-test-writer` agent directly to write Vitest tests for changed code (git diff vs a base branch) or for specific files passed as arguments — usable outside the Jira flow; when the current branch maps to a ticket, it appends `ai_test_front_dev` to the Jira AI field (`customfield_10613`). `/oc-fe-create-ui` also runs this agent as its final development step before review, then appends `ai_Dev_Front` to the Jira AI field (`customfield_10613`).
+- `/oc-fe-regression-test` writes and runs Playwright specs for the **screens the diff
+  touches**, and runs **directly after the Vitest step** in `/oc-fe-fix-bug`,
+  `/oc-fe-create-ui`, `/oc-fe-fix-pr` and `/oc-fe-write-tests` — on the current branch, so
+  the specs are part of the PR. It is **diff-driven**, unlike `/oc-fe-create-e2e-test`, which
+  is ticket-driven and cuts its own `test/TICKET` branch. It applies to **opencell-portal
+  only** and skips itself elsewhere. Specs live at `tests/e2e/**/*.spec.ts` and boot the SPA
+  through `tests/support/app-boot.ts`, which stubs the `keycloak-js` module and replaces
+  `app-properties.js` — note that `window.KEYCLOAK_BYPASS` must stay **unset**, since it
+  short-circuits `onAuthSuccess` and deadlocks the profile bootstrap. The step is
+  **blocking**: a genuine screen regression stops the workflow, and weakening or skipping an
+  assertion to reach green is forbidden.
 - `/oc-be-implement` orchestrates a full backend ticket across the `oc-be-*` builder agents; `/oc-be-review` reviews backend changes via `oc-be-pr-reviewer`.
 - `/oc-fe-calculate-ai-use` measures AI contribution/retention on the last commit (or working tree) of **opencell-portal** and records it on the ticket. It runs **automatically as the last step of `/oc-pull-request`** (and remains usable on its own): a human comment, the `ai_Dev_Front` / `ai_test_front_dev` tags on `customfield_10613`, and a machine-readable record in the AI-metrics field (`customfield_10745`). It is the frontend twin of `/oc-be-tools:oc-be-calculate-ai-use` and **must keep the shared parts identical** — see the AI-usage measurement convention below. Two rules make the automatic invocation safe, and both matter to any future caller: `--if-not-recorded` **exits silently** when the ticket already holds a record for that exact commit sha (`addCommentToJiraIssue` is append-only — only `customfield_10745` is an upsert — so a re-run would otherwise post a second comment), and `--run` resolves the AI-stats directory by **`[TICKET-NUMBER]-*` prefix**, not "newest directory", so a developer who switched tickets in one checkout cannot have the other ticket's sub-agent manifests attributed here.
 
@@ -80,7 +91,7 @@ The skills chain together into a standard workflow:
 
 Both `/oc-be-calculate-ai-use` and `/oc-fe-calculate-ai-use` read four sources: sub-agent **manifests**, sub-agent **first-pass snapshots**, the session **transcript**, and **file-history**. The first two only exist because the orchestrating skills and sub-agents write them — **a sub-agent's `Write`/`Edit` calls never appear in the main session transcript and are lost when the sub-agent finishes**, so without them sub-agent work is undercounted and its retention is unmeasurable. The contract:
 
-- The orchestrator (`/oc-fe-create-ui`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr`, `/oc-fe-write-tests`, `/oc-fe-create-e2e-test`, `/oc-be-implement`) creates `.claude/cache/ai-stats/{TICKET}-{yyyymmdd-HHMMSS}/` and passes a manifest path to every sub-agent it dispatches.
+- The orchestrator (`/oc-fe-create-ui`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr`, `/oc-fe-write-tests`, `/oc-fe-create-e2e-test`, `/oc-fe-regression-test`, `/oc-be-implement`) creates `.claude/cache/ai-stats/{TICKET}-{yyyymmdd-HHMMSS}/` and passes a manifest path to every sub-agent it dispatches.
 - Each code-writing sub-agent writes `{RUN_ID}/{phase}.json` (its file list) and then `{RUN_ID}/snapshots/{phase}.diff` (`git diff HEAD` of exactly those files) as its **final actions** — the snapshot must be captured **before** any review fixes, or retention reads a meaningless 100%. The instructions live in each agent's own `.md` so they work when the agent is invoked directly; the orchestrator verifies and falls back.
 - At plan/approach approval the orchestrator writes `{RUN_ID}/_planning.json`, which is how analysis effort that produces no code gets credited.
 - These directories are git-ignored in both repos.
@@ -140,6 +151,17 @@ plugin, or the claude.ai connector (`mcp__…Atlassian_Rovo__<tool>`).
 
 - Backend sub-agents use `model: claude-sonnet-4-5`; all other sub-agents use `model: sonnet`.
 - **Frontend Vitest files are named `*.test.ts(x)`, never `*.spec.ts(x)`.** opencell-portal's `vitest.config.ts` sets `include: ['src/**/*.test.{ts,tsx,js,jsx}']`, so a `.spec.*` file is silently never collected — it looks like coverage that does not exist. `oc-fe-test-writer`, `oc-fe-reviewer`, `/oc-fe-create-ui`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr` and `/oc-fe-write-tests` all state this; keep them consistent. Playwright is the exception — its e2e specs stay `tests/e2e/**/*.spec.ts`, which is Playwright's own convention and does run. Counters (`/oc-review-pr`, `/oc-fe-calculate-ai-use`) deliberately accept **both** extensions so a stray legacy file is still measured.
+- **The frontend review score has exactly one definition, and it lives in `oc-fe-reviewer.md`.** Its
+  **Scoring** section (verdict per category → fixed deductions → `Fail` ceilings → floor to an integer
+  1-10) is the single source of truth, and **both** callers — `/oc-commit` before the PR and
+  `/oc-review-pr` after it — run that same agent against it. A caller must never restate a shorter
+  checklist, add criteria, re-weight anything, or adjust the number the agent returns; that divergence is
+  what used to make a developer's pre-commit 9/10 become a 6/10 at PR time. Three properties keep the two
+  numbers comparable and must be preserved by any future caller: the **same scope** (whole branch /
+  squashed ticket diff, never a single commit), the **same Testing rule** (production code changed with
+  zero Vitest cases is a `Fail`, never `N/A`, never conditional on test files already existing), and
+  **material-independence** (files vs. raw diff must score alike — never deduct for context a diff hides).
+  The score is not cosmetic: `/oc-review-pr` leaves 8-10 open, drafts 6-7 and **declines** 1-5.
 - Agent markdown files contain the full system prompt — editing the `.md` changes agent behavior directly.
 - Skills reference agents and MCP tools by their registered names (e.g., `oc-fe-reviewer:oc-fe-reviewer`, `oc-be-tools:oc-be-pr-reviewer`).
 - The PostgreSQL MCP runs via Docker; the Opencell MCP runs via `npx` from a GitHub source; the Figma MCP is a remote HTTP server.

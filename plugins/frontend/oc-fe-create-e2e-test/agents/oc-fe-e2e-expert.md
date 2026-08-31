@@ -331,10 +331,13 @@ Schema:
 **Then snapshot your first pass** — so `/oc-fe-calculate-ai-use` can measure *retention* (how much of your output survives to the commit); your line content is otherwise lost when this session ends. Immediately after the manifest, using the same `<RUN_ID>` directory as your manifest path, capture a `git diff` of exactly the files you listed:
 ```bash
 RUN=".claude/cache/ai-stats/<RUN_ID>"        # the directory your manifest path is in
+PHASE="<PHASE>"                              # the basename of your manifest path, without
+                                             # .json — e.g. e2e, or e2e-2 if you were given
+                                             # .../e2e-2.json. NEVER hardcode "e2e".
 mkdir -p "$RUN/snapshots"
 git add -N -- <the files in your manifest>   # REQUIRED — see the note below
-git diff HEAD -- <the files in your manifest> > "$RUN/snapshots/e2e.diff"
+git diff HEAD -- <the files in your manifest> > "$RUN/snapshots/$PHASE.diff"
 ```
 **The `git add -N` (intent-to-add) line is not optional.** `git diff HEAD` ignores untracked files completely, so without it every file you *created* produces **no diff output at all** and its retention becomes unmeasurable — on frontend work that is most of your output. `-N` records an intent-to-add entry only: it stages no content, commits nothing, and is undone by `git reset`.
 
-This records your **added lines vs the branch base** (`HEAD`) — the delta, so it is correct for modified files (an existing component, an existing `en.json`) as well as new ones. Name the `.diff` after the same phase as your manifest. Best-effort; skip if git or the path is unavailable, and skip entirely if no manifest path was provided.
+This records your **added lines vs the branch base** (`HEAD`) — the delta, so it is correct for modified files (an existing component, an existing `en.json`) as well as new ones. The `.diff` **must** be named after the same phase as your manifest: a run directory is shared per ticket, so a hardcoded `e2e.diff` sitting beside an `e2e-2.json` manifest silently overwrites the earlier run's snapshot and makes its retention unmeasurable. Best-effort; skip if git or the path is unavailable, and skip entirely if no manifest path was provided.

@@ -172,6 +172,17 @@ git diff HEAD -- <files from <phase>.json> > .claude/cache/ai-stats/[RUN_ID]/sna
 
 Do the fallback before your own edits so the snapshot reflects the AI's initial output, not your fixes — otherwise the snapshot equals the final code and retention is a meaningless 100%. Best-effort and non-blocking.
 
+### Step 6b: Playwright Regression Tests for the Changed Screens
+
+Directly after the Vitest step, protect the screens the fix touched:
+
+- Run `/oc-fe-regression-test [BASE-BRANCH]`.
+- It stays on the current branch, so the specs are part of this ticket's PR.
+- It skips itself on any repository other than opencell-portal, and when no changed file
+  resolves to a screen.
+- **This step is blocking.** If it reports a genuine application regression, stop and fix the
+  regression before continuing to the tag and commit steps — do not weaken the spec.
+
 ### Step 7: Mark the Ticket as Handled by the Frontend AI Dev
 
 Once the bug is fixed, add the tag `ai_Dev_Front` to the JIRA **AI field** (`customfield_10613`) to record that the frontend AI dev addressed the ticket.

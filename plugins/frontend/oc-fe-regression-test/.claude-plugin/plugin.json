@@ -1,0 +1,5 @@
+{
+  "name": "oc-fe-regression-test",
+  "description": "Create and run Playwright regression tests for the screens changed by the current diff, on the current branch, so they land in the pull request",
+  "version": "1.0.4"
+}
