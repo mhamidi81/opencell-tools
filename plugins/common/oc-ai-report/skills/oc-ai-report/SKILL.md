@@ -268,10 +268,17 @@ def sum_foreign(rows):
     d = {}
     for r in rows: merge_foreign(d, r.get("bugsForeign"))
     return d
-def bugs_label(n, foreign):
-    """Own-area sub-bug count, annotating folded-in cross-area bugs, e.g. '2 (front +1)'."""
+def sum_foreign_h(rows):
+    d = {}
+    for r in rows:
+        for a, h in (r.get("bugsForeignH") or {}).items(): d[a] = round(d.get(a, 0.0) + h, 1)
+    return d
+def bugs_label(n, foreign, foreign_h=None):
+    """Own-area sub-bug count, annotating cross-area sub-bugs (count + total hours) that this
+    report keeps OUT of the area's numbers, e.g. '2 (front +1 7.8h)'."""
     if foreign:
-        extra = ", ".join(f"{FOREIGN_SHORT.get(a, a)} +{c}" for a, c in sorted(foreign.items()))
+        fh = foreign_h or {}
+        extra = ", ".join(f"{FOREIGN_SHORT.get(a, a)} +{c} {fh.get(a, 0)}h" for a, c in sorted(foreign.items()))
         return f"{n} ({extra})"
     return f"{n}"
 
@@ -339,7 +346,7 @@ def build_rows(parents, children, tempo, since, until):
 
     # From the ticket's OWN child sub-issues only (never issue links): Bug/Sub-bug -> count + Sub-bug h;
     # non-bug sub-tasks -> Dev-lead estimate (DL. Est h), summed per area (sub-bug estimates excluded).
-    p_bugs = {}; p_dl = {}; p_has_sub = {}; p_bugs_foreign = {}
+    p_bugs = {}; p_dl = {}; p_has_sub = {}; p_foreign_ct = {}; p_foreign_hr = {}
     for p in parents:
         key = p.get("key"); pf = p.get("fields", {}) or {}
         raw_bugs = {ar: [] for ar in AREAS}; dl_by_area = {ar: 0.0 for ar in AREAS}
@@ -353,19 +360,21 @@ def build_rows(parents, children, tempo, since, until):
                 ar = area_of(cf) or pa         # non-bug sub-tasks still inherit the parent area for the DL estimate
                 saw_sub = True
                 if ar: dl_by_area[ar] += hours(cf.get("timeoriginalestimate"))
-        # A sub-bug stays under its own area when that area carries a record; otherwise it
-        # falls back to a record area (parent's if it has a record, else the first) so it is
-        # never dropped, and the fold-in is remembered per source area for the "(front 1)" note.
+        # Only own-area sub-bugs drive an area's count & Sub-bug h. A sub-bug whose area has no
+        # AI record on the ticket is NOT mixed into another area's numbers (this report measures
+        # per-area AI impact, and each area is a different developer) — it is surfaced only as an
+        # annotation "(front +1 7.8h)" on a record area's cell, carrying its count and total hours.
         bugs_by_area = {ar: list(raw_bugs[ar]) if ar in rec_areas else [] for ar in AREAS}
-        foreign = {ar: {} for ar in AREAS}
+        fct = {ar: {} for ar in AREAS}; fhr = {ar: {} for ar in AREAS}
         fallback = pa if pa in rec_areas else (sorted(rec_areas)[0] if rec_areas else None)
         if fallback:
             for ar in AREAS:
                 if ar in rec_areas or not raw_bugs[ar]: continue
-                bugs_by_area[fallback].extend(raw_bugs[ar])
-                foreign[fallback][ar] = foreign[fallback].get(ar, 0) + len(raw_bugs[ar])
+                fct[fallback][ar] = fct[fallback].get(ar, 0) + len(raw_bugs[ar])
+                fhr[fallback][ar] = round(fhr[fallback].get(ar, 0.0)
+                    + sum(hours((b.get("fields") or {}).get("timespent")) for b in raw_bugs[ar]), 1)
         p_bugs[key] = bugs_by_area; p_dl[key] = dl_by_area; p_has_sub[key] = saw_sub
-        p_bugs_foreign[key] = foreign
+        p_foreign_ct[key] = fct; p_foreign_hr[key] = fhr
 
     rows = []
     for p in parents:
@@ -388,10 +397,10 @@ def build_rows(parents, children, tempo, since, until):
             if until and at and at >= until: continue
             a_est = area_estimate_h(pf, domain)                                     # architect
             dl_est = round(p_dl[key][domain], 1) if p_has_sub[key] else parent_est  # dev-lead
-            bug_nodes = p_bugs[key][domain]                    # own-area + folded-in cross-area bugs
-            foreign_d = dict(p_bugs_foreign[key][domain])       # {srcArea: n} folded into this area
-            bug_logged = bug_logged_h(bug_nodes, acc, tempo)    # Sub-bug h includes folded-in bugs' hours
-            own_bugs = len(bug_nodes) - sum(foreign_d.values()) # base count = own-area sub-bugs only
+            bug_nodes = p_bugs[key][domain]                     # own-area sub-bugs only
+            foreign_ct = dict(p_foreign_ct[key][domain])        # {srcArea: n} cross-area, annotation only
+            foreign_hr = dict(p_foreign_hr[key][domain])        # {srcArea: hours} cross-area, annotation only
+            bug_logged = bug_logged_h(bug_nodes, acc, tempo)    # Sub-bug h = own-area only (no cross-area mixing)
             if acc in tw: logged = hours(tw.get(acc))
             elif acc in wl: logged = hours(wl.get(acc))
             else: logged = parent_logged
@@ -402,7 +411,7 @@ def build_rows(parents, children, tempo, since, until):
                          "turns": num(rec.get("subReq") if rec.get("subReq") is not None else rec.get("turns")),
                          "aEst": round(a_est, 1), "dlEst": round(dl_est, 1),
                          "logged": round(logged, 1), "bugLogged": bug_logged,
-                         "bugs": own_bugs, "bugsForeign": foreign_d})
+                         "bugs": len(bug_nodes), "bugsForeign": foreign_ct, "bugsForeignH": foreign_hr})
     return rows
 
 def main():
@@ -436,7 +445,7 @@ def main():
         P(f"| {ar.capitalize()} | {len(g['contrib'])} | {avg(g['contrib'])}% | {avg(g['retain'])}% | {avg([r['rework'] for r in g['rows']])}% | "
           f"{g['utAdd']}/{g['utMod']} | {g['pmTests']} | {g['turns']} | {round(g['aEst'],1)} | {round(g['dlEst'],1)} | "
           f"{round(g['logged'] + g['bugLogged'],1)} | {round(g['logged'],1)} | {round(g['bugLogged'],1)} | {gain_two(*gain_basis(g['rows'], 'aEst'))} | "
-          f"{gain_two(*gain_basis(g['rows'], 'dlEst'))} | {bugs_label(g['bugs'], sum_foreign(g['rows']))} |")
+          f"{gain_two(*gain_basis(g['rows'], 'dlEst'))} | {bugs_label(g['bugs'], sum_foreign(g['rows']), sum_foreign_h(g['rows']))} |")
 
     # ---- Summary by user ----
     users = {}
@@ -454,7 +463,7 @@ def main():
         P(f"| {u['name']} | {'/'.join(sorted(u['areas']))} | {len(u['tickets'])} | {acc_cell} | "
           f"{avg(u['retain'])}% | {avg(u['rework'])}% | {u['utAdd']}/{u['utMod']} | {u['pmTests']} | {u['turns']} | "
           f"{round(u['aEst'],1)} | {round(u['dlEst'],1)} | {round(u['logged'] + u['bugLogged'],1)} | {round(u['logged'],1)} | {round(u['bugLogged'],1)} | "
-          f"{gain_two(*gain_basis(u['rows'], 'aEst'))} | {gain_two(*gain_basis(u['rows'], 'dlEst'))} | {bugs_label(u['bugs'], sum_foreign(u['rows']))} |")
+          f"{gain_two(*gain_basis(u['rows'], 'aEst'))} | {gain_two(*gain_basis(u['rows'], 'dlEst'))} | {bugs_label(u['bugs'], sum_foreign(u['rows']), sum_foreign_h(u['rows']))} |")
 
     # ---- Detail per user, by ticket ----
     P("\n## Detail per user")
@@ -469,7 +478,7 @@ def main():
             cc = f"**{c}%**" if isinstance(c, (int, float)) and c < 60 else f"{c}%"  # <60% flagged (red in HTML)
             P(f"| [{r['key']}]({JIRA_BROWSE}{r['key']}) | {r['at']} | {r['ttype']} | {r['area']} | {r['summary']} | {r['status']} | {'T' if r['final'] else ''} | {cc} | {r['retain']}% | {r['rework']}% | "
               f"{r['utAdd']}/{r['utMod']} | {r['pmTests']} | {r['turns']} | {r['aEst']} | {r['dlEst']} | {round(r['logged'] + r['bugLogged'],1)} | {r['logged']} | "
-              f"{r['bugLogged']} | {gain_two(r['aEst'], r['logged'], r['bugLogged'])} | {gain_two(r['dlEst'], r['logged'], r['bugLogged'])} | {bugs_label(r['bugs'], r['bugsForeign'])} |")
+              f"{r['bugLogged']} | {gain_two(r['aEst'], r['logged'], r['bugLogged'])} | {gain_two(r['dlEst'], r['logged'], r['bugLogged'])} | {bugs_label(r['bugs'], r['bugsForeign'], r['bugsForeignH'])} |")
     print("\n".join(out))
 
 if __name__ == "__main__":
@@ -566,10 +575,17 @@ def sum_foreign(rows):
     d = {}
     for r in rows: merge_foreign(d, r.get("bugsForeign"))
     return d
-def bugs_label(n, foreign):
-    """Own-area sub-bug count, annotating folded-in cross-area bugs, e.g. '2 (front +1)'."""
+def sum_foreign_h(rows):
+    d = {}
+    for r in rows:
+        for a, h in (r.get("bugsForeignH") or {}).items(): d[a] = round(d.get(a, 0.0) + h, 1)
+    return d
+def bugs_label(n, foreign, foreign_h=None):
+    """Own-area sub-bug count, annotating cross-area sub-bugs (count + total hours) that this
+    report keeps OUT of the area's numbers, e.g. '2 (front +1 7.8h)'."""
     if foreign:
-        extra = ", ".join(f"{FOREIGN_SHORT.get(a, a)} +{c}" for a, c in sorted(foreign.items()))
+        fh = foreign_h or {}
+        extra = ", ".join(f"{FOREIGN_SHORT.get(a, a)} +{c} {fh.get(a, 0)}h" for a, c in sorted(foreign.items()))
         return f"{n} ({extra})"
     return f"{n}"
 
@@ -632,7 +648,7 @@ def build_rows(parents, children, tempo, since, until):
         cf = c.get("fields", {}) or {}
         pk = (cf.get("parent") or {}).get("key")
         if pk: ch_by_parent[pk].append(c)
-    p_bugs = {}; p_dl = {}; p_has_sub = {}; p_bugs_foreign = {}
+    p_bugs = {}; p_dl = {}; p_has_sub = {}; p_foreign_ct = {}; p_foreign_hr = {}
     for p in parents:
         key = p.get("key"); pf = p.get("fields", {}) or {}
         raw_bugs = {ar: [] for ar in AREAS}; dl_by_area = {ar: 0.0 for ar in AREAS}
@@ -648,19 +664,21 @@ def build_rows(parents, children, tempo, since, until):
                 ar = area_of(cf) or pa         # non-bug sub-tasks still inherit the parent area for the DL estimate
                 saw_sub = True
                 if ar: dl_by_area[ar] += hours(cf.get("timeoriginalestimate"))
-        # A sub-bug stays under its own area when that area carries a record; otherwise it
-        # falls back to a record area (parent's if it has a record, else the first) so it is
-        # never dropped, and the fold-in is remembered per source area for the "(front +1)" note.
+        # Only own-area sub-bugs drive an area's count & Sub-bug h. A sub-bug whose area has no
+        # AI record on the ticket is NOT mixed into another area's numbers (this report measures
+        # per-area AI impact, and each area is a different developer) — it is surfaced only as an
+        # annotation "(front +1 7.8h)" on a record area's cell, carrying its count and total hours.
         bugs_by_area = {ar: list(raw_bugs[ar]) if ar in rec_areas else [] for ar in AREAS}
-        foreign = {ar: {} for ar in AREAS}
+        fct = {ar: {} for ar in AREAS}; fhr = {ar: {} for ar in AREAS}
         fallback = pa if pa in rec_areas else (sorted(rec_areas)[0] if rec_areas else None)
         if fallback:
             for ar in AREAS:
                 if ar in rec_areas or not raw_bugs[ar]: continue
-                bugs_by_area[fallback].extend(raw_bugs[ar])
-                foreign[fallback][ar] = foreign[fallback].get(ar, 0) + len(raw_bugs[ar])
+                fct[fallback][ar] = fct[fallback].get(ar, 0) + len(raw_bugs[ar])
+                fhr[fallback][ar] = round(fhr[fallback].get(ar, 0.0)
+                    + sum(hours((b.get("fields") or {}).get("timespent")) for b in raw_bugs[ar]), 1)
         p_bugs[key] = bugs_by_area; p_dl[key] = dl_by_area; p_has_sub[key] = saw_sub
-        p_bugs_foreign[key] = foreign
+        p_foreign_ct[key] = fct; p_foreign_hr[key] = fhr
 
     rows = []
     for p in parents:
@@ -683,9 +701,9 @@ def build_rows(parents, children, tempo, since, until):
             if until and at and at >= until: continue
             a_est = area_estimate_h(pf, domain)
             dl_est = round(p_dl[key][domain], 1) if p_has_sub[key] else parent_est
-            bug_nodes = p_bugs[key][domain]                    # own-area + folded-in cross-area bugs
-            foreign_d = dict(p_bugs_foreign[key][domain])       # {srcArea: n} folded into this area
-            own_bugs = len(bug_nodes) - sum(foreign_d.values()) # base count = own-area sub-bugs only
+            bug_nodes = p_bugs[key][domain]                     # own-area sub-bugs only
+            foreign_ct = dict(p_foreign_ct[key][domain])        # {srcArea: n} cross-area, annotation only
+            foreign_hr = dict(p_foreign_hr[key][domain])        # {srcArea: hours} cross-area, annotation only
             if acc in tw: logged = hours(tw.get(acc))
             elif acc in wl: logged = hours(wl.get(acc))
             else: logged = parent_logged
@@ -695,8 +713,8 @@ def build_rows(parents, children, tempo, since, until):
                          "utAdd": num(rec.get("utAdd")), "utMod": num(rec.get("utMod")), "pmTests": num(rec.get("pmTests")),
                          "turns": num(rec.get("subReq") if rec.get("subReq") is not None else rec.get("turns")),
                          "aEst": round(a_est, 1), "dlEst": round(dl_est, 1), "logged": round(logged, 1),
-                         "bugLogged": bug_logged_h(bug_nodes, acc, tempo),
-                         "bugs": own_bugs, "bugsForeign": foreign_d})
+                         "bugLogged": bug_logged_h(bug_nodes, acc, tempo),   # own-area only
+                         "bugs": len(bug_nodes), "bugsForeign": foreign_ct, "bugsForeignH": foreign_hr})
     return rows
 
 CSV_COLS = [
@@ -721,8 +739,8 @@ def write_csv(rows, path):
         for r in sorted(rows, key=lambda x: (x["area"], x["name"].lower(), x["at"], x["key"])):
             r = dict(r)
             r["finalTxt"] = "T" if r.get("final") else ""
-            fg = r.get("bugsForeign") or {}
-            r["bugsForeignTxt"] = ", ".join(f"{FOREIGN_SHORT.get(a, a)} +{c}" for a, c in sorted(fg.items()))
+            fg = r.get("bugsForeign") or {}; fh = r.get("bugsForeignH") or {}
+            r["bugsForeignTxt"] = ", ".join(f"{FOREIGN_SHORT.get(a, a)} +{c} {fh.get(a, 0)}h" for a, c in sorted(fg.items()))
             r["url"] = JIRA_BROWSE + r["key"]
             r["totalDev"] = round(r["logged"] + r["bugLogged"], 1)
             r["gain"] = gain_cell(r["aEst"], r["logged"])
@@ -786,7 +804,7 @@ def main():
                   f'<td class="r">{g["turns"]}</td><td class="r">{round(g["aEst"],1)}</td><td class="r">{round(g["dlEst"],1)}</td>'
                   f'<td class="r">{round(g["logged"] + g["bugLogged"],1)}</td><td class="r">{round(g["logged"],1)}</td><td class="r">{round(g["bugLogged"],1)}</td>'
                   f'<td class="r {gain_cls(gp)}">{gain_two(*ba)}</td>'
-                  f'<td class="r {gain_cls(gpd)}">{gain_two(*bd)}</td><td class="r">{e(bugs_label(g["bugs"], sum_foreign(g["rows"])))}</td></tr>')
+                  f'<td class="r {gain_cls(gpd)}">{gain_two(*bd)}</td><td class="r">{e(bugs_label(g["bugs"], sum_foreign(g["rows"]), sum_foreign_h(g["rows"])))}</td></tr>')
             h.append("</tbody></table></div>")
             return "".join(h)
 
@@ -813,7 +831,7 @@ def main():
                   f'<td class="r">{round(u["logged"] + u["bugLogged"],1)}</td><td class="r">{round(u["logged"],1)}</td>'
                   f'<td class="r">{round(u["bugLogged"],1)}</td>'
                   f'<td class="r {gain_cls(g)}">{gain_two(*ba)}</td>'
-                  f'<td class="r {gain_cls(gd)}">{gain_two(*bd)}</td><td class="r">{e(bugs_label(u["bugs"], sum_foreign(u["rows"])))}</td></tr>')
+                  f'<td class="r {gain_cls(gd)}">{gain_two(*bd)}</td><td class="r">{e(bugs_label(u["bugs"], sum_foreign(u["rows"]), sum_foreign_h(u["rows"])))}</td></tr>')
             h.append("</tbody></table></div>")
             return "".join(h)
 
@@ -839,7 +857,7 @@ def main():
                   f'<td class="r">{round(agg["logged"] + agg["bugLogged"],1)}</td><td class="r">{round(agg["logged"],1)}</td>'
                   f'<td class="r">{round(agg["bugLogged"],1)}</td>'
                   f'<td class="r {gain_cls(g)}">{gain_two(*ba)}</td>'
-                  f'<td class="r {gain_cls(gd)}">{gain_two(*bd)}</td><td class="r">{e(bugs_label(agg["bugs"], sum_foreign(rs)))}</td></tr>')
+                  f'<td class="r {gain_cls(gd)}">{gain_two(*bd)}</td><td class="r">{e(bugs_label(agg["bugs"], sum_foreign(rs), sum_foreign_h(rs)))}</td></tr>')
             h.append("</tbody></table></div>")
             return "".join(h)
 
@@ -859,7 +877,7 @@ def main():
                   f'<td class="r">{round(r["logged"] + r["bugLogged"],1)}</td><td class="r">{r["logged"]}</td>'
                   f'<td class="r">{r["bugLogged"]}</td>'
                   f'<td class="r {gain_cls(g)}">{gain_two(r["aEst"], r["logged"], r["bugLogged"])}</td>'
-                  f'<td class="r {gain_cls(gd)}">{gain_two(r["dlEst"], r["logged"], r["bugLogged"])}</td><td class="r">{e(bugs_label(r["bugs"], r["bugsForeign"]))}</td></tr>')
+                  f'<td class="r {gain_cls(gd)}">{gain_two(r["dlEst"], r["logged"], r["bugLogged"])}</td><td class="r">{e(bugs_label(r["bugs"], r["bugsForeign"], r["bugsForeignH"]))}</td></tr>')
             h.append("</tbody></table></div>")
             return "".join(h)
 
@@ -952,9 +970,10 @@ def main():
       '<b>A. Est h</b> (Architect) per area from the estimate '
       'custom fields (days &times;8), else the ticket estimate; <b>DL. Est h</b> (Dev-lead) from the ticket estimation '
       'field &mdash; a User Story sums its child sub-task estimates per area (sub-bugs excluded), a Bug/Enabler uses its '
-      'own estimate. <b>Sub-bugs</b> = count of the area\'s own child Bug/Sub-bug sub-issues, with <b>Sub-bug h</b> (hours logged on them). '
-      'A child sub-bug whose component is a different area is still counted here (never dropped) when that other area has no AI record on the '
-      'ticket &mdash; it falls back to this area and is shown as e.g. <b>2 (front +1)</b> (2 own + 1 folded in from frontend); its hours fold into Sub-bug h. '
+      'own estimate. <b>Sub-bugs</b> = count of the area\'s <b>own</b> child Bug/Sub-bug sub-issues (by their component), with <b>Sub-bug h</b> (hours logged on them). '
+      'This report measures per-area AI impact (a different developer per area), so a cross-area sub-bug is <b>not</b> mixed into another area\'s numbers: '
+      'a sub-bug whose component is a different area (when that area has no AI record on the ticket) is shown only as an annotation, e.g. '
+      '<b>2 (front +1 7.8h)</b> &mdash; 2 own-area sub-bugs, plus 1 frontend sub-bug totalling 7.8h that is counted under frontend, not here. '
       '<b>Logged h</b> = hours booked on the ticket per user (Tempo per-user &rarr; Jira worklog &rarr; ticket total); '
       '<b>Total dev h</b> = Logged h + Sub-bug h (all development effort). <b>Arch gain</b> = (A.Est&minus;Logged)/A.Est and '
       '<b>DL gain</b> = (DL.Est&minus;Logged)/DL.Est, each shown <b>without / with</b> bug hours; a dash (&mdash;) marks a '
@@ -1055,7 +1074,7 @@ if __name__ == "__main__":
 - **Totals = sum of the detail rows** (no independent recompute). A ticket's estimate/bugs land under the area(s) with records; if two developers in the same area worked one ticket, their rows both count (rare).
 - **Date = the AI record's `at`** (the day the metric was measured/confirmed). The JQL `updated >=` window is only a pre-filter; precise period membership is decided by `at` in the aggregator.
 - **Logged hours** (per user & ticket, booked on the parent): **Tempo per-user** (`TEMPO_API_TOKEN`, real author) → **Jira worklog** author → **ticket-total** `timespent`. Shown in **hours** (8h/day). **Time gain** is shown as **two numbers, `without / with` bug hours**, and in the aggregate rows is computed over **only the tickets that have the matching estimate** (a ticket with no Architect estimate is left out of the Arch gain entirely — both its estimate and its logged hours — and likewise for the Dev-lead gain), so an unestimated ticket can no longer drag a whole area or developer negative; the Est h / Logged h columns beside it still show the **full** sums: `(estimate − logged)/estimate` first, then `(estimate − (logged + Bug h))/estimate` — so you see the gain on the ticket work alone and the gain once the time spent on its bugs is folded in. Positive = under estimate. (When logged falls back to a ticket total rather than Tempo per-user, the estimate is per-area while logged is whole-ticket, so the value can read oddly.)
-- **Sub-bugs & Sub-bug h** = the ticket's **own child sub-issues** of type `Bug` or `Sub-bug` — **issue links are not counted** (a "Relates" link would pull in duplicate/related bugs not raised against this ticket's work). Each sub-bug is attributed to an area **by its own Component/title only** — unlike non-bug sub-tasks (which inherit the parent's area for the DL estimate), a sub-bug does **not** inherit the parent's area, so a sub-bug with **no area signal of its own is not counted**. A sub-bug **stays under its own area** when that area carries an AI record on the ticket; otherwise it is **never dropped** — it **falls back** to a record area (the parent's if it has a record, else the first) and the fold-in is shown as **`2 (front +1)`** (2 own-area sub-bugs + 1 folded in from frontend). The base number is the own-area count; the parenthetical lists the folded-in counts per source area. **Sub-bug h** is the hours logged on all those bugs (own + folded-in; Tempo per-user → the bug's `timespent`), shown as a **separate** column from the ticket's Logged h. The CSV keeps the own count in **Sub-bugs** and the fold-ins in a **Sub-bugs (other areas)** column.
+- **Sub-bugs & Sub-bug h** = the ticket's **own child sub-issues** of type `Bug` or `Sub-bug` — **issue links are not counted** (a "Relates" link would pull in duplicate/related bugs not raised against this ticket's work). Each sub-bug is attributed to an area **by its own Component/title only** — unlike non-bug sub-tasks (which inherit the parent's area for the DL estimate), a sub-bug does **not** inherit the parent's area, so a sub-bug with **no area signal of its own is not counted**. Only a sub-bug **in the area's own component** drives that area's count and **Sub-bug h**. Because this report measures **per-area AI impact** (a different developer per area — one backend, one frontend, one QA on a User Story), a cross-area sub-bug is **not mixed into another area's numbers**: a sub-bug whose component is a different area (and that area has no AI record on the ticket) is surfaced **only as an annotation**, **`2 (front +1 7.8h)`** — 2 own-area sub-bugs, plus a note that 1 frontend sub-bug totalling 7.8h exists (counted under frontend, not here). The base number and **Sub-bug h** are own-area only; the parenthetical lists each cross-area source's count and total hours. **Sub-bug h** is the hours logged on the own-area bugs (Tempo per-user → the bug's `timespent`), shown as a **separate** column from the ticket's Logged h. The CSV keeps the own count in **Sub-bugs** and the cross-area note in a **Sub-bugs (other areas)** column.
 - **Read-only** — the command never writes to Jira, Bitbucket, or git; outbound calls are read-only: the Jira REST enhanced-search reads (Passes A/B) and the Tempo worklog fetch (Pass C) when a token is set.
 - The AI records are **latest-only per developer×domain**, so the report reflects the most recent measurement per person per ticket, not a full history.
 
