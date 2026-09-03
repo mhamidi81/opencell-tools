@@ -23,7 +23,7 @@ Fixed columns per row: **Ticket · Date · Type · Title · Status · Final**. T
 
 Output: a compact **Markdown** printout (Totals by area overall + by month, then a condensed per-ticket table grouped by month), plus a styled **HTML** file (the full wide per-area matrix, with the report split into **five tabs** — All · User Stories (All) · User Stories (Final) · Bugs (Final) · Bugs and Others — each showing Totals-by-area overall + expandable per-month, and the per-ticket matrix grouped by month) and a **CSV** (the full matrix flattened), all date-stamped in `./docs/`. Users/developers are ordered **by area, then name**.
 
-**Second report — finished-US per-developer summary.** The same run also writes `time-report-<TODAY>-us-summary.html` and `…-us-summary.csv` (derived from `--out`/`--csv` by inserting `-us-summary`). It considers **only User Stories in a final status**, credited to **each area's main developer** (up to three per US). The HTML has **two tabs**: **By month** (date → user: overall AI-true / AI-false tables plus an expandable per-month block) and **By developer** (user → date: each developer, ordered by area then name, expands to a month-by-month table of their finished US). Dev-table columns: **Developer · Area · US (final) · Avg sub-bugs / US · Sum A. Est h · Sum logged h · Sum sub-bug h · Sum total h · Gain (with sub-bugs) · Gain (no sub-bugs)**, each ending with a **Total** row (**Avg sub-bugs / US = total sub-bugs ÷ total US**). The CSV carries a leading **Month** and **AI assisted** column.
+**Second report — finished-US per-developer summary.** The same run also writes `time-report-<TODAY>-us-summary.html` and `…-us-summary.csv` (derived from `--out`/`--csv` by inserting `-us-summary`). It considers **only User Stories in a final status**, credited to **each area's main developer** (up to three per US). The HTML has **two tabs**: **By month** (date → user: overall AI-true / AI-false tables plus an expandable per-month block) and **By developer** (user → date: each developer, ordered by area then name, expands to two month-by-month tables — AI-assisted true / false — of their finished US). Dev-table columns: **Developer · Area · US (final) · Avg sub-bugs / US · Sum A. Est h · Sum logged h · Sum sub-bug h · Sum total h · Gain (with sub-bugs) · Gain (no sub-bugs)**, each ending with a **Total** row (**Avg sub-bugs / US = total sub-bugs ÷ total US**). The CSV carries a leading **Month** and **AI assisted** column.
 
 ## Access
 
@@ -662,10 +662,10 @@ def _us_tables_html(recs):
     return "".join(h)
 
 # by-developer view: per user (area, then name), a month-by-month table of their finished US
-UMONTH_COLS = [("month", "Month"), ("nUS", "US (final)"), ("aiUS", "AI US"), ("avgSub", "Avg sub-bugs / US"),
+UMONTH_COLS = [("month", "Month"), ("nUS", "US (final)"), ("avgSub", "Avg sub-bugs / US"),
                ("sumAEst", "Sum A. Est h"), ("sumLogged", "Sum logged h"), ("sumSub", "Sum sub-bug h"),
                ("sumTotal", "Sum total h"), ("gainBug", "Gain (with sub-bugs)"), ("gainNoBug", "Gain (no sub-bugs)")]
-UMONTH_NUM = {"nUS", "aiUS", "avgSub", "sumAEst", "sumLogged", "sumSub", "sumTotal", "gainBug", "gainNoBug"}
+UMONTH_NUM = {"nUS", "avgSub", "sumAEst", "sumLogged", "sumSub", "sumTotal", "gainBug", "gainNoBug"}
 
 def _umonth_cells(d):
     out = []
@@ -678,8 +678,21 @@ def _umonth_cells(d):
             out.append(f'<td class="r">{d[k]}</td>')
     return "".join(out)
 
+def _umonth_table(recs):
+    """One month-by-month table (+ Total) for a set of a developer's finished-US records."""
+    if not recs:
+        return '<p class="dim" style="padding:.4rem .6rem">None.</p>'
+    h = ['<div class="tw"><table><thead><tr>'
+         + "".join(f'<th class="{ "r" if k in UMONTH_NUM else "" }">{e(t)}</th>' for k, t in UMONTH_COLS)
+         + '</tr></thead><tbody>']
+    for m in sorted({x["month"] for x in recs}, reverse=True):
+        h.append('<tr>' + _umonth_cells(_us_agg(m, "", [x for x in recs if x["month"] == m])) + '</tr>')
+    h.append('<tr class="tot">' + _umonth_cells(_us_agg("Total", "", recs)) + '</tr></tbody></table></div>')
+    return "".join(h)
+
 def _us_by_user_html(recs):
-    """Per developer (area, then name), expandable month-by-month breakdown of their finished US."""
+    """Per developer (area, then name), expandable month-by-month breakdown of their finished US,
+    each split into AI-assisted true / false sub-tables."""
     by_dev = defaultdict(list)
     for x in recs: by_dev[x["dev"]].append(x)
     order = sorted(by_dev, key=lambda d: (AREAS.index(by_dev[d][0]["area"]), d.lower()))
@@ -690,12 +703,10 @@ def _us_by_user_html(recs):
         drecs = by_dev[dev]; area = AREA_LABEL[drecs[0]["area"]]; tot = _us_agg("Total", "", drecs)
         h.append(f'<details><summary>{e(dev)} <span class="cnt">({e(area)} &middot; {tot["nUS"]} US &middot; '
                  f'{tot["aiUS"]} AI &middot; {tot["sumTotal"]}h)</span></summary>')
-        h.append('<div class="tw"><table><thead><tr>'
-                 + "".join(f'<th class="{ "r" if k in UMONTH_NUM else "" }">{e(t)}</th>' for k, t in UMONTH_COLS)
-                 + '</tr></thead><tbody>')
-        for m in sorted({x["month"] for x in drecs}, reverse=True):
-            h.append('<tr>' + _umonth_cells(_us_agg(m, "", [x for x in drecs if x["month"] == m])) + '</tr>')
-        h.append('<tr class="tot">' + _umonth_cells(tot) + '</tr></tbody></table></div></details>')
+        for ai_flag, label in ((True, "true"), (False, "false")):
+            h.append(f'<h4>AI-assisted: {label}</h4>')
+            h.append(_umonth_table([x for x in drecs if x["ai"] == ai_flag]))
+        h.append('</details>')
     return "".join(h)
 
 def _summary_path(path, tag):
@@ -742,6 +753,7 @@ body {{ margin:0; padding:2rem 1.25rem 3rem; background:var(--bg); color:var(--f
 h1 {{ font-size:1.6rem; margin:0 0 .25rem; }}
 h2 {{ font-size:1.2rem; margin:1.8rem 0 .5rem; padding-bottom:.3rem; border-bottom:2px solid var(--line); }}
 h3 {{ font-size:1rem; margin:1.1rem 0 .4rem; color:var(--muted); }}
+h4 {{ font-size:.85rem; margin:.7rem 0 .25rem; color:var(--muted); font-weight:600; }}
 .meta {{ color:var(--muted); margin:0 0 1rem; }}
 .tw {{ border:1px solid var(--line); border-radius:10px; margin:.3rem 0 1rem; }}
 table {{ border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }}
