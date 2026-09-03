@@ -23,7 +23,7 @@ Fixed columns per row: **Ticket · Date · Type · Title · Status · Final**. T
 
 Output: a compact **Markdown** printout (Totals by area overall + by month, then a condensed per-ticket table grouped by month), plus a styled **HTML** file (the full wide per-area matrix, with the report split into **five tabs** — All · User Stories (All) · User Stories (Final) · Bugs (Final) · Bugs and Others — each showing Totals-by-area overall + expandable per-month, and the per-ticket matrix grouped by month) and a **CSV** (the full matrix flattened), all date-stamped in `./docs/`. Users/developers are ordered **by area, then name**.
 
-**Second report — finished-US per-developer summary.** The same run also writes `time-report-<TODAY>-us-summary.html` and `…-us-summary.csv` (derived from `--out`/`--csv` by inserting `-us-summary`). It considers **only User Stories in a final status**, credited to **each area's main developer** (up to three per US), in **two tables — AI true / AI false** — with a per-month breakdown. Columns: **Developer · Area · US (final) · Avg sub-bugs / US · Sum A. Est h · Sum logged h · Sum sub-bug h · Sum total h · Gain (with sub-bugs) · Gain (no sub-bugs)**. Each table ends with a **Total** row (**Avg sub-bugs / US = total sub-bugs ÷ total US**). The CSV carries a leading **Month** and **AI assisted** column.
+**Second report — finished-US per-developer summary.** The same run also writes `time-report-<TODAY>-us-summary.html` and `…-us-summary.csv` (derived from `--out`/`--csv` by inserting `-us-summary`). It considers **only User Stories in a final status**, credited to **each area's main developer** (up to three per US). The HTML has **two tabs**: **By month** (date → user: overall AI-true / AI-false tables plus an expandable per-month block) and **By developer** (user → date: each developer, ordered by area then name, expands to a month-by-month table of their finished US). Dev-table columns: **Developer · Area · US (final) · Avg sub-bugs / US · Sum A. Est h · Sum logged h · Sum sub-bug h · Sum total h · Gain (with sub-bugs) · Gain (no sub-bugs)**, each ending with a **Total** row (**Avg sub-bugs / US = total sub-bugs ÷ total US**). The CSV carries a leading **Month** and **AI assisted** column.
 
 ## Access
 
@@ -621,7 +621,7 @@ def _us_agg(label, area, rs):
     n = len(rs)
     sA = round(sum(x["aEst"] for x in rs), 1); sL = round(sum(x["logged"] for x in rs), 1)
     sB = round(sum(x["subBug"] for x in rs), 1)
-    return {"dev": label, "area": area, "nUS": n,
+    return {"dev": label, "area": area, "month": label, "nUS": n, "aiUS": sum(1 for x in rs if x["ai"]),
             "avgSub": round(sum(x["bugs"] for x in rs) / n, 2) if n else 0,
             "sumAEst": sA, "sumLogged": sL, "sumSub": sB, "sumTotal": round(sL + sB, 1),
             "gainBug": gain_pct(sA, sL + sB), "gainNoBug": gain_pct(sA, sL)}
@@ -661,19 +661,66 @@ def _us_tables_html(recs):
         h.append('</tbody></table></div>')
     return "".join(h)
 
+# by-developer view: per user (area, then name), a month-by-month table of their finished US
+UMONTH_COLS = [("month", "Month"), ("nUS", "US (final)"), ("aiUS", "AI US"), ("avgSub", "Avg sub-bugs / US"),
+               ("sumAEst", "Sum A. Est h"), ("sumLogged", "Sum logged h"), ("sumSub", "Sum sub-bug h"),
+               ("sumTotal", "Sum total h"), ("gainBug", "Gain (with sub-bugs)"), ("gainNoBug", "Gain (no sub-bugs)")]
+UMONTH_NUM = {"nUS", "aiUS", "avgSub", "sumAEst", "sumLogged", "sumSub", "sumTotal", "gainBug", "gainNoBug"}
+
+def _umonth_cells(d):
+    out = []
+    for k, _ in UMONTH_COLS:
+        if k in ("gainBug", "gainNoBug"):
+            out.append(f'<td class="r {gain_cls(d[k])}">{gain_str(d[k])}</td>')
+        elif k == "month":
+            out.append(f'<td class="name">{e(d[k])}</td>')
+        else:
+            out.append(f'<td class="r">{d[k]}</td>')
+    return "".join(out)
+
+def _us_by_user_html(recs):
+    """Per developer (area, then name), expandable month-by-month breakdown of their finished US."""
+    by_dev = defaultdict(list)
+    for x in recs: by_dev[x["dev"]].append(x)
+    order = sorted(by_dev, key=lambda d: (AREAS.index(by_dev[d][0]["area"]), d.lower()))
+    if not order:
+        return '<p class="dim" style="padding:.6rem">No finished User Stories in this window.</p>'
+    h = []
+    for dev in order:
+        drecs = by_dev[dev]; area = AREA_LABEL[drecs[0]["area"]]; tot = _us_agg("Total", "", drecs)
+        h.append(f'<details><summary>{e(dev)} <span class="cnt">({e(area)} &middot; {tot["nUS"]} US &middot; '
+                 f'{tot["aiUS"]} AI &middot; {tot["sumTotal"]}h)</span></summary>')
+        h.append('<div class="tw"><table><thead><tr>'
+                 + "".join(f'<th class="{ "r" if k in UMONTH_NUM else "" }">{e(t)}</th>' for k, t in UMONTH_COLS)
+                 + '</tr></thead><tbody>')
+        for m in sorted({x["month"] for x in drecs}, reverse=True):
+            h.append('<tr>' + _umonth_cells(_us_agg(m, "", [x for x in drecs if x["month"] == m])) + '</tr>')
+        h.append('<tr class="tot">' + _umonth_cells(tot) + '</tr></tbody></table></div></details>')
+    return "".join(h)
+
 def _summary_path(path, tag):
     base, ext = os.path.splitext(path); return f"{base}-{tag}{ext}"
 
 def write_us_summary(rows, html_path, csv_path, project, since, until):
     recs = finished_us_records(rows)
     mons = sorted({x["month"] for x in recs}, reverse=True)
-    B = [f"<h1>Finished User Stories &mdash; per-developer summary</h1>",
-         f'<p class="meta">Project <b>{e(project)}</b> &middot; [{e(since or "…")} … {e(until or "…")}) '
-         f'&middot; only <b>User Stories</b> in a final status &middot; per area developer, split by AI</p>',
-         "<h2>Overall</h2>", _us_tables_html(recs), '<p class="bm">By month</p>']
+    # Tab 1 — By month (date -> user): overall AI tables, then a per-month details block.
+    bymonth = ["<h2>Overall</h2>", _us_tables_html(recs), '<p class="bm">By month</p>']
     for i, m in enumerate(mons):
         mr = [x for x in recs if x["month"] == m]; op = " open" if i == 0 else ""
-        B.append(f'<details{op}><summary>{e(m)} <span class="cnt">({len(mr)} US-area records)</span></summary>{_us_tables_html(mr)}</details>')
+        bymonth.append(f'<details{op}><summary>{e(m)} <span class="cnt">({len(mr)} US-area records)</span></summary>{_us_tables_html(mr)}</details>')
+    # Tab 2 — By developer (user -> date): per developer, a month-by-month breakdown.
+    byuser = ['<p class="bm">Each developer, expandable to their month-by-month finished User Stories</p>', _us_by_user_html(recs)]
+    B = [f"<h1>Finished User Stories &mdash; per-developer summary</h1>",
+         f'<p class="meta">Project <b>{e(project)}</b> &middot; [{e(since or "…")} … {e(until or "…")}) '
+         f'&middot; only <b>User Stories</b> in a final status &middot; per area developer</p>',
+         '<div class="tabs">',
+         '<input type="radio" name="ustab" id="utab-month" checked>',
+         '<input type="radio" name="ustab" id="utab-dev">',
+         '<div class="tabbar"><label for="utab-month">By month</label><label for="utab-dev">By developer</label></div>',
+         f'<section class="panel panel-month">{"".join(bymonth)}</section>',
+         f'<section class="panel panel-dev">{"".join(byuser)}</section>',
+         '</div>']
     B.append('<p class="foot">Only <b>User Stories</b> whose status is final are counted, split by AI and credited to each '
              'area\'s <b>main developer</b> &mdash; the area\'s roster dev with the most total work (dev-logged + their own '
              'sub-bug-fixing hours), so a token reviewer never wins and Architect/PR-review time sits in the Arch/PR bucket. '
@@ -686,9 +733,9 @@ def write_us_summary(rows, html_path, csv_path, project, since, until):
 <title>Finished US summary — {e(project)} {e(since or '')}…{e(until or '')}</title>
 <style>
 :root {{ color-scheme: light dark; --bg:#f7f8fa; --fg:#1a1d21; --muted:#6b7280; --line:#e3e6ea;
-  --head:#eef1f5; --accent:#2563eb; --pos:#15803d; --neg:#b91c1c; --zebra:#fafbfc; }}
+  --head:#eef1f5; --card:#fff; --accent:#2563eb; --pos:#15803d; --neg:#b91c1c; --zebra:#fafbfc; }}
 @media (prefers-color-scheme: dark) {{ :root {{ --bg:#0f1216; --fg:#e6e8eb; --muted:#9aa3ad;
-  --line:#242a31; --head:#171b21; --accent:#6ea8fe; --pos:#4ade80; --neg:#f87171; --zebra:#12161c; }} }}
+  --line:#242a31; --head:#171b21; --card:#141821; --accent:#6ea8fe; --pos:#4ade80; --neg:#f87171; --zebra:#12161c; }} }}
 * {{ box-sizing:border-box; }}
 body {{ margin:0; padding:2rem 1.25rem 3rem; background:var(--bg); color:var(--fg);
   font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }}
@@ -710,6 +757,16 @@ details[open] {{ padding-bottom:.5rem; }}
 summary {{ cursor:pointer; font-weight:600; padding:.5rem .2rem; }}
 summary .cnt {{ color:var(--muted); font-weight:400; font-size:.9em; }}
 .bm {{ color:var(--muted); font-size:.72rem; margin:.6rem 0 .2rem; text-transform:uppercase; letter-spacing:.05em; }}
+.tabs > input {{ position:absolute; opacity:0; width:0; height:0; }}
+.tabbar {{ display:flex; flex-wrap:wrap; gap:.25rem; border-bottom:2px solid var(--line); margin:1rem 0 0; }}
+.tabbar label {{ padding:.5rem 1rem; cursor:pointer; color:var(--muted); font-weight:600;
+  border:1px solid transparent; border-bottom:none; border-radius:8px 8px 0 0; margin-bottom:-2px; }}
+#utab-month:checked ~ .tabbar label[for="utab-month"],
+#utab-dev:checked ~ .tabbar label[for="utab-dev"] {{ color:var(--fg); background:var(--card);
+  border-color:var(--line); border-bottom:2px solid var(--card); }}
+.panel {{ display:none; padding-top:.6rem; }}
+#utab-month:checked ~ .panel-month {{ display:block; }}
+#utab-dev:checked ~ .panel-dev {{ display:block; }}
 .foot {{ color:var(--muted); font-size:.8rem; margin-top:2rem; border-top:1px solid var(--line); padding-top:1rem; }}
 .foot code {{ background:var(--head); padding:.05rem .3rem; border-radius:4px; }}
 </style></head><body>
