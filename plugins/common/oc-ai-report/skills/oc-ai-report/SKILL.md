@@ -346,10 +346,11 @@ def build_rows(parents, children, tempo, since, until):
         pa = area_of(pf); saw_sub = False; rec_areas = record_domains(pf)
         for c in ch_by_parent.get(key, []):
             cf = c.get("fields", {}) or {}
-            ar = area_of(cf) or pa
             if is_bug(cf):
-                if ar: raw_bugs[ar].append(c)
+                bar = area_of(cf)              # bugs: attributed by their OWN component/title only (no parent inheritance)
+                if bar: raw_bugs[bar].append(c)
             else:
+                ar = area_of(cf) or pa         # non-bug sub-tasks still inherit the parent area for the DL estimate
                 saw_sub = True
                 if ar: dl_by_area[ar] += hours(cf.get("timeoriginalestimate"))
         # A sub-bug stays under its own area when that area carries a record; otherwise it
@@ -640,10 +641,11 @@ def build_rows(parents, children, tempo, since, until):
         # non-bug sub-tasks -> Dev-lead estimate (sub-bug estimates excluded).
         for c in ch_by_parent.get(key, []):
             cf = c.get("fields", {}) or {}
-            ar = area_of(cf) or pa
             if is_bug(cf):
-                if ar: raw_bugs[ar].append(c)
+                bar = area_of(cf)              # bugs: attributed by their OWN component/title only (no parent inheritance)
+                if bar: raw_bugs[bar].append(c)
             else:
+                ar = area_of(cf) or pa         # non-bug sub-tasks still inherit the parent area for the DL estimate
                 saw_sub = True
                 if ar: dl_by_area[ar] += hours(cf.get("timeoriginalestimate"))
         # A sub-bug stays under its own area when that area carries a record; otherwise it
@@ -1053,7 +1055,7 @@ if __name__ == "__main__":
 - **Totals = sum of the detail rows** (no independent recompute). A ticket's estimate/bugs land under the area(s) with records; if two developers in the same area worked one ticket, their rows both count (rare).
 - **Date = the AI record's `at`** (the day the metric was measured/confirmed). The JQL `updated >=` window is only a pre-filter; precise period membership is decided by `at` in the aggregator.
 - **Logged hours** (per user & ticket, booked on the parent): **Tempo per-user** (`TEMPO_API_TOKEN`, real author) → **Jira worklog** author → **ticket-total** `timespent`. Shown in **hours** (8h/day). **Time gain** is shown as **two numbers, `without / with` bug hours**, and in the aggregate rows is computed over **only the tickets that have the matching estimate** (a ticket with no Architect estimate is left out of the Arch gain entirely — both its estimate and its logged hours — and likewise for the Dev-lead gain), so an unestimated ticket can no longer drag a whole area or developer negative; the Est h / Logged h columns beside it still show the **full** sums: `(estimate − logged)/estimate` first, then `(estimate − (logged + Bug h))/estimate` — so you see the gain on the ticket work alone and the gain once the time spent on its bugs is folded in. Positive = under estimate. (When logged falls back to a ticket total rather than Tempo per-user, the estimate is per-area while logged is whole-ticket, so the value can read oddly.)
-- **Sub-bugs & Sub-bug h** = the ticket's **own child sub-issues** of type `Bug` or `Sub-bug` — **issue links are not counted** (a "Relates" link would pull in duplicate/related bugs not raised against this ticket's work). Each sub-bug is attributed to an area by its own Component/title (else the parent's area). A sub-bug **stays under its own area** when that area carries an AI record on the ticket; otherwise it is **never dropped** — it **falls back** to a record area (the parent's if it has a record, else the first) and the fold-in is shown as **`2 (front +1)`** (2 own-area sub-bugs + 1 folded in from frontend). The base number is the own-area count; the parenthetical lists the folded-in counts per source area. **Sub-bug h** is the hours logged on all those bugs (own + folded-in; Tempo per-user → the bug's `timespent`), shown as a **separate** column from the ticket's Logged h. The CSV keeps the own count in **Sub-bugs** and the fold-ins in a **Sub-bugs (other areas)** column.
+- **Sub-bugs & Sub-bug h** = the ticket's **own child sub-issues** of type `Bug` or `Sub-bug` — **issue links are not counted** (a "Relates" link would pull in duplicate/related bugs not raised against this ticket's work). Each sub-bug is attributed to an area **by its own Component/title only** — unlike non-bug sub-tasks (which inherit the parent's area for the DL estimate), a sub-bug does **not** inherit the parent's area, so a sub-bug with **no area signal of its own is not counted**. A sub-bug **stays under its own area** when that area carries an AI record on the ticket; otherwise it is **never dropped** — it **falls back** to a record area (the parent's if it has a record, else the first) and the fold-in is shown as **`2 (front +1)`** (2 own-area sub-bugs + 1 folded in from frontend). The base number is the own-area count; the parenthetical lists the folded-in counts per source area. **Sub-bug h** is the hours logged on all those bugs (own + folded-in; Tempo per-user → the bug's `timespent`), shown as a **separate** column from the ticket's Logged h. The CSV keeps the own count in **Sub-bugs** and the fold-ins in a **Sub-bugs (other areas)** column.
 - **Read-only** — the command never writes to Jira, Bitbucket, or git; outbound calls are read-only: the Jira REST enhanced-search reads (Passes A/B) and the Tempo worklog fetch (Pass C) when a token is set.
 - The AI records are **latest-only per developer×domain**, so the report reflects the most recent measurement per person per ticket, not a full history.
 
