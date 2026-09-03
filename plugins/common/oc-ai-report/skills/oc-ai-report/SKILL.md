@@ -9,7 +9,7 @@ argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD] [--o
 Aggregate the machine-readable **AI-usage records** that `/oc-be-calculate-ai-use` (and the future frontend / QA equivalents) write to the **"AI metrics"** field (`customfield_10745`), across many tickets over a time window, into one report:
 
 - A **summary table by user** (one row per developer, aggregated), then **details per user by ticket**, then **totals by area** (a plain sum of the detail rows).
-- **AI metrics** (contribution / retention / tests / requests) are grouped by each record's **domain** (`backend`/`frontend`/`qa`, per developer). Each detail row also shows the **ticket type** (US / Bug / Enabler) and **two estimates per area**: **A. Est h** (Architect) from the Story's estimate custom fields — *Architect estimate back* (`customfield_10157`), *front* (`customfield_10158`), *QA estimate* (`customfield_10189`), days ×8, else the ticket's own estimate; and **DL. Est h** (Dev-lead) from the ticket's *estimation field* — for a User Story the sum of that area's child **sub-task** estimates (sub-bug estimates excluded), for a Bug/Enabler the ticket's own estimate. A **Sub-bugs** count and a separate **Sub-bug h** (hours logged on child Bug/Sub-bug sub-issues) are attributed per area. **Logged hours** are per user & ticket (booked on the parent): Tempo per-user → Jira worklog → ticket total. Plus a **time-gain %** (Architect estimate vs. logged, shown without / with bug hours) — in every **aggregate** row (area, user, month, KPI card) the gain is computed over **only the tickets carrying that estimate**, so an unestimated ticket contributes neither its estimate nor its logged hours. Every **ticket key is a link** to `https://opencellsoft.atlassian.net/browse/<KEY>`. Sections are ordered **Totals by area → Summary by user → Detail per user**.
+- **AI metrics** (contribution / retention / tests / requests) are grouped by each record's **domain** (`backend`/`frontend`/`qa`, per developer). Each detail row also shows the **ticket type** (US / Bug / Enabler) and **two estimates per area**: **A. Est h** (Architect) from the Story's estimate custom fields — *Architect estimate back* (`customfield_10157`), *front* (`customfield_10158`), *QA estimate* (`customfield_10189`), days ×8, else the ticket's own estimate; and **DL. Est h** (Dev-lead) from the ticket's *estimation field* — for a User Story the sum of that area's child **sub-task** estimates (sub-bug estimates excluded), for a Bug/Enabler the ticket's own estimate. A **Sub-bugs** count and a separate **Sub-bug h** (hours logged on child Bug/Sub-bug sub-issues) are attributed per area. **Logged hours** are per user & ticket (booked on the parent): Tempo per-user → Jira worklog → ticket total. Plus a **time-gain %** (Architect estimate vs. logged, shown **with / without** bug hours) — in every **aggregate** row (area, user, month, KPI card) the gain is computed over **only the tickets carrying that estimate**, so an unestimated ticket contributes neither its estimate nor its logged hours. Every **ticket key is a link** to `https://opencellsoft.atlassian.net/browse/<KEY>`. Sections are ordered **Totals by area → Summary by user → Detail per user**, and users are ordered **by area, then name**. A cross-area sub-bug (one whose component area has no AI record on the ticket) is not mixed into another area's numbers — it is shown as an annotation like **`2 (front +1 7.8h)`**.
 
 This command is **read-only** — it only queries Jira. It needs **no** Bitbucket token, **no** git, and **no** repo checkout; it can run from any directory.
 
@@ -325,8 +325,8 @@ def gain_pct(est, logged):
     return round((est - logged) / est * 100)
 def gain_str(g): return "-" if (g is None or abs(g) > GAIN_CAP) else (f"+{g}%" if g >= 0 else f"{g}%")
 def gain_two(est, logged, bug):
-    """Time gain without / with bug hours: (est-logged)/est  /  (est-(logged+bug))/est."""
-    return f"{gain_str(gain_pct(est, logged))} / {gain_str(gain_pct(est, logged + bug))}"
+    """Time gain WITH / WITHOUT bug hours: (est-(logged+bug))/est  /  (est-logged)/est."""
+    return f"{gain_str(gain_pct(est, logged + bug))} / {gain_str(gain_pct(est, logged))}"
 def gain_basis(rows, est_key):
     """(estimate, logged, bug) summed over ONLY the rows that carry a usable estimate for
     est_key. A ticket with no estimate contributes neither its 0 estimate nor its logged
@@ -458,7 +458,7 @@ def main():
     P("\n## Summary by user\n")
     P("| User | Area | Tickets | AI Contrib | Retain | Review phase | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Total dev h | Logged h | Sub-bug h | Arch gain | DL gain | Sub-bugs |")
     P("|---|---|--:|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
-    for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
+    for acc, u in sorted(users.items(), key=lambda kv: ("/".join(sorted(kv[1]["areas"])), kv[1]["name"].lower())):
         ac = avg(u['contrib']); acc_cell = f"**{ac}%**" if ac < 60 else f"{ac}%"  # <60% flagged (red in HTML)
         P(f"| {u['name']} | {'/'.join(sorted(u['areas']))} | {len(u['tickets'])} | {acc_cell} | "
           f"{avg(u['retain'])}% | {avg(u['rework'])}% | {u['utAdd']}/{u['utMod']} | {u['pmTests']} | {u['turns']} | "
@@ -469,7 +469,7 @@ def main():
     P("\n## Detail per user")
     by_user = defaultdict(list)
     for r in rows: by_user[r["acc"]].append(r)
-    for acc, u in sorted(users.items(), key=lambda kv: kv[1]["name"].lower()):
+    for acc, u in sorted(users.items(), key=lambda kv: ("/".join(sorted(kv[1]["areas"])), kv[1]["name"].lower())):
         P(f"\n### {u['name']}\n")
         P("| Ticket | Date | Type | Area | Summary | Status | Final | AI Contrib | Retain | Review phase | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Total dev h | Logged h | Sub-bug h | Arch gain | DL gain | Sub-bugs |")
         P("|---|---|---|---|---|---|:--:|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
@@ -496,7 +496,7 @@ python "<SCRATCHPAD>/ai_report_html.py" --input "<SCRATCHPAD>/tickets.json" \
   --out "./docs/ai-usage-report-[TODAY].html" --csv "./docs/ai-usage-report-[TODAY].csv"
 ```
 
-The page is theme-aware (light/dark) and embeds all CSS — no external assets — so it opens straight from disk. **Five tabs (HTML only):** an **All** tab (every ticket, the default), a **User Stories** tab (US only), a **US (final)** tab (US whose status is terminal, Final = T), a **Bugs (final)** tab (Bug/Sub-bug tickets in a terminal status) and a **Bugs and others** tab (every non-US ticket); each tab holds the full report (KPI cards + the three sections) filtered to that ticket set. Tabs are pure CSS (`<input type="radio">` + `:checked` sibling selectors) — no JavaScript. Within each tab, KPI cards lead, then the three sections mirroring the Markdown. **Grouping (HTML only):** *Totals by area* shows the overall table, then an expandable `<details>` block per month (the date is the record's `at`, newest open). *Summary by user* shows the overall one-row-per-user table (each developer's name **links down to their Detail-per-user section** in the same tab), then an expandable `<details>` block **per user**, each holding that developer's month-by-month breakdown (user → month). *Detail per user* groups each developer's tickets into expandable months, and every ticket key is a link to its Jira issue. (Anchor ids are prefixed per tab, so the same developer is uniquely addressable in each tab.) Tell the user the absolute path and that they can open it in a browser (Windows: `start "" "<path>"`).
+The page is theme-aware (light/dark) and embeds all CSS — no external assets — so it opens straight from disk. **Five tabs (HTML only):** an **All** tab (every ticket, the default), a **User Stories (All)** tab (US only), a **User Stories (Final)** tab (US whose status is terminal, Final = T), a **Bugs (final)** tab (Bug/Sub-bug tickets in a terminal status) and a **Bugs and others** tab (every non-US ticket); each tab holds the full report (KPI cards + the three sections) filtered to that ticket set. Tabs are pure CSS (`<input type="radio">` + `:checked` sibling selectors) — no JavaScript. Within each tab, KPI cards lead, then the three sections mirroring the Markdown. **Grouping (HTML only):** *Totals by area* shows the overall table, then an expandable `<details>` block per month (the date is the record's `at`, newest open). *Summary by user* shows the overall one-row-per-user table (each developer's name **links down to their Detail-per-user section** in the same tab), then an expandable `<details>` block **per user**, each holding that developer's month-by-month breakdown (user → month). *Detail per user* groups each developer's tickets into expandable months, and every ticket key is a link to its Jira issue. (Anchor ids are prefixed per tab, so the same developer is uniquely addressable in each tab.) Tell the user the absolute path and that they can open it in a browser (Windows: `start "" "<path>"`).
 
 `--csv` additionally writes the **ticket-detail rows** (one row per ticket × developer, all detail columns, both time-gain values and a trailing **URL** column with the ticket's Jira link) to a spreadsheet-friendly CSV (UTF-8 with BOM so Excel renders accented names). Default `./docs/ai-usage-report-<TODAY>.csv`. Report both file paths to the user.
 
@@ -626,8 +626,8 @@ def gain_pct(est, logged):
         return None  # placeholder estimate or no logged time -> gain is nonsense
     return round((est - logged) / est * 100)
 def gain_str(g): return "—" if (g is None or abs(g) > GAIN_CAP) else (f"+{g}%" if g >= 0 else f"{g}%")
-def gain_two(est, logged, bug):
-    return f"{gain_str(gain_pct(est, logged))} / {gain_str(gain_pct(est, logged + bug))}"
+def gain_two(est, logged, bug):  # WITH / WITHOUT bug hours
+    return f"{gain_str(gain_pct(est, logged + bug))} / {gain_str(gain_pct(est, logged))}"
 def gain_basis(rows, est_key):
     """(estimate, logged, bug) summed over ONLY the rows with a usable estimate for est_key,
     so an unestimated ticket cannot distort a group's gain (per-ticket rows already show a dash)."""
@@ -724,8 +724,8 @@ CSV_COLS = [
     ("utAdd", "U.tests added"), ("utMod", "U.tests modified"), ("pmTests", "P.tests"),
     ("turns", "Requests"), ("aEst", "A. Est h"), ("dlEst", "DL. Est h"),
     ("totalDev", "Total dev h"), ("logged", "Logged h"), ("bugLogged", "Sub-bug h"),
-    ("gain", "Arch gain % (no bugs)"), ("gainBug", "Arch gain % (with bugs)"),
-    ("gainDl", "DL gain % (no bugs)"), ("gainDlBug", "DL gain % (with bugs)"),
+    ("gainBug", "Arch gain % (with bugs)"), ("gain", "Arch gain % (no bugs)"),
+    ("gainDlBug", "DL gain % (with bugs)"), ("gainDl", "DL gain % (no bugs)"),
     ("bugs", "Sub-bugs"), ("bugsForeignTxt", "Sub-bugs (other areas)"),
     ("url", "URL"),
 ]
@@ -796,7 +796,7 @@ def main():
                 g = ag[ar]
                 if not g["contrib"]: continue
                 ba = gain_basis(g["rows"], "aEst"); bd = gain_basis(g["rows"], "dlEst")
-                gp = gain_pct(ba[0], ba[1]); gpd = gain_pct(bd[0], bd[1])
+                gp = gain_pct(ba[0], ba[1] + ba[2]); gpd = gain_pct(bd[0], bd[1] + bd[2])  # colour by with-bug (shown first)
                 h.append(f'<tr><td class="name">{e(ar.capitalize())}</td><td class="r">{len(g["contrib"])}</td>'
                   f'<td class="r">{pct(avg(g["contrib"]))}</td><td class="r">{pct(avg(g["retain"]))}</td>'
                   f'<td class="r">{pct(avg([r["rework"] for r in g["rows"]]))}</td>'
@@ -818,9 +818,9 @@ def main():
                 for k in SUM: u[k] += r[k]
             h = ['<div class="tw"><table><thead><tr><th>User</th><th>Area</th><th class="r">Tickets</th>'
                  + "".join(f'<th class="r">{e(x)}</th>' for x in HEAD) + "</tr></thead><tbody>"]
-            for _acc, u in sorted(uu.items(), key=lambda kv: kv[1]["name"].lower()):
+            for _acc, u in sorted(uu.items(), key=lambda kv: ("/".join(sorted(kv[1]["areas"])), kv[1]["name"].lower())):
                 ba = gain_basis(u["rows"], "aEst"); bd = gain_basis(u["rows"], "dlEst")
-                g = gain_pct(ba[0], ba[1]); gd = gain_pct(bd[0], bd[1])
+                g = gain_pct(ba[0], ba[1] + ba[2]); gd = gain_pct(bd[0], bd[1] + bd[2])  # colour by with-bug (shown first)
                 namecell = f'<a href="#{pfx}-user-{e(_acc)}">{e(u["name"])}</a>' if pfx else e(u["name"])
                 h.append(f'<tr><td class="name">{namecell}</td><td>{e("/".join(sorted(u["areas"])))}</td>'
                   f'<td class="r">{len(u["tickets"])}</td>'
@@ -848,7 +848,7 @@ def main():
                 for r in rs:
                     for k in SUM: agg[k] += r[k]
                 ba = gain_basis(rs, "aEst"); bd = gain_basis(rs, "dlEst")
-                g = gain_pct(ba[0], ba[1]); gd = gain_pct(bd[0], bd[1])
+                g = gain_pct(ba[0], ba[1] + ba[2]); gd = gain_pct(bd[0], bd[1] + bd[2])  # colour by with-bug (shown first)
                 h.append(f'<tr><td class="name">{e(m)}</td><td class="r">{len({r["key"] for r in rs})}</td>'
                   f'<td class="r{" low" if avg(contrib) < 60 else ""}">{pct(avg(contrib))}</td>'
                   f'<td class="r">{pct(avg(retain))}</td><td class="r">{pct(avg(rework))}</td>'
@@ -866,7 +866,7 @@ def main():
                  + "".join(f'<th class="{ "c" if x in _cent else ("" if x in _left else "r") }">{e(x)}</th>' for x in DHEAD)
                  + "</tr></thead><tbody>"]
             for r in sorted(rs, key=lambda x: (x["at"], x["key"])):
-                g = gain_pct(r["aEst"], r["logged"]); gd = gain_pct(r["dlEst"], r["logged"])
+                g = gain_pct(r["aEst"], r["logged"] + r["bugLogged"]); gd = gain_pct(r["dlEst"], r["logged"] + r["bugLogged"])  # colour by with-bug (shown first)
                 finalcell = '<span class="finalbadge">T</span>' if r["final"] else ""
                 low = isinstance(r["contrib"], (int, float)) and r["contrib"] < 60  # flag weak AI contribution
                 h.append(f'<tr><td class="key"><a href="{JIRA_BROWSE}{e(r["key"])}" target="_blank" rel="noopener">{e(r["key"])}</a></td><td>{e(r["at"])}</td><td>{e(r["ttype"])}</td><td>{e(r["area"])}</td>'
@@ -915,8 +915,8 @@ def main():
                                ("Requests", sum(u["turns"] for u in users_x.values())),
                                ("Est h (A / DL)", f"{round(tot_aest,1)} / {round(tot_dlest,1)}"),
                                ("Logged h (w/o / w bugs)", f"{round(tot_log,1)} / {round(tot_log+tot_bug,1)}"),
-                               ("Arch gain (w/o / w bugs)", gain_two(*card_a)),
-                               ("DL gain (w/o / w bugs)", gain_two(*card_d))]:
+                               ("Arch gain (w / w/o bugs)", gain_two(*card_a)),
+                               ("DL gain (w / w/o bugs)", gain_two(*card_d))]:
                 w(f'<div class="card"><div class="v">{e(val)}</div><div class="l">{e(label)}</div></div>')
             w('</div>')
             # Totals by area (overall, then expandable by month)
@@ -925,14 +925,14 @@ def main():
             # Summary by user (overall, then expandable per user -> month)
             w("<h2>Summary by user</h2>")
             w(summary_user_html(rs, pfx)); w('<p class="bm">By user &rarr; month</p>')
-            for acc, u in sorted(users_x.items(), key=lambda kv: kv[1]["name"].lower()):
+            for acc, u in sorted(users_x.items(), key=lambda kv: ("/".join(sorted(kv[1]["areas"])), kv[1]["name"].lower())):
                 ur = by_user_x[acc]; ac = avg([r["contrib"] for r in ur])
                 w(f'<details><summary>{e(u["name"])} '
                   f'<span class="cnt">({len(u["tickets"])} ticket(s), avg contrib {pct(ac)})</span></summary>')
                 w(user_month_html(ur)); w('</details>')
             # Detail per user (grouped by month)
             w("<h2>Detail per user</h2>")
-            for acc, u in sorted(users_x.items(), key=lambda kv: kv[1]["name"].lower()):
+            for acc, u in sorted(users_x.items(), key=lambda kv: ("/".join(sorted(kv[1]["areas"])), kv[1]["name"].lower())):
                 w(f'<h3 id="{pfx}-user-{e(acc)}">{e(u["name"])}</h3>'); w(month_details(by_user_x[acc], detail_table_html))
             return "".join(h)
 
@@ -949,8 +949,8 @@ def main():
         W('<input type="radio" name="aitab" id="tab-other">')
         W('<div class="tabbar">'
           f'<label for="tab-all">All <span class="cnt">({len(rows)})</span></label>'
-          f'<label for="tab-us">User Stories <span class="cnt">({len(us_rows)})</span></label>'
-          f'<label for="tab-usfinal">US (final) <span class="cnt">({len(us_final_rows)})</span></label>'
+          f'<label for="tab-us">User Stories (All) <span class="cnt">({len(us_rows)})</span></label>'
+          f'<label for="tab-usfinal">User Stories (Final) <span class="cnt">({len(us_final_rows)})</span></label>'
           f'<label for="tab-bugfinal">Bugs (final) <span class="cnt">({len(bug_final_rows)})</span></label>'
           f'<label for="tab-other">Bugs and others <span class="cnt">({len(other_rows)})</span></label></div>')
         W(f'<section class="panel panel-all">{render_body(rows, "all")}</section>')
@@ -976,7 +976,7 @@ def main():
       '<b>2 (front +1 7.8h)</b> &mdash; 2 own-area sub-bugs, plus 1 frontend sub-bug totalling 7.8h that is counted under frontend, not here. '
       '<b>Logged h</b> = hours booked on the ticket per user (Tempo per-user &rarr; Jira worklog &rarr; ticket total); '
       '<b>Total dev h</b> = Logged h + Sub-bug h (all development effort). <b>Arch gain</b> = (A.Est&minus;Logged)/A.Est and '
-      '<b>DL gain</b> = (DL.Est&minus;Logged)/DL.Est, each shown <b>without / with</b> bug hours; a dash (&mdash;) marks a '
+      '<b>DL gain</b> = (DL.Est&minus;Logged)/DL.Est, each shown <b>with / without</b> bug hours; a dash (&mdash;) marks a '
       'meaningless gain &mdash; a placeholder estimate (&le;0.5h), no logged time, or a magnitude beyond &plusmn;1000%. '
       'In every aggregate row (area, user, month, KPI card) the gain is computed over <b>only the tickets that carry '
       'that estimate</b> &mdash; an unestimated ticket contributes neither its estimate nor its logged hours &mdash; so '
@@ -1073,7 +1073,7 @@ if __name__ == "__main__":
 - **Two area sources & two estimates.** *AI metrics* group by the record `domain` (per developer — a story worked by backend and frontend keeps both). **A. Est h** (Architect) comes from the Story's **per-area estimate custom fields** — `customfield_10157` (back), `customfield_10158` (front), `customfield_10189` (QA), in **days ×8**; if none are set (a standalone Bug/Enabler) the ticket's own `timeoriginalestimate` is used. **DL. Est h** (Dev-lead) comes from the **ticket estimation field**: for a User Story, the **sum of that area's child sub-task estimates** (sub-bug estimates excluded); for a Bug/Enabler, the ticket's own estimate. *Sub-bugs* (the count) and *Sub-bug h* come from the ticket's **child Bug/Sub-bug** sub-issues (never issue links), attributed by the bug's Component/title, else the parent's area. Ticket **type** (US/Bug/Enabler) is shown per detail row. Only areas that have an AI record show up (the report is record-driven).
 - **Totals = sum of the detail rows** (no independent recompute). A ticket's estimate/bugs land under the area(s) with records; if two developers in the same area worked one ticket, their rows both count (rare).
 - **Date = the AI record's `at`** (the day the metric was measured/confirmed). The JQL `updated >=` window is only a pre-filter; precise period membership is decided by `at` in the aggregator.
-- **Logged hours** (per user & ticket, booked on the parent): **Tempo per-user** (`TEMPO_API_TOKEN`, real author) → **Jira worklog** author → **ticket-total** `timespent`. Shown in **hours** (8h/day). **Time gain** is shown as **two numbers, `without / with` bug hours**, and in the aggregate rows is computed over **only the tickets that have the matching estimate** (a ticket with no Architect estimate is left out of the Arch gain entirely — both its estimate and its logged hours — and likewise for the Dev-lead gain), so an unestimated ticket can no longer drag a whole area or developer negative; the Est h / Logged h columns beside it still show the **full** sums: `(estimate − logged)/estimate` first, then `(estimate − (logged + Bug h))/estimate` — so you see the gain on the ticket work alone and the gain once the time spent on its bugs is folded in. Positive = under estimate. (When logged falls back to a ticket total rather than Tempo per-user, the estimate is per-area while logged is whole-ticket, so the value can read oddly.)
+- **Logged hours** (per user & ticket, booked on the parent): **Tempo per-user** (`TEMPO_API_TOKEN`, real author) → **Jira worklog** author → **ticket-total** `timespent`. Shown in **hours** (8h/day). **Time gain** is shown as **two numbers, `with / without` bug hours**, and in the aggregate rows is computed over **only the tickets that have the matching estimate** (a ticket with no Architect estimate is left out of the Arch gain entirely — both its estimate and its logged hours — and likewise for the Dev-lead gain), so an unestimated ticket can no longer drag a whole area or developer negative; the Est h / Logged h columns beside it still show the **full** sums: `(estimate − (logged + Bug h))/estimate` first (with bugs), then `(estimate − logged)/estimate` (without bugs). Positive = under estimate. (When logged falls back to a ticket total rather than Tempo per-user, the estimate is per-area while logged is whole-ticket, so the value can read oddly.)
 - **Sub-bugs & Sub-bug h** = the ticket's **own child sub-issues** of type `Bug` or `Sub-bug` — **issue links are not counted** (a "Relates" link would pull in duplicate/related bugs not raised against this ticket's work). Each sub-bug is attributed to an area **by its own Component/title only** — unlike non-bug sub-tasks (which inherit the parent's area for the DL estimate), a sub-bug does **not** inherit the parent's area, so a sub-bug with **no area signal of its own is not counted**. Only a sub-bug **in the area's own component** drives that area's count and **Sub-bug h**. Because this report measures **per-area AI impact** (a different developer per area — one backend, one frontend, one QA on a User Story), a cross-area sub-bug is **not mixed into another area's numbers**: a sub-bug whose component is a different area (and that area has no AI record on the ticket) is surfaced **only as an annotation**, **`2 (front +1 7.8h)`** — 2 own-area sub-bugs, plus a note that 1 frontend sub-bug totalling 7.8h exists (counted under frontend, not here). The base number and **Sub-bug h** are own-area only; the parenthetical lists each cross-area source's count and total hours. **Sub-bug h** is the hours logged on the own-area bugs (Tempo per-user → the bug's `timespent`), shown as a **separate** column from the ticket's Logged h. The CSV keeps the own count in **Sub-bugs** and the cross-area note in a **Sub-bugs (other areas)** column.
 - **Read-only** — the command never writes to Jira, Bitbucket, or git; outbound calls are read-only: the Jira REST enhanced-search reads (Passes A/B) and the Tempo worklog fetch (Pass C) when a token is set.
 - The AI records are **latest-only per developer×domain**, so the report reflects the most recent measurement per person per ticket, not a full history.
