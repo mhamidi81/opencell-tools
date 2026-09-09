@@ -65,8 +65,9 @@ These are cheap, high-value, and specific to overlays. Treat a failure as a **cr
 8. **`@Specializes` correctness** — extends the core bean class directly, distinct
    `@Stateless(name=…)`, minimal overrides. Flag if scripts are expected to see the change, since
    `getServiceInterface` will not.
-9. **Branch naming** — the branch must carry a target-branch suffix; accept either separator
-   (`-dev`, `_dev`, `-181x`, `-18x`, `-165x`, `-15x`).
+9. **Branch naming** — the branch must carry both the **type prefix matching the ticket's Jira issue
+   type** (`feature/` for Story or Enabler, `bugfix/` for Bug or Sub-bug) and a target-branch suffix;
+   accept either separator (`-dev`, `_dev`, `-181x`, `-18x`, `-165x`, `-15x`).
 10. **Test placement** — no tests added under the script module's `src/test/java`; it never runs.
 
 ## Review criteria

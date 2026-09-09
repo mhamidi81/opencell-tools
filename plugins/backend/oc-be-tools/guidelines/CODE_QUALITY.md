@@ -290,14 +290,24 @@ Use descriptive branch names that include username, ticket type, and number.
 
 **Format**: `{username}/{type}/{TICKET-NUMBER}-{brief-description}`
 
-**Types:**
-- `feature/` - New features
-- `bugfix/` - Bug fixes
-- `hotfix/` - Urgent production fixes
-- `refactor/` - Code refactoring
-- `docs/` - Documentation updates
+**The `{type}` is decided by the Jira issue type — never chosen by feel:**
 
-**Example:** `andrius/feature/INTRD-34243-add-indexation-entities`
+| Jira issue type | Branch prefix |
+|---|---|
+| Story (User Story) | `feature/` |
+| Enabler | `feature/` |
+| Bug | `bugfix/` |
+| Sub-bug | `bugfix/` |
+
+Read the issue type from the ticket (`fields.issuetype.name`) before creating the branch. Match it
+case-insensitively; `bug` and `sub-bug` are the only bug types.
+
+For work that has no Jira ticket, these remain available: `hotfix/` (urgent production fix),
+`refactor/`, `docs/`.
+
+**Examples:**
+- `andrius/feature/INTRD-34243-add-indexation-entities` — a Story
+- `andrius/bugfix/INTRD-45275-fix-invoice-rounding` — a Bug
 
 **Best practices:**
 - Keep names lowercase with hyphens

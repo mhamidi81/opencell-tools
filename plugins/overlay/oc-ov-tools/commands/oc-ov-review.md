@@ -45,8 +45,10 @@ stopping at the first.
 5. **Entity jar registration** — a new module with `@Entity` classes must appear as a `<jar-file>` in
    the overlay `persistence.xml`.
 6. **Jasper pairing** — a changed `.jrxml` with no regenerated `.jasper` of the same basename.
-7. **Branch suffix** — the branch must end in a target suffix; accept either separator
-   (`-dev`, `_dev`, `-181x`, `-18x`, `-165x`, `-15x`).
+7. **Branch name** — two checks. It must start with the **type prefix matching the ticket's Jira
+   issue type** (`feature/` for Story or Enabler, `bugfix/` for Bug or Sub-bug), and it must end in a
+   target suffix; accept either separator (`-dev`, `_dev`, `-181x`, `-18x`, `-165x`, `-15x`). A branch
+   with no type prefix is legacy, not a pattern to follow.
 8. **Unregistered core override** — a new file shadowing a core resource path or colliding with a core
    FQN, with no entry in the repo `CLAUDE.md` override register.
 9. **Test placement** — no tests added under the script module's `src/test/java`.

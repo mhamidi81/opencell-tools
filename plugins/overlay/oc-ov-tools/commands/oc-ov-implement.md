@@ -19,13 +19,17 @@ Orchestrates a complete backend implementation in an Opencell **overlay** reposi
 
 1. Confirm the repo is an overlay: read its `CLAUDE.md` `## Overlay profile` block. If there is none,
    fall back to the module-prefix heuristic in `OVERLAY_PROFILES.md`, and ask if that is inconclusive.
-2. **Ask which target branch(es)** with `AskUserQuestion` — `dev` (default), `18.1.X`, `18.X`,
+2. **Resolve the branch type from the Jira issue type** — a read-only lookup,
+   `getJiraIssue(<TICKET>, fields: ["issuetype", "summary"])`. Map `fields.issuetype.name`
+   case-insensitively: **Story or Enabler → `feature/`**, **Bug or Sub-bug → `bugfix/`**. If the
+   lookup fails or the type is unexpected, ask which prefix to use — never default to `feature/`.
+3. **Ask which target branch(es)** with `AskUserQuestion` — `dev` (default), `18.1.X`, `18.X`,
    `16.5.X`, `15.X`, or several. This is not optional: the target decides the branch-name suffix, and
    **several targets means one branch and one pull request per target**.
-3. Create the branch as `[<type>/]<KEY>-<number>-<slug>-<targetSuffix>` per
-   `${CLAUDE_PLUGIN_ROOT}/guidelines/OVERLAY_WORKFLOW.md`. Suggest `/rename <TICKET> <summary>` for
-   the session title.
-4. Create the AI-stats run directory `.claude/cache/ai-stats/<TICKET>-<yyyymmdd-HHMMSS>/` and keep the
+4. Create the branch as `<type>/<KEY>-<number>-<slug>-<targetSuffix>` per
+   `${CLAUDE_PLUGIN_ROOT}/guidelines/OVERLAY_WORKFLOW.md` — the type prefix is mandatory. Suggest
+   `/rename <TICKET> <summary>` for the session title.
+5. Create the AI-stats run directory `.claude/cache/ai-stats/<TICKET>-<yyyymmdd-HHMMSS>/` and keep the
    `RUN_ID`; every builder gets a manifest path inside it.
 
 ## Phase 0.5 — Core repository preflight (blocking on user confirmation)

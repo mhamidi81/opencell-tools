@@ -28,14 +28,31 @@ These rules apply to ALL generated code:
 
 **HARD GATE — this blocks everything.** Before you create a branch, run `git branch`/`git checkout`, dispatch any builder agent, or write or generate **any** code, you MUST get the branch decision from the user. **This applies in every permission mode, including auto-accept / "auto" mode** — do not treat auto mode as permission to skip it.
 
-**Ask with the `AskUserQuestion` tool** (a plain prose question is not reliable in auto mode — the tool forces a real stop):
+**First, resolve the branch type from the Jira issue type.** This is a read-only lookup, so it does not
+breach the gate — fetch just the issue type before asking:
 
-> "For {TICKET}, create a new branch or use the branch you're already on?"
+```
+getJiraIssue({TICKET}, fields: ["issuetype", "summary"])
+```
+
+Map `fields.issuetype.name`, case-insensitively, per `guidelines/CODE_QUALITY.md` § Branch Naming:
+
+| Jira issue type | Branch prefix |
+|---|---|
+| Story (User Story), Enabler | `feature/` |
+| Bug, Sub-bug | `bugfix/` |
+
+If the lookup fails or returns an unexpected type, **ask the user which prefix to use** — do not default
+to `feature/`.
+
+**Then ask with the `AskUserQuestion` tool** (a plain prose question is not reliable in auto mode — the tool forces a real stop):
+
+> "For {TICKET} ({issue type}), create a new branch or use the branch you're already on?"
 > Options: **New branch** / **Use current branch**.
 
 Then:
 - **Do nothing else until the user answers.** No git commands, no scaffolding, no code.
-- **New branch** → ask for a brief description, then create `{username}/feature/{TICKET-NUMBER}-{description}`.
+- **New branch** → ask for a brief description, then create `{username}/{type}/{TICKET-NUMBER}-{description}`, where `{type}` is the prefix resolved above (`feature/` for a Story or Enabler, `bugfix/` for a Bug or Sub-bug).
 - **Use current branch** → run `git branch --show-current` and tell the user which branch they're on (users may keep several tickets on one branch).
 
 **Only after the branch is confirmed**, do the two non-blocking setup steps below, then start Phase 1.

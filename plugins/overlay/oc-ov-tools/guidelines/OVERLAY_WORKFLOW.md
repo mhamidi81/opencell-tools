@@ -38,18 +38,33 @@ feature branch. On a feature branch, check core out to the **target** branch man
 ## Branch naming — REPLACES core
 
 ```
-[<type>/]<KEY>-<number>[-<slug>]<sep><targetBranch>
+<type>/<KEY>-<number>[-<slug>]<sep><targetBranch>
 ```
 
-where `<sep>` is `-` or `_`. **The target-branch suffix is mandatory.** There is no `{username}/`
-prefix (core's convention). Real examples:
+where `<sep>` is `-` or `_`. Two parts are mandatory and neither is a matter of taste:
+
+**1. The `<type>` prefix is decided by the Jira issue type** — the same mapping core uses:
+
+| Jira issue type | Branch prefix |
+|---|---|
+| Story (User Story), Enabler | `feature/` |
+| Bug, Sub-bug | `bugfix/` |
+
+Read `fields.issuetype.name` from the ticket and match it case-insensitively; `bug` and `sub-bug` are
+the only bug types. If the type cannot be read, ask rather than defaulting to `feature/`.
+
+**2. The target-branch suffix is mandatory** — see the table below.
+
+There is no `{username}/` prefix (core has one; overlays do not). Real examples:
 
 ```
 bugfix/MACRD-1905-wfa-blocked-at-step-activatio-dev
 feature/MACRD-587-dev
-MACRD-1884_dev
 bugfix/MACRD-1811-regression-on-usagescharge_165x
 ```
+
+Some older branches omit the type prefix (`MACRD-1884_dev`). That is legacy — new branches always
+carry it.
 
 | Target branch | Suffix |
 |---|---|
