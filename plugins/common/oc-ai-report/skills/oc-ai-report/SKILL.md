@@ -1,7 +1,7 @@
 ---
 name: oc-ai-report
 description: Produce a cross-ticket AI-usage report over a period. AI metrics grouped by developer domain (backend/frontend/QA); per-area Architect estimate (custom fields) and Dev-lead estimate (ticket field / sum of child sub-task estimates); ticket type; bug counts and hours-logged-on-bugs per area; logged hours per user & ticket via the Tempo API (fallback Jira worklogs); time gain without/with bug hours; sections ordered Totals → Summary → Detail. Fetches Jira via direct Cloud REST (enhanced /search/jql, fields-limited, no descriptions, paginated) using a mandatory JIRA_API_TOKEN — no Atlassian MCP; Tempo optional. Prints Markdown and writes a styled, date-stamped HTML file to ./docs/ai-usage-report-<date>.html.
-argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD] [--out PATH]"
+argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD,MACRD] [--out PATH]"
 ---
 
 ## Purpose
@@ -21,11 +21,13 @@ Requires **`JIRA_API_TOKEN`** (+ **`JIRA_EMAIL`**, default `andrius.karpavicius@
 
 ## Arguments
 
-Parse `$ARGUMENTS` — **all optional**. A bare `/oc-ai-report` reports the **last 30 days** for **INTRD**.
+Parse `$ARGUMENTS` — **all optional**. A bare `/oc-ai-report` reports the **last 30 days** for **INTRD and MACRD**.
 
 - `--since YYYY-MM-DD` — start of the period (inclusive), matched against each record's `at`. **Default: 30 days before `--until`.**
 - `--until YYYY-MM-DD` — end of the period (exclusive). **Default: tomorrow** (so today's records are included).
-- `--project KEY` — Jira project. **Default: `INTRD`.**
+- `--project KEY[,KEY…]` — Jira project(s), comma-separated. **Default: `INTRD,MACRD`.** Backend work
+  is raised in `INTRD` (core *and* overlay) and in `MACRD` (MACO R&D / overlay), so both are in scope
+  by default. Areas are by discipline, not repository — overlay Java/xhtml records arrive as `backend`.
 - `--out PATH` — where to write the HTML report. **Default: `./docs/ai-usage-report-<TODAY>.html`** where `<TODAY>` is the run date (`date -u +%Y-%m-%d`), e.g. `./docs/ai-usage-report-2026-08-05.html` (relative to the current directory; the `docs/` folder is created if missing).
 - `--csv PATH` — also write the **ticket-detail rows** as CSV (spreadsheet-friendly). **Default: `./docs/ai-usage-report-<TODAY>.csv`** (same folder/date-stamp as the HTML).
 
@@ -101,11 +103,12 @@ def fetch_jql(jql, fields):
 
 def main():
     ap=argparse.ArgumentParser()
-    ap.add_argument("--since", required=True); ap.add_argument("--project", default="INTRD")
+    ap.add_argument("--since", required=True); ap.add_argument("--project", default="INTRD,MACRD")
     ap.add_argument("--out-tickets", required=True); ap.add_argument("--out-children", required=True)
     a=ap.parse_args()
     # Pass A — parent tickets that carry an AI-metrics record (customfield_10745 not empty)
-    jqlA=f'project = {a.project} AND cf[10745] IS NOT EMPTY AND updated >= "{a.since}" ORDER BY updated DESC'
+    projs=[x.strip() for x in a.project.split(",") if x.strip()]
+    jqlA=f'project in ({", ".join(projs)}) AND cf[10745] IS NOT EMPTY AND updated >= "{a.since}" ORDER BY updated DESC'
     parents=fetch_jql(jqlA, FIELDS_A)
     json.dump({"issues":{"nodes":parents}}, open(a.out_tickets,"w",encoding="utf-8"))
     sys.stderr.write(f"Pass A: {len(parents)} tickets with AI records\n")
@@ -755,7 +758,7 @@ def main():
     ap.add_argument("--input", required=True); ap.add_argument("--children"); ap.add_argument("--tempo")
     ap.add_argument("--since"); ap.add_argument("--until"); ap.add_argument("--out", required=True)
     ap.add_argument("--csv")   # optional: also write the ticket-detail rows as CSV
-    ap.add_argument("--project", default="INTRD")
+    ap.add_argument("--project", default="INTRD,MACRD")
     a = ap.parse_args()
     parents = nodes(json.load(open(a.input, encoding="utf-8")))
     children = nodes(json.load(open(a.children, encoding="utf-8"))) if a.children else []

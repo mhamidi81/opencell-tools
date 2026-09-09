@@ -1,7 +1,7 @@
 ---
 name: oc-time-report
 description: Produce an estimation-vs-logged-hours report over a period, independent of the AI-usage JSON. Tempo-worklog driven, TICKET-based with PER-AREA columns — one row per ticket, a column group for each area (Backend/Frontend/QA) giving that area's main developer, Architect & Dev-lead estimates, logged & sub-bug hours, AI flag, two time gains (with/without sub-bugs) and sub-bug count, plus an Architect/PR/mgmt logged column and a total; each area's main dev is its top contributor by dev+sub-bug hours, and a multi-role reviewer's hours go to the Arch/PR column. Tickets carry a Date (latest worklog date) and are grouped by month; the HTML has five tabs (All, User Stories All/Final, Bugs Final, Bugs and Others). Also writes a second finished-User-Story per-developer summary (per area, split by AI, by month). Prints Markdown and writes date-stamped HTML + CSV to ./docs/. Fetches Jira via direct REST (mandatory JIRA_API_TOKEN) and Tempo per-user (mandatory TEMPO_API_TOKEN) — no Atlassian MCP.
-argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD] [--out PATH] [--csv PATH]"
+argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD,MACRD] [--out PATH] [--csv PATH]"
 ---
 
 ## Purpose
@@ -34,11 +34,11 @@ Both tokens are **mandatory** and read from the environment (never passed on the
 
 ## Arguments
 
-Parse `$ARGUMENTS` — all optional. Bare `/oc-time-report` = **last 30 days**, project **INTRD**.
+Parse `$ARGUMENTS` — all optional. Bare `/oc-time-report` = **last 30 days**, projects **INTRD and MACRD**.
 
 - `--since YYYY-MM-DD` — start (inclusive). Default: 30 days before `--until`.
 - `--until YYYY-MM-DD` — end (exclusive). Default: tomorrow.
-- `--project KEY` — Jira project. Default `INTRD`.
+- `--project KEY[,KEY...]` — Jira project(s), comma-separated. Default `INTRD,MACRD` — backend work is raised in `INTRD` (core *and* overlay) and in `MACRD` (MACO R&D / overlay).
 - `--out PATH` — HTML output. Default `./docs/time-report-<TODAY>.html`.
 - `--csv PATH` — CSV output. Default `./docs/time-report-<TODAY>.csv`.
 
@@ -95,7 +95,7 @@ python "<SCRATCHPAD>/fetch_tempo_users.py" --devmap "<SCRATCHPAD>/devmap.json" \
   --dates-out "<SCRATCHPAD>/wdates.json"
 ```
 
-It prints a per-developer worklog/issue count to stderr; report which developers actually had worklogs. If Tempo returns nothing, tell the user and stop. (Most logged time is cross-project — INTRD + SUPS support + others; the aggregator keeps only project-`INTRD` tickets, so the ticket report is a subset of the raw logged hours.)
+It prints a per-developer worklog/issue count to stderr; report which developers actually had worklogs. If Tempo returns nothing, tell the user and stop. (Most logged time is cross-project — INTRD + MACRD + SUPS support + others; the aggregator keeps only tickets in the requested projects, so the ticket report is a subset of the raw logged hours.)
 
 ## Task 3 — Fetch ticket metadata (Jira, direct REST)
 
@@ -233,9 +233,10 @@ def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--ids", required=True)      # file: comma-separated worklogged issue ids
     ap.add_argument("--out", required=True)       # issues.json
-    ap.add_argument("--project", default="INTRD")
+    ap.add_argument("--project", default="INTRD,MACRD")
     a=ap.parse_args()
-    PROJ=a.project
+    PROJS=[x.strip() for x in a.project.split(",") if x.strip()]; PSTR=",".join(PROJS)
+    def in_scope(k): return any(str(k).startswith(q+"-") for q in PROJS)
     wl=[x for x in open(a.ids).read().split(",") if x]
     by_id={}
     # Phase 1: metadata for every worklogged issue (all projects) by id
@@ -257,7 +258,7 @@ def main():
     sys.stderr.write(f"Phase2 done: +{len(pkeys)} parents, total {len(by_id)}\n")
     # Phase 3: all sub-tasks of PROJECT Story/Enabler parents (for DL est + bug counts)
     story_parents=sorted({v["key"] for v in list(by_id.values())
-        if v["key"].startswith(PROJ+"-") and (v["fields"]["issuetype"]["name"] or "") in ("Story","Enabler")})
+        if in_scope(v["key"]) and (v["fields"]["issuetype"]["name"] or "") in ("Story","Enabler")})
     seen=set(by_id)
     for i,b in enumerate(batched(story_parents,60)):
         for n in fetch_jql("parent in ("+",".join(b)+")"):
@@ -266,8 +267,8 @@ def main():
         if i%10==0: sys.stderr.write(f"  subtask batch {i}: total {len(by_id)}\n")
     sys.stderr.write(f"Phase3 done: total {len(by_id)} nodes\n")
     json.dump({"issues":{"nodes":list(by_id.values())}}, open(a.out,"w",encoding="utf-8"))
-    inp=sum(1 for v in by_id.values() if v["key"].startswith(PROJ+"-"))
-    sys.stderr.write(f"WROTE {a.out}: {len(by_id)} total, {inp} {PROJ}\n")
+    inp=sum(1 for v in by_id.values() if in_scope(v["key"]))
+    sys.stderr.write(f"WROTE {a.out}: {len(by_id)} total, {inp} in {PSTR}\n")
 
 if __name__=="__main__": main()
 ```
@@ -397,7 +398,7 @@ def build_ticket_rows(all_nodes, tempo, devmap, project, wdates=None):
 
     rows = []
     for tkey, agg in tk.items():
-        if project and not str(tkey).startswith(project + "-"): continue
+        if project and not any(str(tkey).startswith(q.strip() + "-") for q in str(project).split(",") if q.strip()): continue
         tnode = by_key.get(tkey)
         if not tnode: continue
         tf = tnode.get("fields") or {}
@@ -806,7 +807,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tempo", required=True); ap.add_argument("--issues", required=True)
     ap.add_argument("--devmap", required=True); ap.add_argument("--dates")   # {issueId: latest worklog date}
-    ap.add_argument("--since"); ap.add_argument("--until"); ap.add_argument("--project", default="INTRD")
+    ap.add_argument("--since"); ap.add_argument("--until"); ap.add_argument("--project", default="INTRD,MACRD")
     ap.add_argument("--md"); ap.add_argument("--out", required=True); ap.add_argument("--csv")
     a = ap.parse_args()
     tempo = json.load(open(a.tempo, encoding="utf-8"))

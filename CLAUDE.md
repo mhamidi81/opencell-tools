@@ -10,15 +10,16 @@ This is the **OpenCell Tools Marketplace** — a Claude Code plugin registry tha
 
 ```
 .claude-plugin/marketplace.json     # Central plugin registry (all plugins listed here)
-plugins/<factory>/<name>/           # factory ∈ frontend, backend, qa, archi, func, common, mcp
+plugins/<factory>/<name>/           # factory ∈ frontend, backend, overlay, qa, archi, func, common, mcp
   .claude-plugin/plugin.json        # Plugin metadata, MCP server config, agent/skill refs
   skills/<skill-name>/SKILL.md      # Skill (slash command) definition
   agents/<agent-name>.md            # Sub-agent system prompt and config
   commands/<command-name>.md        # Slash command (used by oc-be-tools)
 ```
 
-Plugins are grouped into **factory folders**. `qa/` and `func/` are reserved placeholders
-(README only) with no plugins yet. `mcp/` holds the external-service connectors.
+Plugins are grouped into **factory folders**. `qa/` is a reserved placeholder (README only) with no
+plugins yet. `mcp/` holds the external-service connectors. `overlay/` holds the toolkit for Opencell
+**overlay** repositories, which layer their own jars and resources over the core war.
 
 ## Naming Convention
 
@@ -28,6 +29,7 @@ All plugins, skills, agents, and commands follow `oc-<abbr>-<name>`:
 |---------|------|---------|
 | frontend | `fe` | `oc-fe-engineer`, `/oc-fe-create-ui` |
 | backend | `be` | `oc-be-pr-reviewer`, `/oc-be-implement` |
+| overlay | `ov` | `oc-ov-pr-reviewer`, `/oc-ov-implement` |
 | qa | `qa` | *(reserved)* |
 | archi | `ar` | `/oc-ar-tech-design` |
 | func | `fn` | *(reserved)* |
@@ -44,6 +46,32 @@ There are three kinds of plugins:
 1. **Skills & commands** — Slash commands users invoke directly: `/oc-cache-jira`, `/oc-commit`, `/oc-pull-request`, `/oc-review-pr`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr`, `/oc-fe-create-ui`, `/oc-fe-write-tests`, `/oc-fe-create-e2e-test`, `/oc-fe-regression-test`, `/oc-fe-calculate-ai-use`, `/oc-ar-tech-design`, `/oc-be-implement`, `/oc-be-review`, the backend guide skills (`/oc-be-api-guide`, `/oc-be-db-guide`, `/oc-be-entity-guide`, `/oc-be-service-guide`), and the MCP skills (`/oc-figma`, `/oc-playwright`, `/oc-opencell`). Defined in `SKILL.md` files (or `commands/*.md` for `oc-be-tools`).
 2. **Sub-agents** — Specialized AI personas spawned by skills or the main agent: `oc-fe-engineer`, `oc-fe-reviewer`, `oc-fe-designer`, `oc-fe-test-writer`, `oc-fe-cypress-expert`, `oc-fe-e2e-expert`, and the backend agents `oc-be-entity-builder`, `oc-be-service-builder`, `oc-be-api-builder`, `oc-be-test-generator`, `oc-be-postman-generator`, `oc-be-pr-reviewer`. Defined in `.md` files under `agents/` with YAML frontmatter (`name`, `color`, `model`).
 3. **MCP Servers** — External service integrations configured in `plugin.json` under `mcpServers` (Figma, Playwright, Opencell, SonarQube, PostgreSQL), all under `plugins/mcp/`. **Atlassian is not one of them** — Jira/Confluence come from the official `atlassian` plugin in Anthropic's `claude-plugins-official` marketplace, which this repo does not vendor.
+
+## Cross-plugin guideline reuse (oc-ov-tools → oc-be-tools)
+
+`oc-ov-tools` is a **delta layer** over `oc-be-tools`: the backend guidelines stay authoritative and
+load first, and the overlay files state only what differs. That reuse has one non-obvious constraint.
+
+**`${CLAUDE_PLUGIN_ROOT}` cannot cross plugins.** It resolves to the plugin's *own* root, and installs
+are version-pinned and flat:
+
+```
+~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/          # ${CLAUDE_PLUGIN_ROOT}; versions coexist
+~/.claude/plugins/marketplaces/<marketplace>/plugins/backend/...   # full repo clone, stable, auto-updated
+```
+
+So `${CLAUDE_PLUGIN_ROOT}/../../backend/...` does **not** resolve — that shape only exists in the
+source repo, never in an install. `guidelines/_CORE_BASE.md` therefore resolves an ordered candidate
+list (marketplace checkout → sibling versioned cache → local source checkout) and **hard-stops** when
+`oc-be-tools` is absent, because a delta that says "REPLACES core §X" is worse than useless without X.
+
+Consequences for anyone editing this repo:
+
+- Never move `oc-be-tools` out of `plugins/backend/`, and never rename its `guidelines/` directory.
+- When you rename a heading in a core guideline, bump the `CORE BASELINE` line in the
+  `OVERLAY_*_DELTA.md` files that reference it. `/oc-ov-review` warns on version skew but cannot
+  detect a renamed heading.
+- Overlay skills and agents must keep reading core first. A delta read in isolation is incomplete.
 
 ## How to Add a New Plugin
 
@@ -95,6 +123,24 @@ Both `/oc-be-calculate-ai-use` and `/oc-fe-calculate-ai-use` read four sources: 
 - Each code-writing sub-agent writes `{RUN_ID}/{phase}.json` (its file list) and then `{RUN_ID}/snapshots/{phase}.diff` (`git diff HEAD` of exactly those files) as its **final actions** — the snapshot must be captured **before** any review fixes, or retention reads a meaningless 100%. The instructions live in each agent's own `.md` so they work when the agent is invoked directly; the orchestrator verifies and falls back.
 - At plan/approach approval the orchestrator writes `{RUN_ID}/_planning.json`, which is how analysis effort that produces no code gets credited.
 - These directories are git-ignored in both repos.
+
+**Overlay repositories are a third domain.** Work in an overlay repo (e.g. `opencell-vertical-energy`)
+is measured by the same `/oc-be-calculate-ai-use` command under a repo profile — the analyzer is
+**not** forked — with its own `domain` value, its own tag names, and two extra `cat` keys (`scr` for
+ScriptInstances, `rpt` for Jasper reports); `script` is a distinct artifact class because it is
+deployed as source to a live server and never compiled into the war. `/oc-ov-calculate-ai-use` is a
+thin alias that only supplies that profile.
+
+**Areas are defined by discipline, not repository.** Java and xhtml work is `backend` whether it lands
+in `opencell-core` or in an overlay repo, so overlay records use `domain: backend` and the ordinary
+`ai_Dev_back` / `ai_test_back_dev` / `ai_code_review_back` tags. **Do not invent an `overlay` domain** —
+the report aggregators filter on `AREAS = ["backend", "frontend", "qa"]` and drop anything else
+silently. Overlay adds only two `cat` keys: `scr` (ScriptInstances) and `rpt` (Jasper reports).
+
+Overlay tickets are raised in **`INTRD`** (the same project as core work) and **`MACRD`**, so the
+ticket key says nothing about which codebase a change landed in; the **repository** decides module
+paths, categories and which review command applies. Both projects are in scope for `/oc-ai-report`
+and `/oc-time-report`.
 
 **Identical across backend, frontend and QA:** the field (`customfield_10745`), the schema (`opencell.ai-usage/v1`), and the record key layout (`<domain>/<accountId>/<name>`, upserted by the `<domain>/<accountId>/` prefix, latest-only). Only the `domain` value, the `cat` sub-keys, the artifact-count keys and the tag names differ. One reporting tool reads every team's data from that one field — do not diverge from the shared parts.
 
@@ -149,7 +195,7 @@ plugin, or the claude.ai connector (`mcp__…Atlassian_Rovo__<tool>`).
 
 ## Conventions
 
-- Backend sub-agents use `model: claude-sonnet-4-5`; all other sub-agents use `model: sonnet`.
+- Backend **and overlay** sub-agents use `model: claude-sonnet-4-5`; all other sub-agents use `model: sonnet`.
 - **Frontend Vitest files are named `*.test.ts(x)`, never `*.spec.ts(x)`.** opencell-portal's `vitest.config.ts` sets `include: ['src/**/*.test.{ts,tsx,js,jsx}']`, so a `.spec.*` file is silently never collected — it looks like coverage that does not exist. `oc-fe-test-writer`, `oc-fe-reviewer`, `/oc-fe-create-ui`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr` and `/oc-fe-write-tests` all state this; keep them consistent. Playwright is the exception — its e2e specs stay `tests/e2e/**/*.spec.ts`, which is Playwright's own convention and does run. Counters (`/oc-review-pr`, `/oc-fe-calculate-ai-use`) deliberately accept **both** extensions so a stray legacy file is still measured.
 - **The frontend review score has exactly one definition, and it lives in `oc-fe-reviewer.md`.** Its
   **Scoring** section (verdict per category → fixed deductions → `Fail` ceilings → floor to an integer

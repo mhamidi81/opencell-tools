@@ -69,6 +69,11 @@
       "description": "Backend development toolkit for Opencell Core — agents for building entities, services, APIs, tests, and Postman collections, guideline-loading skills, an implementation orchestrator (/oc-be-implement), and a guideline-based code review command (/oc-be-review)"
     },
     {
+      "name": "oc-ov-tools",
+      "source": "./plugins/overlay/oc-ov-tools",
+      "description": "Overlay development toolkit for Opencell overlay/vertical repositories (opencell-vertical-energy, overlay-project-template) — a thin DELTA layer over oc-be-tools, whose guidelines stay authoritative and load first. Covers apiv0 REST (/ve/, IBaseRs/BaseRs/BaseApi, plain-POJO DTOs), core-service extension via @Specializes, overlay Liquibase (db_resources/{current,rebuild}/overlay.xml and the LiquibaseFileTest-enforced pairing), ScriptInstance and Job authoring (getServiceInterface, the deploy mojo), maven-war-overlay and core-override rules, Postman and Jasper conventions, and the target-branch-suffixed git workflow. Ships nine guideline-loading skills, builder agents for entities/Liquibase, @Specializes services, apiv0 APIs and scripts/jobs, an overlay-aware PR reviewer, an implementation orchestrator (/oc-ov-implement) and a review command (/oc-ov-review) with nine overlay mechanical gates. REQUIRES oc-be-tools@opencell-tools."
+    },
+    {
       "name": "oc-ar-tools",
       "source": "./plugins/archi/oc-ar-tools",
       "description": "Archi design toolkit for Opencell Core — agents and skills for US analysis and technical design"

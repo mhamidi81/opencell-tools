@@ -54,6 +54,35 @@ claude
 | Sub-agents | `oc-be-pr-reviewer` | Backend code reviewer validating Java/EJB/JPA/Liquibase code against the guidelines, with a score and file:line suggestions |
 | Skills | `/oc-be-entity-guide`, `/oc-be-service-guide`, `/oc-be-api-guide`, `/oc-be-db-guide` | Skills that load the relevant guidelines when working on each layer |
 
+### Overlay toolkit (oc-ov-tools)
+
+`oc-ov-tools` covers Opencell **overlay** repositories — projects such as `opencell-vertical-energy`
+and `overlay-project-template` that build the final `opencell.war` by layering their own jars and
+resources over core Opencell's war.
+
+It is a **delta layer**: the `oc-be-tools` guidelines stay authoritative and load first, and the
+overlay files state only what differs. **Install `oc-be-tools` too** — `oc-ov-tools` hard-stops
+without it. No configuration is required; the core guidelines are located automatically.
+
+```bash
+/plugin install oc-be-tools@opencell-tools
+/plugin install oc-ov-tools@opencell-tools
+```
+
+| Type | Provides | Description |
+|------|----------|-------------|
+| Commands | `/oc-ov-implement` | Orchestrate a full overlay ticket, with core-repo, branch-target and Liquibase gates |
+| Commands | `/oc-ov-review` | Guideline + requirements + Sonar review, plus nine overlay mechanical gates |
+| Commands | `/oc-ov-calculate-ai-use` | Thin alias over the shared backend AI-usage command |
+| Sub-agents | `oc-ov-entity-builder`, `oc-ov-service-builder`, `oc-ov-api-builder`, `oc-ov-script-builder` | Entities + `overlay.xml` pair, `@Specializes` core-service extension, apiv0 REST, ScriptInstances and Jobs |
+| Sub-agents | `oc-ov-pr-reviewer` | Overlay-aware reviewer — no AGPL / Immutables / activator false positives |
+| Skills | `/oc-ov-entity-guide`, `/oc-ov-service-guide`, `/oc-ov-api-guide`, `/oc-ov-db-guide`, `/oc-ov-script-guide`, `/oc-ov-test-guide`, `/oc-ov-postman-guide`, `/oc-ov-jasper-guide`, `/oc-ov-override-guide` | Load the core guidelines, then the matching overlay delta |
+
+Why the layer exists: an overlay uses no AGPL header, has no JAX-RS activator (core discovers apiv0
+resources by Reflections scan), uses plain-POJO DTOs rather than Immutables, keeps Liquibase in
+`overlay.xml` rather than `structure.xml`, and cannot use `@Inject` inside ScriptInstances. It also
+adds a whole subject core has no equivalent for: overriding core, preferably via CDI `@Specializes`.
+
 ### Functional toolkit (oc-fn-tools)
 
 `oc-fn-tools` (func factory) bundles the functional / product-design skills for Opencell. These are **auto-loading** skills — no slash command; each triggers from context — covering Jira authoring, Confluence docs, portal capture, and the design-first delivery methodology.

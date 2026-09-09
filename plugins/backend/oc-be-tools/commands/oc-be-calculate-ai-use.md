@@ -78,6 +78,36 @@ Two tags, either or both:
 
 ---
 
+## Repo profile — core and overlay repositories
+
+This command serves **both** `opencell-core` and the Opencell **overlay** repositories
+(`opencell-vertical-energy`, and other `opencell-ext-*` / `opencell-elec-*` verticals). Detect the
+repo from `git remote get-url origin` or the root pom `artifactId`, and use it for the project slug
+in Task 3 and the paths below.
+
+**The domain and tags are the same for both.** Areas are defined by discipline, not repository: Java
+and xhtml work is `backend` wherever it lands, so overlay records use `domain: backend` with
+`ai_Dev_back` / `ai_test_back_dev` / `ai_code_review_back`. **Never emit an `overlay` domain** —
+`/oc-ai-report` and `/oc-time-report` filter on `AREAS = ["backend", "frontend", "qa"]` and would drop
+the record silently. Frontend (`opencell-portal`) is a separate repository and is measured by
+`/oc-fe-calculate-ai-use`.
+
+Only the artifact categories differ. `category()` already handles both; the overlay-specific rows:
+
+| Category | `cat` key | Overlay match | Note |
+|---|---|---|---|
+| `script` | `scr` | the overlay script module, `.java` | ScriptInstances — deployed as source to a live server, never compiled into the war |
+| `report` | `rpt` | `.jrxml` | Jasper templates, compiled outside the Maven build |
+| `migration` | `mig` | `/db_resources/` + `.xml` | the overlay changeset path has **no** `changelog/` segment, so core's pattern alone misses every overlay migration |
+| `postman` | `pm` | the overlay postman folder | also catches `.postman_environment.json` |
+
+Overlay tickets are raised in **`INTRD`** (the same project as core work) and in **`MACRD`**, so the
+ticket key does not identify the codebase — only the repository does.
+
+> **Known edge case.** Core and overlay share the `backend/<accountId>/` record-key prefix, so one
+> developer recording *both* core and overlay work against the *same* ticket would have the second run
+> upsert over the first. Record the ticket once, from the repo holding the bulk of the work.
+
 ## Argument Parsing
 
 Parse `$ARGUMENTS` (all optional):
@@ -142,7 +172,7 @@ Every source flag except `--repo` is optional. Planning reconstruction and inter
 
 - `work_type` is `code`, `planning-dominant` (< 20 lines added but planning effort detected), or `minimal-change`.
 - `planning` carries `detected`, `source` (`manifest`/`transcript`), `effort_band` (Low/Medium/High), `revision_rounds`, `analysis_tool_calls`, `plan_word_count`, `duration_minutes`, `assistant_turns`.
-- `by_category[c].added` is the added **line count** per artifact category (production/migration/tests/postman/docs/other).
+- `by_category[c].added` is the added **line count** per artifact category (production/migration/tests/postman/script/report/docs/other). `script` and `report` only occur in overlay repositories.
 - `artifacts.tests` = `{files, methods_total, added, modified}` (unit-test methods, via `@Test` method-body diff of base-vs-final). `artifacts.postman` = `{files, requests_total, assertion_requests, setup_requests, added_requests, added_assertion_requests, test_cases_total, added_test_cases, blocks_total, added_blocks}` — `assertion_requests` are verification requests (at least one non-status assertion); `setup_requests` are data prep / job launches / teardown, including requests that only check their own HTTP status; `test_cases_total`/`added_test_cases` count the individual business tests inside them, while `blocks_total`/`added_blocks` are the raw `pm.test` counts including status checks.
 - `interactions` = `{sessions, exchanges, substantive, avg_per_session, per_session[{session, exchanges, substantive}]}` — developer↔AI messages on the commit's sessions (see two-tier definition above).
 - `provenance.reviewer_rework_pct` — share of AI lines from the post-review phase (see Metrics).
@@ -179,8 +209,11 @@ def to_rel(path, repo):
 def category(rel):
     r = rel.lower()
     if "/src/test/" in r and r.endswith(".java"): return "tests"
-    if r.endswith(".postman_collection.json") or "/us-tests/" in r: return "postman"
+    if r.endswith(".postman_collection.json") or "/us-tests/" in r or "-postman/" in r: return "postman"
     if "/changelog/" in r and r.endswith(".xml"): return "migration"
+    if "/db_resources/" in r and r.endswith(".xml"): return "migration"   # overlay repos: no changelog/ segment
+    if "-script/src/" in r and r.endswith(".java"): return "script"       # overlay ScriptInstances
+    if r.endswith(".jrxml"): return "report"                              # overlay Jasper templates
     if r.endswith(".java"): return "production"
     if r.endswith(".md"): return "docs"
     return "other"

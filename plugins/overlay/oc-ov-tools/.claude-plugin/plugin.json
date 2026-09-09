@@ -1,0 +1,5 @@
+{
+  "name": "oc-ov-tools",
+  "description": "Overlay development toolkit for Opencell overlay/vertical repositories (opencell-vertical-energy, overlay-project-template). A thin DELTA layer over oc-be-tools, whose guidelines stay authoritative and load first. Covers apiv0 REST (/ve/, IBaseRs/BaseRs/BaseApi, plain-POJO DTOs), core-service extension via @Specializes, overlay Liquibase (db_resources/{current,rebuild}/overlay.xml and the LiquibaseFileTest-enforced pairing), ScriptInstance and Job authoring (getServiceInterface, the deploy mojo), maven-war-overlay and core-override rules, Postman and Jasper conventions, and the target-branch-suffixed git workflow. REQUIRES oc-be-tools@opencell-tools.",
+  "version": "1.0.0"
+}
