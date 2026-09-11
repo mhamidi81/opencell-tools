@@ -10,7 +10,7 @@ This is the **OpenCell Tools Marketplace** — a Claude Code plugin registry tha
 
 ```
 .claude-plugin/marketplace.json     # Central plugin registry (all plugins listed here)
-plugins/<factory>/<name>/           # factory ∈ frontend, backend, overlay, qa, archi, func, common, mcp
+plugins/<factory>/<name>/           # factory ∈ frontend, backend, overlay, maco, qa, archi, func, common, mcp
   .claude-plugin/plugin.json        # Plugin metadata, MCP server config, agent/skill refs
   skills/<skill-name>/SKILL.md      # Skill (slash command) definition
   agents/<agent-name>.md            # Sub-agent system prompt and config
@@ -19,7 +19,9 @@ plugins/<factory>/<name>/           # factory ∈ frontend, backend, overlay, qa
 
 Plugins are grouped into **factory folders**. `qa/` is a reserved placeholder (README only) with no
 plugins yet. `mcp/` holds the external-service connectors. `overlay/` holds the toolkit for Opencell
-**overlay** repositories, which layer their own jars and resources over the core war.
+**overlay** repositories, which layer their own jars and resources over the core war. `maco/` holds
+the toolkit for **`opencell-maco-project`**, a standalone Spring Boot application — see the MACO
+section below for why it is not an overlay.
 
 ## Naming Convention
 
@@ -30,6 +32,7 @@ All plugins, skills, agents, and commands follow `oc-<abbr>-<name>`:
 | frontend | `fe` | `oc-fe-engineer`, `/oc-fe-create-ui` |
 | backend | `be` | `oc-be-pr-reviewer`, `/oc-be-implement` |
 | overlay | `ov` | `oc-ov-pr-reviewer`, `/oc-ov-implement` |
+| maco | `mc` | `oc-mc-pr-reviewer`, `/oc-mc-implement` |
 | qa | `qa` | *(reserved)* |
 | archi | `ar` | `/oc-ar-tech-design` |
 | func | `fn` | *(reserved)* |
@@ -72,6 +75,41 @@ Consequences for anyone editing this repo:
   `OVERLAY_*_DELTA.md` files that reference it. `/oc-ov-review` warns on version skew but cannot
   detect a renamed heading.
 - Overlay skills and agents must keep reading core first. A delta read in isolation is incomplete.
+
+## MACO (`oc-mc-tools`) is standalone, NOT a delta over `oc-be-tools`
+
+`opencell-maco-project` is a **separate Spring Boot 2.3 / Java 11 application**, not an Opencell Core
+overlay. Its conventions **invert** the core backend rules, so the delta pattern that works for
+`oc-ov-tools` would be actively harmful here:
+
+| Concern | opencell-core (`oc-be-tools`) | opencell-maco-project (`oc-mc-tools`) |
+|---------|-------------------------------|----------------------------------------|
+| Stack | JEE / Wildfly, CDI, JAX-RS | Spring Boot 2.3, Spring MVC, Spring Batch |
+| Java / namespace | 21, `jakarta.*` **mandatory** | **11, `javax.*` mandatory** (zero `jakarta.*` imports) |
+| Persistence | Entity base classes, custom fields | Plain JPA + Spring Data `JpaRepository` |
+| Migrations | Liquibase changesets | **Flyway** `V{x.y.z}__{name}.sql` under `db/postgres/` |
+| API | `IBaseRs`/`BaseRs`/`BaseApi` | `@RestController` + `ResponseDto`/`FiltersDto`, **Swagger 2** |
+| Tests | Arquillian + Postman | `@SpringBootTest` + MockMvc, **JUnit 4** |
+| Other | AGPL header required | no license header, no Lombok |
+
+Consequences for anyone editing this repo:
+
+- **`oc-mc-tools` carries its own full guidelines** and has **no `_CORE_BASE.md`** and no dependency
+  on `oc-be-tools` for its guidelines. Do not add one, and never make a MACO file "read core first".
+- The reviewer is explicitly told **not** to flag MACO code for `javax.*`, a missing AGPL header, or a
+  missing Liquibase changeset. If a future edit reintroduces core rules into the MACO reviewer, every
+  MACO PR gets false criticals.
+- MACO tickets are raised in **`MACRD`** — the same project as overlay work — so the ticket key does
+  **not** identify the codebase. The **repository** decides module paths, categories and which review
+  command applies.
+
+**The one shared piece is AI-usage measurement.** `/oc-mc-calculate-ai-use` is a **thin alias** over
+`/oc-be-tools:oc-be-calculate-ai-use` (exactly like `/oc-ov-calculate-ai-use`) — it supplies a MACO
+repo profile and must never fork the analyzer. MACO records `domain: backend` with the ordinary
+`ai_Dev_back` / `ai_test_back_dev` / `ai_code_review_back` tags; **do not invent a `maco` domain**,
+the report aggregators filter on `AREAS = ["backend", "frontend", "qa"]` and drop anything else
+silently. Only the artifact categories differ: `bat` (Spring Batch) and a `mig` matcher keyed on
+Flyway `.sql`, since the core Liquibase-XML pattern matches nothing in MACO.
 
 ## How to Add a New Plugin
 
