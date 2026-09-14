@@ -1,7 +1,7 @@
 ---
 name: oc-fn-func-design
-version: 1.30.0
-updated: 2026-08-07T21:14:43+02:00
+version: 1.31.0
+updated: 2026-09-14T12:20:00+02:00
 author: Stéphane Chambrin
 description: >
   Rules and reference data for working with Jira issues in the Opencell INTRD project
@@ -55,6 +55,7 @@ The Atlassian **Rovo MCP** is the **baseline transport that always works** — i
 | Operation | Use |
 |---|---|
 | Read an issue, JQL search, approximate count | `jira`/curl if the helper is installed, else `getJiraIssue` / `searchJiraIssuesUsingJql` (Rovo MCP) |
+| **Count-complete read** — a full roster, a rollup, "every issue matching X" | **`jira jql … --all --fields=… --json`**, which drains every page itself. Strongly prefer it: the MCP returns 50–100 per call with a `nextPageToken` to carry by hand, and injects every page into context in full. Scope with `jira count` first |
 | Field & custom-field metadata (createmeta) | `jira`/curl if the helper is installed, else `getJiraIssueTypeMetaWithFields` / `getJiraProjectIssueTypesMetadata` (Rovo MCP) |
 | List or apply a transition | `jira`/curl if the helper is installed, else `getTransitionsForJiraIssue` / `transitionJiraIssue` (Rovo MCP) |
 | Plain-text comment | `jira`/curl if the helper is installed, else `addCommentToJiraIssue` (Rovo MCP) |

@@ -49,7 +49,7 @@ closing. Requires `pandoc` ≥ 2.15 and `python3`; **no network, no PowerPoint, 
 The SKILL.md conventions apply unchanged. On top of them, a dual-lane deck needs:
 
 - **Front-matter metadata**: `title:`, `subtitle:`, `author:` (e.g.
-  `'Stéphane Chambrin — VP Product, Opencell'`) — pandoc builds the cover from these; Marp
+  `'Stéphane Chambrin — CPO, Opencell'`) — pandoc builds the cover from these; Marp
   ignores them. The explicit lead title slide stays (Marp needs it) and **must mirror the
   metadata**; the bridge drops it for PPTX. **Fold the date into `subtitle:`** (the cover layout
   has no date placeholder).

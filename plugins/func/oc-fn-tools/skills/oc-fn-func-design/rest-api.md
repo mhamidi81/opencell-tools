@@ -50,7 +50,7 @@ covers the same operations, and the Rovo MCP covers them with no setup at all. D
 | Command | Does | Default output |
 |---|---|---|
 | `jira get KEY [fields] [--json]` | Fetch one issue | `name: value` lines, ADF flattened to text; `--json` = raw ADF JSON |
-| `jira jql 'QUERY' [--fields=a,b] [--max=N] [--token=T] [--json]` | Enhanced JQL search | one `KEY ⇥ status ⇥ summary` line per issue (+ paging hint) |
+| `jira jql 'QUERY' [--fields=a,b] [--max=N] [--token=T] [--all] [--json]` | Enhanced JQL search | one `KEY ⇥ status ⇥ summary` line per issue (+ paging hint) |
 | `jira count 'QUERY'` | Approximate match count | a single number |
 | `jira transitions KEY` | List available transitions | `id ⇥ name` lines |
 | `jira transition KEY ID` | Apply a transition | `ok: …` (API returns 204) |
@@ -66,10 +66,34 @@ jira get INTRD-1486                                   # read preset, ADF as text
 jira get INTRD-1486 summary,status                    # narrower allowlist
 jira get INTRD-42531 customfield_10137 --json         # true ADF of a Story field
 jira jql 'project = INTRD AND statusCategory != Done ORDER BY updated DESC' --max=15
+jira jql 'project = INTRD AND fixVersion = "19.0.0"' --all --fields=summary,status,fixVersions --json \
+  | jq -r '.issues[] | [.key, .fields.status.name] | @tsv'   # every match, no cursor juggling
 jira count 'project = INTRD AND created >= -7d'
 jira meta 10001                                        # find customfield_* IDs for an issue type
 jira raw GET '/issue/INTRD-1486?expand=renderedFields&fields=description'
 ```
+
+### `--all` — drain every page
+
+`jql` returns **one page** by default (`--max=10`) and prints
+`…more (rerun with --token=<cursor>)` when there is more. **`--all` follows that cursor for you** and
+returns the complete result set. Reach for it whenever you need a count-complete answer — a roster, a
+rollup, "every Story on this fixVersion" — instead of hand-carrying `--token=` between calls.
+
+- Under `--all`, **`--max` is the page size, not a total**, and defaults to **100** (the API maximum) so
+  a drain costs the fewest round trips. An explicit `--max=N` still wins.
+- **`--json` returns one JSON document either way**, so `jq '.issues[]'` and `.isLast` read the same
+  with or without `--all`. A single page is the raw envelope (`isLast`, `issues`, `nextPageToken`);
+  `--all` returns `{isLast, issues}` — the cursor is spent, so it is omitted.
+- In line mode the `…more` hint is **suppressed**, because nothing is left.
+- **Runaway guard:** `JIRA_MAX_PAGES` (default 100 pages = 10k issues). If it trips, the warning goes to
+  **stderr**, `isLast` is `false`, and **the exit status is 2** — so a truncated drain never looks like a
+  complete one. The message carries the live cursor, so you can resume with `--token=`.
+- Aliases inherit it: `jira children INTRD-1949 --all` returns every child, not the first ten.
+
+**`--all` is cheap in context, not free in time.** It is N sequential API calls, and `jq` still projects
+in the shell so only your projection reaches the model — but do not drain a query you have not scoped.
+Run `jira count` first when you are unsure of the magnitude.
 
 **`raw` takes a path relative to `/rest/api/3` — the helper prepends the base itself**
 (`BASE="https://$SITE/rest/api/3"`). Passing the full path doubles the prefix and fails with a 404
@@ -87,7 +111,7 @@ catalog](#endpoint-catalog-raw-curl-for-what-the-helper-doesnt-cover) below is a
 
 Common queries have short aliases, runnable either as a top-level shortcut
 (`jira mine`) or under `jql` (`jira jql mine`) — both are identical. Aliases
-inherit every `jql` flag (`--max`, `--fields`, `--json`, `--token`). All are
+inherit every `jql` flag (`--max`, `--fields`, `--json`, `--token`, `--all`). All are
 scoped to `$JIRA_PROJECT` (INTRD by default) except `children`, which scopes by
 `parent`. `jira aliases` prints the live list.
 
@@ -116,6 +140,11 @@ The same field-allowlist rule from `SKILL.md` § *Reading efficiency* governs th
 helper: keep `get`'s `fields` and `jql`'s `--fields` tight, raise `--max` only
 when needed. The helper's defaults are deliberately small. Reach for `--json`
 only when you truly need raw ADF (e.g. copying a template's structure verbatim).
+
+**`--all` does not break that discipline — a tight `--fields` matters more with it, not less.** The
+cost of a drain is API round trips plus whatever your projection emits; the response bodies never
+enter context. So `--all` with a two-field allowlist is cheap even over hundreds of issues, while
+`--all` with no `--fields` and no `jq` is how you flood the window.
 
 **One exception: when a field's value must be relied on, read it with `--json` and `jq` rather than
 trusting the default projection.** The default projection filters through `map(select(.value != null))`
@@ -261,6 +290,9 @@ trade is the validation risk above — on `raw`, ADF correctness is yours.
 | Symptom | Cause / fix |
 |---|---|
 | `401 Unauthorized` | Missing or wrong `~/.netrc` entry, or token revoked. Re-check the `machine` host and recreate the token. |
+| You are pasting `--token=…` from one `jira jql` call into the next | Stop — use `--all`, which follows the cursor itself. Hand-carrying the cursor is the failure mode it exists to remove. |
+| A `jql` result looks suspiciously round (exactly 10, 50, 100 rows) | You read one page. Confirm with `jira count` on the same query; add `--all` if they disagree. |
+| `jira jql --all` exits `2` | The `JIRA_MAX_PAGES` guard truncated the drain — the result is **incomplete**. Raise `JIRA_MAX_PAGES`, narrow the query, or resume from the `--token=` printed on stderr. |
 | `410 Gone` on search | You hit the removed `/search` endpoint — use `POST /search/jql`. |
 | `404` whose body reads `No endpoint <METHOD> /rest/api/3/rest/api/3/…` | You passed a full path to `jira raw`, which prepends `/rest/api/3` itself. Drop the prefix: `jira raw GET "/project/INTRD"`. |
 | `jira get KEY <fields>` prints the key and nothing else, or omits a field you asked for | The default projection drops `null`-valued fields (`bin/jira:150`). The value is `null`, not an error — re-read with `--json` + `jq` (or `jira raw GET '/issue/KEY?fields=<field>'`) whenever the value must be relied on. |
