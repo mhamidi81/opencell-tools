@@ -43,6 +43,7 @@ Three facts about the data constrain the design:
 | D5 | Fetch requests `description` (unlike `/oc-ai-report`) but **flattens and truncates it to a separate compact file** | Semantic clustering needs the prose; the fat `bugs.json` must never enter the model context |
 | D6 | **One Enabler per area**, one Sub-task per cluster, bugs linked with `Relates` | Backend and frontend clusters are scheduled by different teams; a single mixed Enabler could not be assigned |
 | D7 | Jira writes are **opt-in (`--create-enabler`), confirmed, idempotent and resumable** | Tickets are outward-facing and awkward to undo, and this command will be re-run on overlapping windows |
+| D8a | The rejection filter checks **status and resolution**, not resolution alone | Verified against live data: `Invalid` is a status here and `Declined` is the rejecting resolution. Checking one field lets every rejected bug into the clusters |
 | D8 | **Zero clusters creates nothing** | An empty Enabler is backlog noise that someone has to triage |
 | D9 | Enablers carry a **default assignee per area**, pinned by `accountId`, and **Sub-tasks inherit it** | Each area has a standing owner of the cluster work, and the whole tree lands in that person's Jira queue rather than only its root. `accountId` rather than name or email because display names change and `assignee` only accepts an id |
 
@@ -148,9 +149,21 @@ Fields: `summary, description, issuetype, status, resolution, components, labels
 created, priority, assignee, reporter, parent`. Paginated 100/page via `nextPageToken`,
 retrying 429/503.
 
-**Resolution filter.** Bugs whose `resolution.name` is `Invalid` or `Duplicate` are dropped
-— they are not defects and would pollute a cluster. Every other status counts, open or
-closed. The count of dropped issues is reported.
+**Rejection filter.** Bugs the team rejected as non-defects are dropped — they would
+pollute a cluster. **Two fields must be checked, not one** (measured against live INTRD
+data, 2025-09 → 2026-09):
+
+- `resolution.name` in `Invalid` / `Duplicate` / `Declined`
+- **or** `status.name` = `Invalid`
+
+`Invalid` is a **status** in this Jira — 416 bugs carry it over a year — and never
+appears as a resolution; the resolution used to reject a bug is **`Declined`** (13 of a
+100-bug sample). A resolution-only filter, as this spec originally specified, would have
+dropped essentially nothing. Every other status counts, open or closed. The count of
+dropped issues is reported.
+
+Not dropped, deliberately: `Cannot Reproduce` and `Won't Do`. Both can sit on a real
+defect the team chose not to pursue, and dropping them would hide genuine clusters.
 
 Two outputs:
 - `bugs.json` — the full records. Never read into the model context.

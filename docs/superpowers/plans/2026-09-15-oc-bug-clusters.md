@@ -738,9 +738,21 @@ def test_real_defects_are_kept(resolution):
     assert bf.is_real_defect({"resolution": resolution}) is True
 
 
-@pytest.mark.parametrize("name", ["Invalid", "invalid", "Duplicate", " DUPLICATE "])
-def test_invalid_and_duplicate_are_dropped(name):
+@pytest.mark.parametrize("name", ["Invalid", "invalid", "Duplicate", " DUPLICATE ",
+                                  "Declined", " declined "])
+def test_rejecting_resolutions_are_dropped(name):
     assert bf.is_real_defect({"resolution": {"name": name}}) is False
+
+
+@pytest.mark.parametrize("name", ["Invalid", "invalid", " INVALID "])
+def test_the_invalid_status_is_dropped_even_with_no_resolution(name):
+    """Measured: this Jira rejects a bug via the STATUS Invalid, so a
+    resolution-only filter would keep every one of them."""
+    assert bf.is_real_defect({"status": {"name": name}, "resolution": None}) is False
+
+
+def test_an_ordinary_status_is_kept():
+    assert bf.is_real_defect({"status": {"name": "In Progress"}}) is True
 
 
 # ------------------------------------------------------------------- the window
@@ -859,8 +871,9 @@ def test_collect_keeps_the_area_in_scope_and_all_unclassified(env):
 def test_collect_drops_invalid_and_counts_them(env):
     issues = [
         issue("INTRD-1"),
-        issue("INTRD-2", resolution={"name": "Invalid"}),
-        issue("INTRD-3", resolution={"name": "Duplicate"}),
+        issue("INTRD-2", resolution={"name": "Declined"}),
+        issue("INTRD-3", status={"name": "Invalid",
+                                 "statusCategory": {"key": "done"}}),
     ]
     doc = bf.collect(client_for(issues, env), "jql", "core")
 
@@ -918,7 +931,12 @@ COMPONENT_AREA = {"frontend": "portal", "backend": "core"}
 TAG = re.compile(r"^\s*\[\s*(front|back)", re.I)
 TAG_AREA = {"front": "portal", "back": "core"}
 
-DROPPED_RESOLUTIONS = {"invalid", "duplicate"}
+# Measured against live INTRD data (2025-09 → 2026-09): "Invalid" is a Jira
+# STATUS here (416 bugs carry it), never a resolution; the resolution the team
+# uses to reject a bug is "Declined" (13 of a 100-bug sample). Filtering on
+# resolution alone would therefore drop almost nothing.
+DROPPED_RESOLUTIONS = {"invalid", "duplicate", "declined"}
+DROPPED_STATUSES = {"invalid"}
 EXCERPT_LIMIT = 300
 DEFAULT_DAYS = 30
 
@@ -980,9 +998,17 @@ def area_of(fields):
 
 
 def is_real_defect(fields):
-    resolution = fields.get("resolution") or {}
-    name = (resolution.get("name") or "").strip().lower()
-    return name not in DROPPED_RESOLUTIONS
+    """A bug the team accepted as a genuine defect.
+
+    Checks BOTH fields: this Jira rejects a bug by moving it to the *status*
+    Invalid, and separately records resolution Declined/Duplicate. Checking only
+    one of the two lets rejected bugs into clusters.
+    """
+    resolution = (fields.get("resolution") or {}).get("name") or ""
+    if resolution.strip().lower() in DROPPED_RESOLUTIONS:
+        return False
+    status = (fields.get("status") or {}).get("name") or ""
+    return status.strip().lower() not in DROPPED_STATUSES
 
 
 def resolve_window(since, until, today=None, days=DEFAULT_DAYS):
