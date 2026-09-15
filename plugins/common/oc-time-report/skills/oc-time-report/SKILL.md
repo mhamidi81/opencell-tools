@@ -46,7 +46,7 @@ Compute dates with `date -u +%Y-%m-%d` etc.; echo the resolved window back to th
 
 ## Developer roster (name → area)
 
-Area is per developer. Resolve each name to a Jira **accountId** via Jira REST user search — `GET https://opencellsoft.atlassian.net/rest/api/3/user/search?query=<name>` (Basic auth `JIRA_EMAIL:JIRA_API_TOKEN`), pick the active `@opencellsoft.com` account whose `displayName` best matches (names below may differ slightly; warn on any you cannot resolve). Write the resolved map to `devmap.json` as `{ "<accountId>": {"name": "<display>", "area": "backend|frontend|qa", "archpr": true|false} }`. Set **`archpr: true`** for the multi-role developers who also do **Architect / PR-review / management** work (see table); everyone else `false`. (If a `devmap.json` from a previous run already covers the roster, reuse it — accountIds are stable.)
+Area is per developer. Resolve each name to a Jira **accountId** via Jira REST user search — `GET https://opencellsoft.atlassian.net/rest/api/3/user/search?query=<name>` (Basic auth `JIRA_EMAIL:JIRA_API_TOKEN`), pick the active `@opencellsoft.com` account whose `displayName` best matches (names below may differ slightly; warn on any you cannot resolve). Write the resolved map to `devmap.json` as `{ "<accountId>": {"name": "<display>", "area": "backend|frontend|qa", "archpr": true|false} }`. Set **`archpr: true`** for the multi-role developers who also do **Architect / PR-review / management** work (see table); everyone else `false`. Additionally set **`archOnly: true`** for a **pure reviewer/architect with no dev role** (Adil El Jaouhari, Rachid Ait Yazza): all of their time — non-bug logged *and* sub-bug fixing — always goes to the **Arch/PR h** column, they are never an area's main developer, and they are excluded from the finished-US per-developer summary. (Mohamed Hamidi keeps his Frontend dev role: `archpr: true`, `archOnly: false`.) (If a `devmap.json` from a previous run already covers the roster, reuse it — accountIds are stable.)
 
 | Developer | Area |
 |---|---|
@@ -63,13 +63,13 @@ Area is per developer. Resolve each name to a Jira **accountId** via Jira REST u
 | Anas Rouaguebe | backend |
 | Tarik Fakhouri | backend |
 | Z Bariki | backend |
-| Adil El Jaouhari | backend + **archpr** (PR review) |
+| Adil El Jaouhari | **PR reviewer only** (archpr + archOnly — no dev role) |
 | M Stitane | backend |
 | Hatim Oudad | backend |
 | Zakaria El Meliani | backend |
 | Andrius Karpavicius | backend |
 | Mohamed El Azzouzi | backend |
-| Rachid Ait Yazza | backend + **archpr** (Architect) |
+| Rachid Ait Yazza | **Architect only** (archpr + archOnly — no dev role) |
 | E Znibar | backend |
 | Amine Tazi | backend |
 | Maria Ait Brahim | backend |
@@ -411,9 +411,13 @@ def build_ticket_rows(all_nodes, tempo, devmap, project, wdates=None):
         # dev; a sub-bug counts once per area that worked on it. (Nothing is dropped for lacking a component.)
         area_sub_h = {ar: 0.0 for ar in AREAS}; area_bug_ct = {ar: 0 for ar in AREAS}
         sub_dev = defaultdict(lambda: defaultdict(float))
+        archpr_logged = 0.0; archpr_devs = {}
         for b in agg["subbugs"].values():
             touched = set()
             for acc, sec in b["perdev"].items():
+                if devmap[acc].get("archOnly"):   # pure reviewer/architect -> Arch/PR, not an area
+                    archpr_logged += sec; archpr_devs[devmap[acc]["name"]] = archpr_devs.get(devmap[acc]["name"], 0.0) + sec
+                    continue
                 ar = devmap[acc]["area"]; area_sub_h[ar] += sec; sub_dev[ar][acc] += sec; touched.add(ar)
             for ar in touched: area_bug_ct[ar] += 1
 
@@ -422,6 +426,7 @@ def build_ticket_rows(all_nodes, tempo, devmap, project, wdates=None):
         # who only did a token review/touch on the parent.
         by_area_dev = defaultdict(dict)
         for acc, sec in agg["devLogged"].items():
+            if devmap[acc].get("archOnly"): continue   # pure reviewer/architect is never an area main dev
             by_area_dev[devmap[acc]["area"]][acc] = by_area_dev[devmap[acc]["area"]].get(acc, 0) + sec
         for ar in AREAS:
             for acc, sec in sub_dev.get(ar, {}).items():
@@ -430,10 +435,10 @@ def build_ticket_rows(all_nodes, tempo, devmap, project, wdates=None):
 
         # attribute each developer's NON-BUG logged hours: own area, except a multi-role dev who is
         # NOT their area's main dev on this ticket -> Architect/PR/mgmt bucket.
-        area_logged = {ar: 0.0 for ar in AREAS}; archpr_logged = 0.0; archpr_devs = {}
+        area_logged = {ar: 0.0 for ar in AREAS}
         for acc, sec in agg["devLogged"].items():
             ar = devmap[acc]["area"]
-            if devmap[acc].get("archpr") and main.get(ar) != acc:
+            if devmap[acc].get("archOnly") or (devmap[acc].get("archpr") and main.get(ar) != acc):
                 archpr_logged += sec; archpr_devs[devmap[acc]["name"]] = archpr_devs.get(devmap[acc]["name"], 0.0) + sec
             else:
                 area_logged[ar] += sec
@@ -1006,7 +1011,8 @@ if __name__ == "__main__":
 - **Tempo token visibility.** On this instance `TEMPO_API_TOKEN` has **organisation-wide** worklog visibility — the per-user endpoint (`/worklogs/user/{accountId}`) returns worklogs for **every** roster area (backend, frontend, QA), verified across all 27 developers. There is **no backend-only restriction**; report all areas. (A missing area therefore means those developers had no in-window worklogs or the roster name failed to resolve to an accountId — not a Tempo permission gap.)
 - **Point-in-time.** Logged hours reflect the Tempo state when you run it. It requires `TEMPO_API_TOKEN`.
 - **Per-area columns.** Each ticket has a column group per area (Backend/Frontend/QA); a developer's hours land in **their own roster area**. A multi-role `archpr` developer who isn't their area's main dev on a ticket has their non-bug hours moved to the **Arch/PR h** column, so per-area numbers reflect real development, not review.
-- **Main dev = top by total work.** Per area, the main developer is the roster dev with the most **dev-logged + own sub-bug-fixing** hours — a token reviewer never wins. The **second report** credits each finished US to each area's main dev (up to three per US).
+- **Main dev = top by total work.** Per area, the main developer is the roster dev with the most **dev-logged + own sub-bug-fixing** hours — a token reviewer never wins, and an **`archOnly`** reviewer/architect is never eligible. The **second report** credits each finished US to each area's main dev (up to three per US).
+- **`archOnly` reviewers/architects** (Adil, Rachid) have **no dev role**: all their logged + sub-bug hours go to the **Arch/PR h** column, they never count in an area or as a main dev, and they are omitted from the finished-US summary.
 - **Roll-up.** Worklogs on a Story's non-bug sub-tasks fold into that Story's per-area **Logged h**; worklogs on its Bug/Sub-bug sub-tasks fold into per-area **Sub-bug h** (by the fixer's area). A top-level Bug the developer logged on is its own row (all time = that area's Logged h).
 - **Date & month.** Each ticket's Date is its latest Tempo worklog date; tickets are grouped by that month (a long-running ticket's full hours land in its last-activity month).
 - **Estimates.** A. Est needs the per-area estimate custom fields on the Story; DL. Est needs child sub-task estimates (Story) or the ticket estimate (Bug/Enabler). Areas with no estimate show `0` / `–` time gain.
