@@ -44,7 +44,7 @@ Three facts about the data constrain the design:
 | D6 | **One Enabler per area**, one Sub-task per cluster, bugs linked with `Relates` | Backend and frontend clusters are scheduled by different teams; a single mixed Enabler could not be assigned |
 | D7 | Jira writes are **opt-in (`--create-enabler`), confirmed, idempotent and resumable** | Tickets are outward-facing and awkward to undo, and this command will be re-run on overlapping windows |
 | D8 | **Zero clusters creates nothing** | An empty Enabler is backlog noise that someone has to triage |
-| D9 | Enablers carry a **default assignee per area**, pinned by `accountId`; **Sub-tasks are left unassigned** | Each area has a standing owner who triages the cluster work, but distributing the individual clusters is that owner's call, not the tool's. `accountId` rather than name or email because display names change and `assignee` only accepts an id |
+| D9 | Enablers carry a **default assignee per area**, pinned by `accountId`, and **Sub-tasks inherit it** | Each area has a standing owner of the cluster work, and the whole tree lands in that person's Jira queue rather than only its root. `accountId` rather than name or email because display names change and `assignee` only accepts an id |
 
 **Non-goals.** No defect-type/root-cause axis. No MACO/`MACRD` support — `--repo` names
 *portal* and *core*, and MACO is a third codebase (see `CLAUDE.md`). No Bitbucket access:
@@ -102,7 +102,8 @@ Bitbucket token, and can run from any directory.
 | `core` | `Backend` | Adil El Jaouhari (`adil.eljaouhari@opencellsoft.com`) | `63369fa788ed2ebef97cddfb` |
 
 These ids live in one table at the top of `SKILL.md` so a handover is a one-line edit.
-The **Sub-tasks are created unassigned** — the Enabler's owner distributes the clusters.
+**Sub-tasks inherit their Enabler's assignee**, so an area's whole cluster tree lands in
+one person's queue and can be redistributed from there.
 An `--assignee-*` value given as an email is resolved via
 `GET /rest/api/3/user/search` before the confirmation prompt, so an unresolvable name
 stops the run while nothing has been written.
@@ -242,7 +243,7 @@ Nothing is posted before that.
 | Object | Type | Summary | Notes |
 |--------|------|---------|-------|
 | Enabler | `10076` | `Bug clusters — Frontend — 2026-08-16 → 2026-09-16` | component `Frontend`/`Backend`, **`assignee` = that area's default**, marker label, description = window + filters + cluster overview + local report path |
-| Sub-task | `10003` | `<subject> — N bugs` | `parent` = the Enabler, **unassigned**, description = every bug key and summary |
+| Sub-task | `10003` | `<subject> — N bugs` | `parent` = the Enabler, **`assignee` inherited from it**, description = every bug key and summary |
 | Link | `Relates` | — | one per bug, bug ↔ its Sub-task |
 
 Descriptions are built as **ADF** — REST v3 rejects a raw string on create.
@@ -263,7 +264,7 @@ missing link is cosmetic while a half-created Enabler is not.
 | ADF flatten failure on one bug | Empty excerpt, classify on summary alone |
 | `createmeta` shows an unexpected required field | Stop before any write |
 | `--assignee-*` email resolves to no user | Stop before any write, naming the value |
-| Jira rejects the `assignee` (inactive user, no browse permission) | **Retry the create unassigned**, warn loudly with the id — a clustered Enabler nobody owns still beats no Enabler |
+| Jira rejects the `assignee` (inactive user, no browse permission) | **Retry the create unassigned**, for the Enabler and for any Sub-task, warning loudly with the id — a clustered Enabler nobody owns still beats no Enabler |
 | Sub-task create fails | Enabler kept, `created.json` written, run re-entrant |
 | Issue link fails | Collected, reported at the end, run continues |
 
