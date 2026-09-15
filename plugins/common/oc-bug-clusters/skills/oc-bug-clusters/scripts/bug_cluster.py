@@ -113,7 +113,10 @@ def _window_line(model):
 
 def _counter_line(model):
     unclassified = len(model["unclassified"])
-    return (f"Fetched **{model['fetched']}** · dropped Invalid/Duplicate "
+    # "rejected", not "Invalid/Duplicate": the filter also drops resolution
+    # Declined and status Invalid, and on real data every dropped bug was
+    # Declined — naming only two of the four reasons misinforms the reader.
+    return (f"Fetched **{model['fetched']}** · dropped as rejected "
             f"**{model['dropped_invalid']}** · kept **{model['kept']}** · "
             f"no resolvable area **{unclassified}**")
 
@@ -273,10 +276,8 @@ def _area_html(model, area, data):
                          + _bug_rows_html(g["bugs"]) + "</table></div>")
 
     if data["near"]:
-        pills = " ".join(
-            f'<span class="pill" title="{_e("; ".join(b["summary"] for b in g["bugs"]))}">'
-            f'{_e(g["subject"])} {g["count"]}</span>'
-            for g in data["near"])
+        pills = " ".join(f'<span class="pill">{_e(g["subject"])} {g["count"]}</span>'
+                         for g in data["near"])
         parts.append(f'<h3>Near-clusters (below {model["min_cluster"]})</h3>'
                      f'<div class="card">{pills}</div>')
 
@@ -292,7 +293,7 @@ def render_html(model):
     body = [f"<h1>{_e(title)}</h1>",
             f'<p class="meta">{_e(", ".join(model["projects"]))} · threshold '
             f'{model["min_cluster"]} · fetched {model["fetched"]} · dropped '
-            f'{model["dropped_invalid"]} · kept {model["kept"]} · generated '
+            f'{model["dropped_invalid"]} rejected · kept {model["kept"]} · generated '
             f'{_e(date.today().isoformat())}</p>']
 
     if len(areas) > 1:

@@ -16,6 +16,15 @@ def test_markdown_states_the_window_and_the_counters():
     assert "INTRD" in text
 
 
+def test_markdown_does_not_claim_dropped_bugs_were_invalid_or_duplicate():
+    """The filter also drops resolution Declined and status Invalid — on real
+    INTRD data every dropped bug was Declined. Naming two of the four reasons
+    tells the reader something false about their own data."""
+    text = bc.render_markdown(model_with())
+    assert "Invalid/Duplicate" not in text
+    assert "rejected" in text
+
+
 def test_markdown_shows_each_cluster_with_its_size():
     text = bc.render_markdown(model_with(subject="quoting", n=7))
     assert "quoting" in text and "7" in text
@@ -107,10 +116,14 @@ def test_html_is_a_complete_document():
 
 
 def test_html_escapes_markup_in_a_summary():
+    """min_cluster=1 so the bug forms a CLUSTER, not a near-cluster: summaries are
+    only rendered in the cluster detail table, and escaping is what matters there.
+    At min_cluster=5 this bug lands in `near`, whose pills render subject and count
+    only, so the assertion could never see a summary at all."""
     assignments = {"P-0": "quoting"}
     bugs = [bug("P-0", "portal")]
     bugs[0]["summary"] = "<script>alert(1)</script> & co"
-    model = bc.build_model(document(bugs), assignments, min_cluster=5)
+    model = bc.build_model(document(bugs), assignments, min_cluster=1)
     html = bc.render_html(model)
     assert "<script>alert(1)</script>" not in html
     assert "&lt;script&gt;" in html and "&amp; co" in html
