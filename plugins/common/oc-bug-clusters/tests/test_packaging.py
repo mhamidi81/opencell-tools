@@ -53,6 +53,8 @@ def test_every_subject_has_a_description_line():
 import subprocess
 import sys
 
+import bug_enabler  # conftest already puts scripts/ on sys.path
+
 SKILL = PLUGIN_DIR / "skills" / NAME / "SKILL.md"
 SCRIPTS = PLUGIN_DIR / "skills" / NAME / "scripts"
 
@@ -81,6 +83,12 @@ def test_skill_pins_both_default_assignee_account_ids():
     text = skill_text()
     assert "5ef5c13914f60e0ac1c9b049" in text     # Mohamed Hamidi, Frontend
     assert "63369fa788ed2ebef97cddfb" in text     # Adil El Jaouhari, Backend
+    # The literals above only prove SKILL.md mentions SOME ids matching this
+    # comment's claims. Compare the full set against the code so the two can
+    # never quietly drift -- a stale id here would still get used by a direct
+    # script run, since DEFAULT_ASSIGNEE is what actually ships.
+    ids_in_skill = set(re.findall(r"\b[0-9a-f]{24}\b", text))
+    assert ids_in_skill == set(bug_enabler.DEFAULT_ASSIGNEE.values())
 
 
 def test_every_script_the_skill_invokes_exists():
