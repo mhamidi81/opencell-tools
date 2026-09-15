@@ -372,8 +372,14 @@ def test_a_rerun_with_existing_state_creates_nothing_twice():
 
 
 def test_a_rerun_completes_a_partially_created_area():
+    """A real partially-created state was already stamped by the first apply_plan
+    call that created the Enabler, so this reproduces that shape (identity plus
+    a lone enabler entry) rather than the unstamped legacy shape covered by
+    test_legacy_state_without_identity_is_refused."""
     plan = plan_for(model=model_for(sizes=(("quoting", 5),)))
     state = be.new_state()
+    state["project"] = plan["project"]
+    state["markers"] = sorted(a["marker"] for a in plan["areas"])
     state["enablers"]["portal"] = "INTRD-500"
 
     client = RecordingClient()
@@ -447,6 +453,38 @@ def test_state_reused_for_the_same_plan_still_resumes():
 def test_new_state_carries_no_identity_yet():
     state = be.new_state()
     assert state["project"] is None and state["markers"] == []
+
+
+def test_legacy_state_without_identity_is_refused():
+    """Reproduces the inert-guard defect: a created.json written by the previous
+    version has entries but no project/markers keys at all -- state.get("project")
+    is None, which used to be treated the same as a fresh, empty state and slid
+    straight past the identity check. Such a state must be refused outright, not
+    silently re-stamped with whatever plan happens to be passed in."""
+    legacy_state = {"enablers": {"portal": "INTRD-500"},
+                    "subtasks": {"portal/invoicing": "INTRD-501"},
+                    "links": [], "warnings": []}
+    client = RecordingClient()
+
+    with pytest.raises(jc.JiraError, match="identity"):
+        be.apply_plan(client, plan_for(), legacy_state)
+
+    assert client.posts == []
+
+
+def test_empty_state_with_no_project_key_still_gets_stamped():
+    """The fresh-run path must not regress: a state dict that simply lacks a
+    'project' key (not just new_state()'s explicit None) but has no entries yet
+    is still a legitimate fresh start."""
+    state = {"enablers": {}, "subtasks": {}, "links": [], "warnings": []}
+    client = RecordingClient()
+
+    result = be.apply_plan(client, plan_for(), state)
+
+    assert result["project"] == "INTRD"
+    assert result["markers"] == sorted(a["marker"] for a in plan_for()["areas"])
+    assert created_issues(client) == [
+        "Bug clusters — Frontend — 2026-08-01 → 2026-09-01", "quoting — 6 bugs"]
 
 
 def test_apply_stamps_the_project_and_markers_onto_a_fresh_state():
