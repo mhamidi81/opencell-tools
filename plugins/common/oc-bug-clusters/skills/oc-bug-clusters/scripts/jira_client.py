@@ -20,10 +20,17 @@ BASE = "https://opencellsoft.atlassian.net"
 DEFAULT_EMAIL = "mohamed.hamidi@opencellsoft.com"
 MAX_ATTEMPTS = 5
 RETRY_STATUS = (429, 503)
-# Only GET is safe to retry blind. A 429/503 on POST /rest/api/3/issue may arrive
-# AFTER Jira committed the create -- retrying it would duplicate the issue, so a
-# POST failure is raised immediately instead.
-RETRYABLE_METHODS = {"GET"}
+# search() posts to this path only to carry a JQL body too large for a GET's URL
+# -- it is still a read, so it retries like one. Every other POST (issue create,
+# issue link) is a write: a 429/503 there may arrive AFTER Jira committed it, so
+# retrying blind would duplicate the issue or the link.
+SEARCH_PATH = "/rest/api/3/search/jql"
+
+
+def _is_idempotent_request(method, path):
+    """Retryability follows idempotency, not the HTTP method: GET is always
+    safe, and POST is safe only for the read-only paginated search endpoint."""
+    return method == "GET" or (method == "POST" and path == SEARCH_PATH)
 
 
 class JiraError(RuntimeError):
@@ -74,7 +81,7 @@ class JiraClient:
                     raw = response.read()
                     return json.loads(raw) if raw else {}
             except urllib.error.HTTPError as ex:
-                retryable = method in RETRYABLE_METHODS and ex.code in RETRY_STATUS
+                retryable = _is_idempotent_request(method, path) and ex.code in RETRY_STATUS
                 if retryable and attempt < MAX_ATTEMPTS - 1:
                     self._sleep(2 * (attempt + 1))
                     continue
@@ -95,7 +102,7 @@ class JiraClient:
             body = {"jql": jql, "fields": fields, "maxResults": page_size}
             if token:
                 body["nextPageToken"] = token
-            page = self.post("/rest/api/3/search/jql", body)
+            page = self.post(SEARCH_PATH, body)
             yield from page.get("issues") or []
             token = page.get("nextPageToken")
             if page.get("isLast") or not token:

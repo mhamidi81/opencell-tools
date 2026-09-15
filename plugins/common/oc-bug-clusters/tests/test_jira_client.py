@@ -71,6 +71,37 @@ def test_a_post_503_is_not_retried(env):
     assert slept == []
 
 
+def test_post_issue_503_is_not_retried_one_attempt(env):
+    """Same rule pinned to the real create endpoint: a 503 there must raise after
+    exactly one attempt, never duplicating the issue."""
+    opener = FakeOpener([http_error(503)])
+    client = jc.JiraClient(opener=opener, env=env, sleep=lambda _s: None)
+
+    with pytest.raises(jc.JiraError, match="503"):
+        client.post("/rest/api/3/issue", {})
+    assert len(opener.requests) == 1
+
+
+def test_search_retries_a_transient_429_then_returns_all_pages(env):
+    """search() posts to /rest/api/3/search/jql, which is a read despite using
+    POST (the JQL body can exceed a GET's URL length). Retryability must follow
+    idempotency, not the HTTP method -- a bare method == 'GET' check disables
+    retry here and breaks the paginated fetch path on the very first transient
+    429/503 it hits."""
+    slept = []
+    opener = FakeOpener([
+        http_error(429),
+        {"issues": [{"key": "A-1"}], "nextPageToken": "p2", "isLast": False},
+        {"issues": [{"key": "A-2"}], "isLast": True},
+    ])
+    client = jc.JiraClient(opener=opener, env=env, sleep=slept.append)
+
+    keys = [i["key"] for i in client.search("project = A", ["summary"])]
+
+    assert keys == ["A-1", "A-2"]
+    assert slept == [2]
+
+
 def test_does_not_retry_a_400_and_reports_the_body(env):
     opener = FakeOpener([http_error(400, b"bad jql")])
     client = jc.JiraClient(opener=opener, env=env, sleep=lambda _s: None)
