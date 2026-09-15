@@ -172,7 +172,10 @@ Two outputs:
   characters**), `component`, `labels`. This is the only file Claude reads.
 
 If the ADF flatten fails for a bug, its `excerpt` is empty and classification proceeds on
-the summary alone.
+the summary alone. **A `description` that arrives as a plain string is taken as-is**
+rather than flattened to nothing: REST v3 returns ADF, but v2, exports and proxies return
+text or wiki markup, and silently emptying every excerpt is indistinguishable in the
+report from bugs that genuinely had no description.
 
 ### Stage 2 — Area assignment (deterministic, in `bug_fetch.py`)
 

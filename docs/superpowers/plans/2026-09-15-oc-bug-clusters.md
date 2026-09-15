@@ -677,6 +677,14 @@ def test_flatten_adf_never_raises(bad):
     assert bf.flatten_adf(bad) == ""
 
 
+def test_flatten_adf_takes_a_plain_string_description_as_is():
+    """REST v3 returns ADF, but v2, exports and proxies return a string. Returning
+    "" for those silently costs every bug its excerpt, which is invisible in the
+    report — it just looks like the bugs had no descriptions."""
+    assert bf.flatten_adf("## Problem\n\nContract  not\tapplied") == \
+        "## Problem Contract not applied"
+
+
 def test_flatten_adf_collapses_whitespace():
     doc = {"content": [{"type": "text", "text": "a  \n\t b"}]}
     assert bf.flatten_adf(doc) == "a b"
@@ -953,7 +961,14 @@ def flatten_adf(node):
 
     A bug with an unreadable description must still be classifiable from its summary,
     so this never raises.
+
+    A plain string is taken as-is: REST v3 returns ADF, but v2, exports and proxies
+    hand back text or wiki markup, and returning "" for those would silently cost
+    every bug its excerpt — the main classification signal after the summary.
     """
+    if isinstance(node, str):
+        return " ".join(node.split())
+
     parts = []
 
     def walk(n, depth=0):
