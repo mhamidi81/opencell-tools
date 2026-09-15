@@ -48,3 +48,61 @@ def test_every_subject_has_a_description_line():
     for block in re.split(r"^## ", text, flags=re.M)[1:]:
         heading, _, body = block.partition("\n")
         assert body.strip(), f"subject '{heading}' has no description"
+
+
+import subprocess
+import sys
+
+SKILL = PLUGIN_DIR / "skills" / NAME / "SKILL.md"
+SCRIPTS = PLUGIN_DIR / "skills" / NAME / "scripts"
+
+
+def skill_text():
+    return SKILL.read_text()
+
+
+def test_skill_frontmatter_name_matches_the_plugin():
+    head = skill_text().split("---")[1]
+    assert f"name: {NAME}" in head
+    assert "description:" in head and "argument-hint:" in head
+
+
+def test_skill_documents_every_flag_it_advertises():
+    """The argument-hint and the argument table must not drift apart."""
+    text = skill_text()
+    hint = re.search(r"argument-hint: \"(.+)\"", text).group(1)
+    advertised = set(re.findall(r"--[a-z-]+", hint))
+    documented = set(re.findall(r"^\| `(--[a-z-]+)`", text, re.M))
+    assert advertised - documented == set(), "advertised but undocumented"
+    assert documented - advertised == set(), "documented but not advertised"
+
+
+def test_skill_pins_both_default_assignee_account_ids():
+    text = skill_text()
+    assert "5ef5c13914f60e0ac1c9b049" in text     # Mohamed Hamidi, Frontend
+    assert "63369fa788ed2ebef97cddfb" in text     # Adil El Jaouhari, Backend
+
+
+def test_every_script_the_skill_invokes_exists():
+    for name in set(re.findall(r"scripts/([a-z_]+\.py)", skill_text())):
+        assert (SCRIPTS / name).is_file(), name
+
+
+def test_skill_only_passes_flags_the_scripts_accept():
+    """Catches the commonest rot: a renamed CLI flag the skill still calls."""
+    for name in sorted(set(re.findall(r"scripts/([a-z_]+\.py)", skill_text()))):
+        helptext = subprocess.run(
+            [sys.executable, str(SCRIPTS / name), "--help"],
+            capture_output=True, text=True, check=True).stdout
+        # Scan each whole fenced block that invokes the script: the commands are
+        # backslash-continued across lines, so a line-bounded regex would miss most
+        # of the flags — the exact drift this test exists to catch.
+        for block in re.findall(r"```bash\n(.*?)```", skill_text(), re.S):
+            if f"scripts/{name}" not in block:
+                continue
+            for flag in re.findall(r"--[a-z-]+", block):
+                assert flag in helptext, f"{name} does not accept {flag}"
+
+
+def test_skill_forbids_the_atlassian_mcp_for_the_fetch():
+    assert "Do not use the Atlassian MCP" in skill_text()
