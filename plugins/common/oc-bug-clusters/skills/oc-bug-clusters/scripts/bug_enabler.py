@@ -6,6 +6,14 @@ nothing; `--apply` executes a plan. The confirmation gate therefore lives in the
 between the two calls, rather than as an interactive prompt inside a script that
 Claude Code runs non-interactively.
 """
+import argparse
+import json
+import os
+import sys
+import urllib.parse
+
+from jira_client import JiraClient, JiraError, MissingToken
+
 ENABLER_TYPE_ID = "10076"
 SUBTASK_TYPE_ID = "10003"
 
@@ -145,3 +153,187 @@ def required_field_ids(meta):
 
 def missing_required(meta, fields):
     return required_field_ids(meta) - set(fields)
+
+
+# --------------------------------------------------------------- assignee lookup
+
+def resolve_assignee(client, value):
+    """Accept an accountId or an email. An email that matches no user raises — a
+    silent fallback here would assign the Enabler to nobody without saying so."""
+    if "@" not in value:
+        return value
+    query = urllib.parse.quote(value)
+    users = client.get(f"/rest/api/3/user/search?query={query}") or []
+    exact = [u for u in users
+             if (u.get("emailAddress") or "").lower() == value.lower()]
+    for candidate in (exact, users):
+        if len(candidate) == 1:
+            return candidate[0]["accountId"]
+    raise JiraError(f"'{value}' matches no Jira user (or several); "
+                    f"pass an accountId instead")
+
+
+# ------------------------------------------------------------------ idempotency
+
+def existing_enabler(client, project, marker):
+    jql = (f'project = {project} AND issuetype = Enabler '
+           f'AND labels = "{marker}" ORDER BY created DESC')
+    for issue in client.search(jql, ["summary"]):
+        return issue["key"]
+    return None
+
+
+# --------------------------------------------------------------------- preflight
+
+def _createmeta(client, project, type_id):
+    return client.get(
+        f"/rest/api/3/issue/createmeta/{project}/issuetypes/{type_id}")
+
+
+def preflight(client, project, plan):
+    """Fail before the first write if Jira wants a field the payload has no value for."""
+    checks = []
+    for area in plan["areas"]:
+        checks.append((ENABLER_TYPE_ID, area["enabler"]["fields"]))
+        for subtask in area["subtasks"]:
+            # `parent` is injected at creation time; declare it so the guard
+            # does not report it as missing.
+            checks.append((SUBTASK_TYPE_ID, dict(subtask["fields"], parent=True)))
+    for type_id, fields in checks:
+        missing = missing_required(_createmeta(client, project, type_id), fields)
+        if missing:
+            raise JiraError(
+                f"issue type {type_id} in {project} requires "
+                f"{sorted(missing)}, which /oc-bug-clusters does not set. "
+                f"Nothing was created.")
+
+
+# ------------------------------------------------------------------------- apply
+
+def new_state():
+    return {"enablers": {}, "subtasks": {}, "links": [], "warnings": []}
+
+
+def _create(client, fields, state):
+    """Create an issue, retrying once without the assignee if Jira refuses it."""
+    try:
+        return client.post("/rest/api/3/issue", {"fields": fields})["key"]
+    except JiraError as ex:
+        if "assignee" not in str(ex).lower() or "assignee" not in fields:
+            raise
+        state["warnings"].append(
+            f"Jira refused assignee {fields['assignee']} on "
+            f"'{fields['summary']}' — created unassigned. ({ex})")
+        retry = {k: v for k, v in fields.items() if k != "assignee"}
+        return client.post("/rest/api/3/issue", {"fields": retry})["key"]
+
+
+def apply_plan(client, plan, state, force=False):
+    for area in plan["areas"]:
+        token = area["area"]
+
+        if token not in state["enablers"]:
+            if not force:
+                found = existing_enabler(client, plan["project"], area["marker"])
+                if found:
+                    state["warnings"].append(
+                        f"{area['component']}: {found} already carries label "
+                        f"{area['marker']} — skipped. Use --force to create another.")
+                    continue
+            state["enablers"][token] = _create(client, area["enabler"]["fields"], state)
+
+        enabler_key = state["enablers"][token]
+
+        for subtask in area["subtasks"]:
+            slot = f"{token}/{subtask['subject']}"
+            if slot not in state["subtasks"]:
+                fields = dict(subtask["fields"], parent={"key": enabler_key})
+                state["subtasks"][slot] = _create(client, fields, state)
+            subtask_key = state["subtasks"][slot]
+
+            for bug_key in subtask["links"]:
+                edge = f"{bug_key}->{subtask_key}"
+                if edge in state["links"]:
+                    continue
+                try:
+                    client.post("/rest/api/3/issueLink", {
+                        "type": {"name": LINK_TYPE},
+                        "inwardIssue": {"key": bug_key},
+                        "outwardIssue": {"key": subtask_key}})
+                    state["links"].append(edge)
+                except JiraError as ex:
+                    # Best effort: a missing link is cosmetic, a half-created
+                    # Enabler is not. Collect and carry on.
+                    state["warnings"].append(f"link {edge} failed: {ex}")
+    return state
+
+
+# --------------------------------------------------------------------------- CLI
+
+def _load_state(path):
+    if path and os.path.exists(path):
+        with open(path, encoding="utf-8") as handle:
+            return json.load(handle)
+    return new_state()
+
+
+def _save_state(path, state):
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(state, handle, ensure_ascii=False, indent=1)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Create Enablers from a cluster model.")
+    parser.add_argument("--model", required=True)
+    parser.add_argument("--project", default="INTRD")
+    parser.add_argument("--report-path", default="")
+    parser.add_argument("--assignee-portal", default=DEFAULT_ASSIGNEE["portal"])
+    parser.add_argument("--assignee-core", default=DEFAULT_ASSIGNEE["core"])
+    parser.add_argument("--state", required=True)
+    parser.add_argument("--force", action="store_true")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--plan", action="store_true")
+    mode.add_argument("--apply", action="store_true")
+    args = parser.parse_args(argv)
+
+    with open(args.model, encoding="utf-8") as handle:
+        model = json.load(handle)
+
+    try:
+        client = JiraClient()
+        assignees = {"portal": resolve_assignee(client, args.assignee_portal),
+                     "core": resolve_assignee(client, args.assignee_core)}
+    except (MissingToken, JiraError) as ex:
+        sys.stderr.write(f"{ex}\n")
+        return 2
+
+    plan = build_plan(model, args.project, assignees, args.report_path)
+
+    if args.plan:
+        sys.stdout.write(render_plan(plan))
+        _save_state(args.state + ".plan.json", plan)
+        return 0
+
+    if not plan["areas"]:
+        sys.stdout.write(render_plan(plan))
+        return 0
+
+    state = _load_state(args.state)
+    try:
+        preflight(client, args.project, plan)
+        state = apply_plan(client, plan, state, force=args.force)
+    finally:
+        _save_state(args.state, state)
+
+    for area, key in state["enablers"].items():
+        sys.stdout.write(f"{area}: {model['areas'][area]['component']} Enabler {key}\n")
+    for slot, key in state["subtasks"].items():
+        sys.stdout.write(f"  {slot}: {key}\n")
+    sys.stdout.write(f"{len(state['links'])} bug links created\n")
+    for warning in state["warnings"]:
+        sys.stderr.write(f"WARNING: {warning}\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

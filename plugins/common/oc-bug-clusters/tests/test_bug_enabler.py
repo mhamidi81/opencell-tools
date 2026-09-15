@@ -175,3 +175,237 @@ def test_missing_required_names_what_the_payload_lacks():
 def test_missing_required_is_empty_when_the_payload_covers_everything():
     meta = {"fields": [{"fieldId": "summary", "required": True}]}
     assert be.missing_required(meta, {"summary": "x", "labels": []}) == set()
+
+
+# ============================================================ applier behaviour
+
+import jira_client as jc
+
+
+def test_subtask_inherits_an_OVERRIDDEN_enabler_assignee():
+    """Closes a gap in Task 6's tests: inheritance was only ever checked with the
+    DEFAULT assignees, so an implementation that hardcoded the area default would
+    have passed. Sub-task inheritance is behaviour the user asked for explicitly,
+    so it is asserted against a value that cannot come from a constant."""
+    model = model_for()
+    plan = be.build_plan(model, project="INTRD",
+                         assignees={"portal": "acc-override-1", "core": "acc-override-2"},
+                         report_path="r.html")
+    area = plan["areas"][0]
+    assert area["enabler"]["fields"]["assignee"] == {"id": "acc-override-1"}
+    for subtask in area["subtasks"]:
+        assert subtask["fields"]["assignee"] == {"id": "acc-override-1"}
+
+
+class RecordingClient:
+    """Stands in for JiraClient. `fail_on` maps a call signature to an exception."""
+
+    def __init__(self, search_results=(), fail_on=None, meta=None):
+        self.search_results = list(search_results)
+        self.fail_on = dict(fail_on or {})
+        self.meta = meta or {"fields": [{"fieldId": "summary", "required": True}]}
+        self.posts = []
+        self.gets = []
+        self._n = 0
+
+    def search(self, jql, fields, page_size=100):
+        self.searches = getattr(self, "searches", [])
+        self.searches.append(jql)
+        return iter(self.search_results.pop(0) if self.search_results else [])
+
+    def get(self, path):
+        self.gets.append(path)
+        if path in self.fail_on:
+            raise self.fail_on[path]
+        return self.meta
+
+    def post(self, path, body):
+        self.posts.append((path, body))
+        summary = (body.get("fields") or {}).get("summary")
+        if summary in self.fail_on:
+            # One-shot: a retry that changes the payload (e.g. drops a rejected
+            # assignee) must be allowed to succeed, not hit the same guard again.
+            raise self.fail_on.pop(summary)
+        if path == "/rest/api/3/issue":
+            self._n += 1
+            return {"key": f"INTRD-{900 + self._n}"}
+        return {}
+
+
+def created_issues(client):
+    return [b["fields"]["summary"] for p, b in client.posts if p == "/rest/api/3/issue"]
+
+
+def link_count(client):
+    return sum(1 for p, _ in client.posts if p == "/rest/api/3/issueLink")
+
+
+# ------------------------------------------------------------ assignee resolution
+
+def test_an_account_id_passes_straight_through():
+    client = RecordingClient()
+    assert be.resolve_assignee(client, "5ef5c13914f60e0ac1c9b049") == \
+        "5ef5c13914f60e0ac1c9b049"
+    assert client.gets == []
+
+
+def test_an_email_is_resolved_to_an_account_id():
+    client = RecordingClient()
+    client.meta = [{"accountId": "acc-1", "emailAddress": "a@opencellsoft.com"}]
+    assert be.resolve_assignee(client, "a@opencellsoft.com") == "acc-1"
+    assert "user/search" in client.gets[0]
+
+
+def test_an_unresolvable_email_raises_before_anything_is_written():
+    client = RecordingClient()
+    client.meta = []
+    with pytest.raises(jc.JiraError, match="no Jira user"):
+        be.resolve_assignee(client, "ghost@opencellsoft.com")
+
+
+# ------------------------------------------------------------------ idempotency
+
+def test_an_existing_marker_label_is_found():
+    client = RecordingClient(search_results=[[{"key": "INTRD-500"}]])
+    assert be.existing_enabler(client, "INTRD", "bug-clusters-portal-a-b") == "INTRD-500"
+    assert 'labels = "bug-clusters-portal-a-b"' in client.searches[0]
+
+
+def test_no_marker_means_no_existing_enabler():
+    assert be.existing_enabler(RecordingClient(), "INTRD", "m") is None
+
+
+def test_apply_skips_an_area_whose_marker_already_exists():
+    client = RecordingClient(search_results=[[{"key": "INTRD-500"}]])
+    state = be.apply_plan(client, plan_for(), be.new_state())
+
+    assert created_issues(client) == []
+    assert any("INTRD-500" in w for w in state["warnings"])
+
+
+def test_force_creates_anyway():
+    client = RecordingClient(search_results=[[{"key": "INTRD-500"}]])
+    be.apply_plan(client, plan_for(), be.new_state(), force=True)
+    assert len(created_issues(client)) == 2      # 1 enabler + 1 subtask
+
+
+# ---------------------------------------------------------------------- preflight
+
+def test_preflight_passes_when_every_required_field_is_present():
+    client = RecordingClient()
+    be.preflight(client, "INTRD", plan_for())     # must not raise
+
+
+def test_preflight_stops_on_an_unexpected_required_field():
+    client = RecordingClient(meta={"fields": [
+        {"fieldId": "summary", "required": True},
+        {"fieldId": "customfield_777", "required": True}]})
+    with pytest.raises(jc.JiraError, match="customfield_777"):
+        be.preflight(client, "INTRD", plan_for())
+
+
+# ------------------------------------------------------------------ creation flow
+
+def test_apply_creates_the_enabler_then_its_subtasks():
+    client = RecordingClient()
+    be.apply_plan(client, plan_for(model=model_for(sizes=(("quoting", 6),))),
+                  be.new_state())
+    assert created_issues(client) == ["Bug clusters — Frontend — 2026-08-01 → 2026-09-01",
+                                      "quoting — 6 bugs"]
+
+
+def test_subtask_is_given_the_enabler_as_its_parent():
+    client = RecordingClient()
+    be.apply_plan(client, plan_for(), be.new_state())
+    subtask_body = [b for p, b in client.posts if p == "/rest/api/3/issue"][1]
+    assert subtask_body["fields"]["parent"] == {"key": "INTRD-901"}
+
+
+def test_every_bug_of_a_cluster_is_linked_to_its_subtask():
+    client = RecordingClient()
+    state = be.apply_plan(client, plan_for(model=model_for(sizes=(("quoting", 6),))),
+                          be.new_state())
+    assert link_count(client) == 6
+    assert len(state["links"]) == 6
+
+
+def test_a_link_uses_the_relates_type_and_points_at_the_subtask():
+    client = RecordingClient()
+    be.apply_plan(client, plan_for(model=model_for(sizes=(("quoting", 5),))),
+                  be.new_state())
+    body = next(b for p, b in client.posts if p == "/rest/api/3/issueLink")
+    assert body["type"] == {"name": "Relates"}
+    assert body["outwardIssue"] == {"key": "INTRD-902"}
+
+
+def test_state_records_what_was_created():
+    client = RecordingClient()
+    state = be.apply_plan(client, plan_for(), be.new_state())
+    assert state["enablers"]["portal"] == "INTRD-901"
+    assert state["subtasks"]["portal/quoting"] == "INTRD-902"
+
+
+# --------------------------------------------------------------------- resumption
+
+def test_a_rerun_with_existing_state_creates_nothing_twice():
+    plan = plan_for()
+    first = be.apply_plan(RecordingClient(), plan, be.new_state())
+
+    client = RecordingClient()
+    be.apply_plan(client, plan, first)
+
+    assert created_issues(client) == [] and link_count(client) == 0
+
+
+def test_a_rerun_completes_a_partially_created_area():
+    plan = plan_for(model=model_for(sizes=(("quoting", 5),)))
+    state = be.new_state()
+    state["enablers"]["portal"] = "INTRD-500"
+
+    client = RecordingClient()
+    be.apply_plan(client, plan, state)
+
+    assert created_issues(client) == ["quoting — 5 bugs"]
+    assert link_count(client) == 5
+
+
+# ----------------------------------------------------------- failure containment
+
+def test_a_failed_link_is_warned_about_and_does_not_stop_the_run():
+    client = RecordingClient()
+    original = client.post
+
+    def post(path, body):
+        if path == "/rest/api/3/issueLink":
+            client.posts.append((path, body))
+            raise jc.JiraError("HTTP 404 on POST /rest/api/3/issueLink: no such issue")
+        return original(path, body)
+
+    client.post = post
+    state = be.apply_plan(client, plan_for(model=model_for(sizes=(("quoting", 5),))),
+                          be.new_state())
+
+    assert state["subtasks"]["portal/quoting"]
+    assert len(state["warnings"]) == 5
+    assert state["links"] == []
+
+
+def test_a_rejected_assignee_retries_the_create_unassigned():
+    summary = "Bug clusters — Frontend — 2026-08-01 → 2026-09-01"
+    client = RecordingClient(fail_on={
+        summary: jc.JiraError("HTTP 400 on POST /rest/api/3/issue: "
+                              '{"errors":{"assignee":"not permitted"}}')})
+    state = be.apply_plan(client, plan_for(), be.new_state())
+
+    bodies = [b for p, b in client.posts if p == "/rest/api/3/issue"]
+    assert "assignee" not in bodies[1]["fields"], "retry drops the assignee"
+    assert state["enablers"]["portal"]
+    assert any("assignee" in w for w in state["warnings"])
+
+
+def test_a_failed_subtask_leaves_the_enabler_and_the_state_intact():
+    client = RecordingClient(fail_on={
+        "quoting — 6 bugs": jc.JiraError("HTTP 500 on POST /rest/api/3/issue: boom")})
+    with pytest.raises(jc.JiraError):
+        be.apply_plan(client, plan_for(model=model_for(sizes=(("quoting", 6),))),
+                      be.new_state())
