@@ -3233,43 +3233,63 @@ echo OK
 ```
 Expected: `OK`
 
-- [ ] **Step 5: Live read-only run**
+- [ ] **Step 5: End-to-end run over 100 real bugs (no token required)**
 
-Requires `JIRA_API_TOKEN` in the environment. Run the command for real:
+`JIRA_API_TOKEN` is **not set in this environment**, and the plugin cannot fall back to
+the Atlassian MCP — avoiding it is the spec's whole reason for using REST. So the
+end-to-end check runs the real pipeline over a **fixture captured from live Jira** in the
+exact shape the REST search endpoint returns: 100 real INTRD bugs created
+2026-08-15 → 2026-09-15, with their real ADF descriptions, components, statuses and
+resolutions.
+
+The fixture and the harness already exist in the plan's SDD workspace:
+
+```bash
+python3 .superpowers/sdd/2026-09-15-oc-bug-clusters/verify_on_real_data.py
+```
+
+It drives `bug_fetch.collect` → `bug_cluster.build_model` → all three renderers →
+`bug_enabler.build_plan` and asserts against figures computed **independently** of the
+plugin:
+
+| Expectation | Value |
+|---|---|
+| Issues in the fixture | 100 |
+| Area split (component, then `[front]`/`[back]` tag) | portal 48 · core 40 · unclassified 12 |
+| Rejected bugs dropped | > 0 (resolution `Declined` ×13, plus status `Invalid`) |
+| Excerpts | never exceed 300 characters |
+| Real ADF descriptions flattened to > 40 chars | more than 10 |
+| Clusters | none below the threshold; no near-cluster at or above it |
+| CSV rows | exactly one per kept bug |
+| HTML | one document, a tab per area, nothing unescaped |
+| Enabler plan | one per area with clusters; `calls` = enablers + subtasks + links |
+| Assignees | Frontend `5ef5c13914f60e0ac1c9b049`, Backend `63369fa788ed2ebef97cddfb`, inherited by every Sub-task |
+| Marker labels | `bug-clusters-portal-…` and `bug-clusters-core-…` (area token, not component) |
+| Sub-tasks | carry no `parent` before apply |
+
+Expected: `ALL CHECKS PASSED`. Report the printed area split and cluster counts.
+**If any check fails, stop and investigate — do not proceed to Step 6.**
+
+- [ ] **Step 6: Record what remains unverified**
+
+Two things this substitution cannot cover. State them plainly in the report rather than
+implying the plugin is fully exercised:
+
+1. **The live REST fetch path** — auth against the real endpoint, `nextPageToken`
+   pagination across real pages, and whether Jira accepts the generated JQL verbatim.
+   `test_jira_client.py` covers the logic, not the endpoint.
+2. **Real Enabler creation** — `createmeta` preflight against the live screen
+   configuration, and the marker-label idempotency check on a second run.
+
+Both need `JIRA_API_TOKEN` in the environment. Once it is set, run:
 
 ```
 /oc-bug-clusters --since 2026-08-15 --until 2026-09-15 --repo both
-```
-
-Reconcile against the figures measured while writing the spec:
-
-- `project in (INTRD, MACRD)` over that window held **149** Bug/Sub-bug issues; this run
-  is INTRD only, so **`fetched` must be at or below 149 and well above zero**.
-- In a 50-bug sample the split was **46% Frontend / 40% Backend / 14% no component**.
-  `portal`, `core` and `unclassified` should land near those proportions — a wildly
-  different split means `area_of` regressed.
-- Confirm the HTML opens with two tabs, the CSV has one row per kept bug, and no
-  Markdown section contradicts the counters.
-
-Report the actual numbers. **If they do not reconcile, stop and investigate — do not
-proceed to Step 6.**
-
-- [ ] **Step 6: Gated write run**
-
-Ask the user before this step; it creates real Jira issues.
-
-```
 /oc-bug-clusters --since 2026-08-15 --until 2026-09-15 --repo both --create-enabler
 ```
 
-Review the printed plan object-by-object with the user, approve, then confirm:
-
-- one Enabler per area, correct component, correct assignee;
-- one Sub-task per cluster, each inheriting its Enabler's assignee;
-- the bugs appear as `Relates` links on the Sub-task.
-
-Then **run the exact same command again**. It must report the existing Enabler keys and
-create nothing — that is the marker label working.
+reviewing the printed plan before approving the write, then re-running the second command
+to confirm it reports the existing Enablers and creates nothing.
 
 - [ ] **Step 7: Commit and open the PR**
 
