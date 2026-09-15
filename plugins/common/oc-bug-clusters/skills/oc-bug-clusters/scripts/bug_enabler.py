@@ -335,7 +335,6 @@ def main(argv=None):
 
     if args.plan:
         sys.stdout.write(render_plan(plan))
-        _save_state(args.state + ".plan.json", plan)
         return 0
 
     if not plan["areas"]:
