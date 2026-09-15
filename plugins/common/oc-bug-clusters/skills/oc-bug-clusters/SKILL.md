@@ -128,6 +128,11 @@ python3 "$S/scripts/bug_enabler.py" --model "$RUN/model.json" --project [PROJECT
 If it prints `No cluster reached the threshold`, say so and stop — **never create an
 empty Enabler**.
 
+The marker label encodes the area and the window, but not the threshold — so re-running
+the same window at a different `--min-cluster` finds the existing Enabler and silently
+does nothing; if the user deliberately wants a second Enabler at the new threshold, that
+is what `--force` is for.
+
 **Step 2 — ask.** Show the printed plan and ask the user to confirm, plainly: how many
 Enablers, how many Sub-tasks, how many bug links, and into which project. **Wait for an
 explicit yes.** Do not proceed on silence or on an ambiguous reply.
