@@ -404,8 +404,17 @@ def test_a_rejected_assignee_retries_the_create_unassigned():
 
 
 def test_a_failed_subtask_leaves_the_enabler_and_the_state_intact():
+    """Binds the state so the survival claim is actually asserted. Passing
+    `be.new_state()` inline would make this test pass even if apply_plan lost the
+    Enabler on the way out — and that Enabler key is exactly what lets the next run
+    resume instead of creating a second one."""
     client = RecordingClient(fail_on={
         "quoting — 6 bugs": jc.JiraError("HTTP 500 on POST /rest/api/3/issue: boom")})
+    state = be.new_state()
+
     with pytest.raises(jc.JiraError):
         be.apply_plan(client, plan_for(model=model_for(sizes=(("quoting", 6),))),
-                      be.new_state())
+                      state)
+
+    assert state["enablers"]["portal"], "the Enabler must survive for the resume path"
+    assert state["subtasks"] == {}, "the failed Sub-task must not be recorded"
