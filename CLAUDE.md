@@ -207,8 +207,12 @@ Four constraints are not obvious from the code:
 - **The area token and the Jira component are two vocabularies.** `portal`/`core` is
   what `--repo` takes and what keys the label; `Frontend`/`Backend` is what goes on the
   issue. Mixing them silently breaks idempotency, because the label stops matching.
-- **`Sub-bug` must be quoted in JQL.** The hyphen breaks an unquoted term, and the
-  failure mode is a silent undercount rather than an error.
+- **`Sub-bug` is quoted in JQL defensively, not because it is known to be required.**
+  The commonly-cited "an unquoted hyphenated issue type silently undercounts" was
+  **tested against this instance and did not reproduce**: `issuetype in (Bug, "Sub-bug")`
+  and `issuetype in (Bug, Sub-bug)` both return 133 for the same window. Keep the quotes —
+  they cost nothing and other Jira versions may differ — but do not treat the claim as
+  verified, and do not build anything on it.
 
 The two default Enabler assignees are pinned by `accountId` at the top of `SKILL.md` —
 Frontend `5ef5c13914f60e0ac1c9b049`, Backend `63369fa788ed2ebef97cddfb`. A handover is a
