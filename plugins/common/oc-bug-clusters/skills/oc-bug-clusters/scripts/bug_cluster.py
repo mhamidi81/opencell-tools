@@ -14,7 +14,7 @@ import sys
 from collections import Counter
 from datetime import date
 
-from bug_fetch import AREA_COMPONENT
+from bug_fetch import AREA_COMPONENT, areas_in_scope
 
 AREA_ORDER = ["portal", "core"]
 SUBJECT_HEADING = re.compile(r"^## ([a-z0-9-]+)$", re.M)
@@ -66,9 +66,7 @@ def build_model(document, assignments, min_cluster, seeded=()):
     if missing:
         raise MissingAssignments(missing)
 
-    scope = [a for a in AREA_ORDER
-             if a in {"portal": {"portal"}, "core": {"core"},
-                      "both": {"portal", "core"}}[document["repo"]]]
+    scope = [a for a in AREA_ORDER if a in areas_in_scope(document["repo"])]
 
     areas = {}
     for area in scope:
