@@ -14,6 +14,7 @@ import argparse
 import json
 import re
 import sys
+from collections import Counter
 from datetime import date, timedelta
 
 from jira_client import BASE, JiraClient, MissingToken
@@ -172,19 +173,40 @@ def areas_in_scope(repo):
 
 def collect(client, jql, repo):
     """Fetch, filter and normalise. Bugs of the area NOT in scope are excluded;
-    bugs with no resolvable area are always kept, so the loss stays visible."""
+    bugs with no resolvable area are always kept, so the loss stays visible.
+
+    A rejected bug is recorded, not just counted: `dropped_invalid` stays a plain
+    count because other code reads it, but a bare count cannot tell anyone whether
+    a dropped bug was a real deferred defect — `dropped` carries the key and why."""
     scope = areas_in_scope(repo)
-    bugs, fetched, dropped = [], 0, 0
+    bugs, fetched, dropped = [], 0, []
     for issue in client.search(jql, FIELDS):
         fetched += 1
         fields = issue.get("fields") or {}
         if not is_real_defect(fields):
-            dropped += 1
+            dropped.append({"key": issue.get("key"),
+                            "status": _name(fields.get("status")),
+                            "resolution": _name(fields.get("resolution"))})
             continue
         record = normalize(issue)
         if record["area"] is None or record["area"] in scope:
             bugs.append(record)
-    return {"repo": repo, "fetched": fetched, "dropped_invalid": dropped, "bugs": bugs}
+    return {"repo": repo, "fetched": fetched, "dropped_invalid": len(dropped),
+            "dropped": dropped, "bugs": bugs}
+
+
+def _dropped_reason(entry):
+    return entry["resolution"] or f"status {entry['status']}"
+
+
+def dropped_breakdown(dropped):
+    """`dropped 13 (Declined 13)` — the reason breakdown for the stderr summary."""
+    if not dropped:
+        return "0"
+    counts = Counter(_dropped_reason(d) for d in dropped)
+    parts = ", ".join(f"{name} {n}" for name, n in
+                      sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
+    return f"{len(dropped)} ({parts})"
 
 
 def classify_rows(document):
@@ -227,7 +249,8 @@ def main(argv=None):
     unclassified = sum(1 for b in document["bugs"] if b["area"] is None)
     sys.stderr.write(
         f"Analysing {', '.join(projects)} bugs, {args.repo}, {since} → {until}\n"
-        f"  fetched {document['fetched']}, dropped-invalid {document['dropped_invalid']}, "
+        f"  fetched {document['fetched']}, "
+        f"dropped {dropped_breakdown(document['dropped'])}, "
         f"kept {kept} ({unclassified} with no resolvable area)\n")
     return 0
 

@@ -249,6 +249,33 @@ def test_collect_drops_invalid_and_counts_them(env):
     assert doc["fetched"] == 3 and doc["dropped_invalid"] == 2
 
 
+def test_dropped_list_carries_the_keys_and_the_reasons(env):
+    issues = [
+        issue("INTRD-1"),
+        issue("INTRD-2", resolution={"name": "Declined"}),
+        issue("INTRD-3", status={"name": "Invalid",
+                                 "statusCategory": {"key": "done"}}),
+    ]
+    doc = bf.collect(client_for(issues, env), "jql", "core")
+
+    assert doc["dropped"] == [
+        {"key": "INTRD-2", "status": "In Progress", "resolution": "Declined"},
+        {"key": "INTRD-3", "status": "Invalid", "resolution": None},
+    ]
+    assert doc["dropped_invalid"] == 2
+
+
+def test_dropped_breakdown_groups_by_reason():
+    dropped = [{"key": "A-1", "status": "In Progress", "resolution": "Declined"},
+              {"key": "A-2", "status": "In Progress", "resolution": "Declined"},
+              {"key": "A-3", "status": "Invalid", "resolution": None}]
+    assert bf.dropped_breakdown(dropped) == "3 (Declined 2, status Invalid 1)"
+
+
+def test_dropped_breakdown_of_an_empty_list_is_zero():
+    assert bf.dropped_breakdown([]) == "0"
+
+
 def test_classify_rows_are_compact_and_cover_only_classifiable_bugs(env):
     issues = [issue("INTRD-1"), issue("INTRD-2", components=[], summary="untagged")]
     doc = bf.collect(client_for(issues, env), "jql", "both")
