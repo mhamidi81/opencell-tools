@@ -152,9 +152,10 @@ initiative** — only when the user asks for it.
 | Condition | What to do |
 |---|---|
 | `JIRA_API_TOKEN` unset | Print the setup instructions from the script and stop. Never fall back to the MCP |
+| The window is inverted — `must be before` | The dates are back to front or equal. Relay the message, ask for corrected dates, and stop. Nothing was fetched |
 | Zero bugs in the window | Report it and stop |
 | Zero clusters | Show the report's near-clusters, create nothing |
 | `no subject assigned for: …` | You missed keys in Task 2. Classify exactly those and re-run Task 3 |
 | `requires [...], which /oc-bug-clusters does not set` | A Jira screen changed. Report it; nothing was written |
 | An `--assignee-*` email matches no user | Stop and ask for an accountId; nothing was written |
-| `WARNING: link … failed` | Relay it; the Enabler and Sub-tasks are fine |
+| Any `WARNING:` line | Relay it verbatim. The three kinds are a failed bug link (the Enabler and Sub-tasks are fine — add the link by hand), an assignee Jira refused (the issue was created unassigned), and an Enabler skipped because its marker label already exists |
