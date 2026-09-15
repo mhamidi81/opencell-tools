@@ -211,7 +211,8 @@ def preflight(client, project, plan):
 # ------------------------------------------------------------------------- apply
 
 def new_state():
-    return {"enablers": {}, "subtasks": {}, "links": [], "warnings": []}
+    return {"enablers": {}, "subtasks": {}, "links": [], "warnings": [],
+            "project": None, "markers": []}
 
 
 def _create(client, fields, state):
@@ -229,6 +230,23 @@ def _create(client, fields, state):
 
 
 def apply_plan(client, plan, state, force=False):
+    plan_markers = sorted(a["marker"] for a in plan["areas"])
+
+    if state["enablers"] or state["subtasks"]:
+        if (state.get("project") is not None
+                and (state.get("project") != plan["project"]
+                     or state.get("markers") != plan_markers)):
+            raise JiraError(
+                f"--state was created for project {state.get('project')!r} "
+                f"(markers {state.get('markers')!r}), but this plan targets "
+                f"project {plan['project']!r} (markers {plan_markers!r}). "
+                f"This state file belongs to a different run — point --state "
+                f"at a state file for this window instead.")
+
+    if state.get("project") is None:
+        state["project"] = plan["project"]
+        state["markers"] = plan_markers
+
     for area in plan["areas"]:
         token = area["area"]
 

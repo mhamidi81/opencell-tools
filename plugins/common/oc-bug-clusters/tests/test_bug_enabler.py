@@ -403,6 +403,45 @@ def test_a_rejected_assignee_retries_the_create_unassigned():
     assert any("assignee" in w for w in state["warnings"])
 
 
+def test_state_reused_across_a_different_window_raises():
+    """Reproduces the destructive path: run August's plan, then reuse the same
+    state for September without pointing --state elsewhere. Without an identity
+    check this silently creates and links nothing while still looking done."""
+    august = plan_for(model=model_for())
+    state = be.apply_plan(RecordingClient(), august, be.new_state())
+
+    september_model = model_for()
+    september_model["window"] = {"since": "2026-09-01", "until": "2026-10-01"}
+    september = be.build_plan(september_model, project="INTRD",
+                              assignees=dict(be.DEFAULT_ASSIGNEE),
+                              report_path="r.html")
+
+    with pytest.raises(jc.JiraError, match="different run"):
+        be.apply_plan(RecordingClient(), september, state)
+
+
+def test_state_reused_for_the_same_plan_still_resumes():
+    plan = plan_for()
+    state = be.apply_plan(RecordingClient(), plan, be.new_state())
+
+    client = RecordingClient()
+    be.apply_plan(client, plan, state)
+
+    assert created_issues(client) == [] and link_count(client) == 0
+
+
+def test_new_state_carries_no_identity_yet():
+    state = be.new_state()
+    assert state["project"] is None and state["markers"] == []
+
+
+def test_apply_stamps_the_project_and_markers_onto_a_fresh_state():
+    plan = plan_for()
+    state = be.apply_plan(RecordingClient(), plan, be.new_state())
+    assert state["project"] == "INTRD"
+    assert state["markers"] == sorted(a["marker"] for a in plan["areas"])
+
+
 def test_a_failed_subtask_leaves_the_enabler_and_the_state_intact():
     """Binds the state so the survival claim is actually asserted. Passing
     `be.new_state()` inline would make this test pass even if apply_plan lost the
