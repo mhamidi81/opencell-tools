@@ -50,7 +50,14 @@ def flatten_adf(node):
 
     A bug with an unreadable description must still be classifiable from its summary,
     so this never raises.
+
+    A plain string is taken as-is: REST v3 returns ADF, but v2, exports and proxies
+    hand back text or wiki markup, and returning "" for those would silently cost
+    every bug its excerpt — the main classification signal after the summary.
     """
+    if isinstance(node, str):
+        return " ".join(node.split())
+
     parts = []
 
     def walk(n, depth=0):
