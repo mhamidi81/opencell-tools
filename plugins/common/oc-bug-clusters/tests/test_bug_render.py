@@ -46,6 +46,27 @@ def test_markdown_names_the_near_clusters_with_their_counts():
     assert "rating" in text and "Near-clusters" in text
 
 
+def test_markdown_bullet_includes_the_assignee():
+    assignments = {"P-0": "quoting"}
+    bugs = [bug("P-0", "portal")]
+    bugs[0]["assignee"] = "Adil El Jaouhari"
+    model = bc.build_model(document(bugs), assignments, min_cluster=1)
+    assert "Adil El Jaouhari" in bc.render_markdown(model)
+
+
+def test_markdown_bullet_uses_an_em_dash_when_the_assignee_is_absent():
+    """Gives the bug a label so the cluster table's own "—" (for empty top
+    labels) can't make this pass for the wrong reason; checks the bullet line
+    specifically, not just that "—" appears somewhere in the document."""
+    assignments = {"P-0": "quoting"}
+    bugs = [bug("P-0", "portal", labels=["billing"])]
+    model = bc.build_model(document(bugs), assignments, min_cluster=1)
+    assert bugs[0]["assignee"] is None
+    bullet = next(line for line in bc.render_markdown(model).splitlines()
+                 if line.startswith("- [P-0]"))
+    assert "· — ·" in bullet
+
+
 def test_markdown_lists_unclassified_bugs():
     text = bc.render_markdown(model_with(extra_bugs=[bug("U-1", None)]))
     assert "U-1" in text and "Unclassified" in text

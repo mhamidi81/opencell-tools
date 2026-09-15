@@ -145,7 +145,8 @@ def render_markdown(model):
                 out += [f"### `{cluster['subject']}` — {cluster['count']} bugs", ""]
                 for b in cluster["bugs"]:
                     out.append(f"- [{b['key']}]({b['url']}) · {b['status']} · "
-                               f"{b['created']} · {b['summary']}")
+                               f"{b['created']} · {b['assignee'] or '—'} · "
+                               f"{b['summary']}")
                 out.append("")
         if data["near"]:
             out += [f"**Near-clusters** (below {model['min_cluster']}): "
