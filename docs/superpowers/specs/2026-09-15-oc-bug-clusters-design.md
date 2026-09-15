@@ -59,6 +59,19 @@ plugins/common/oc-bug-clusters/
   .claude-plugin/plugin.json                     # name, description, version 1.0.0
   skills/oc-bug-clusters/SKILL.md                # the whole command
   skills/oc-bug-clusters/references/subjects.md  # seeded, editable taxonomy
+  skills/oc-bug-clusters/scripts/
+    jira_client.py                               # Jira Cloud REST transport
+    bug_fetch.py                                 # Stage 1-2: fetch + area-tag
+    bug_cluster.py                                # Stage 4: cluster + render
+    bug_enabler.py                                # Stage 5: plan/apply Jira writes
+  tests/                                          # pytest suite, stdlib-only, no network
+    conftest.py
+    test_jira_client.py
+    test_bug_fetch.py
+    test_bug_cluster.py
+    test_bug_render.py
+    test_bug_enabler.py
+    test_packaging.py
 ```
 
 Plus one entry in `.claude-plugin/marketplace.json` with
@@ -286,8 +299,15 @@ missing link is cosmetic while a half-created Enabler is not.
 
 ## 8. Verification
 
-The repository has no test harness — it is entirely Markdown and JSON — so verification is
-a pair of real runs, reconciled against figures measured while writing this spec:
+The repository ships a pytest suite (`plugins/common/oc-bug-clusters/tests/`, Python 3
+stdlib only, no network — Jira calls go through a fake opener) covering the deterministic
+modules: the Jira transport, fetch/area-tagging/the rejection filter, clustering, the
+Markdown/CSV/HTML renderers, and packaging. Run it with
+`python3 -m pytest plugins/common/oc-bug-clusters/tests -q`.
+
+What that suite cannot cover — the LLM subject-classification step (Task 2) and a live
+Jira write — still needs a pair of real runs, reconciled against figures measured while
+writing this spec:
 
 1. **Read-only:** `/oc-bug-clusters --since 2026-08-15 --until 2026-09-15 --repo both`.
    The fetched total must reconcile against the raw JQL count of **149** for
