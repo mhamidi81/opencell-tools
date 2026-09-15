@@ -1,0 +1,5 @@
+{
+  "name": "oc-bug-clusters",
+  "description": "Analyse the bugs created over a period, classify each onto a seeded subject taxonomy, and group any subject carrying at least 5 bugs into a cluster. Area (portal/core) is resolved deterministically from the Jira component with a [front]/[back] summary-tag fallback; the subject is the only LLM judgement. Prints Markdown and writes a date-stamped HTML + CSV to ./docs/. With --create-enabler it creates one Enabler per area (Frontend assigned to Mohamed Hamidi, Backend to Adil El Jaouhari) holding one Sub-task per cluster, with the cluster's bugs linked; writes are confirmed, idempotent via a marker label, and resumable. Reads Jira via direct Cloud REST with a mandatory JIRA_API_TOKEN - no Atlassian MCP.",
+  "version": "1.0.0"
+}

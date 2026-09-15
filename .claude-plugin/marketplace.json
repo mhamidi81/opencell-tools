@@ -119,6 +119,11 @@
       "description": "Estimation-vs-logged-hours report over a period (independent of the AI-usage JSON) — Tempo-worklog driven, one row per ticket with a PER-AREA column group (Backend/Frontend/QA): area main developer, Architect & Dev-lead estimates, logged/sub-bug hours, AI flag, two gains (with/without sub-bugs) and sub-bug count, plus an Arch/PR/management logged column and total. Date per ticket + month grouping, five HTML tabs, and a second finished-US per-developer summary. Date-stamped HTML + CSV to ./docs/. Jira via direct REST + Tempo per-user, both mandatory tokens; no MCP"
     },
     {
+      "name": "oc-bug-clusters",
+      "source": "./plugins/common/oc-bug-clusters",
+      "description": "Period-scoped bug clustering: classify the bugs created in a window onto a subject taxonomy, group subjects carrying at least 5 bugs, and optionally create one Jira Enabler per area with a Sub-task per cluster"
+    },
+    {
       "name": "oc-figma-mcp",
       "source": "./plugins/mcp/oc-figma-mcp",
       "description": "Connect to Figma MCP server to extract design context, generate code from designs, and retrieve design tokens"
