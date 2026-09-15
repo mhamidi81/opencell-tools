@@ -3318,13 +3318,14 @@ plugin:
 | Expectation | Value |
 |---|---|
 | Issues in the fixture | 100 |
-| Area split (component, then `[front]`/`[back]` tag) | portal 48 · core 40 · unclassified 12 |
+| Area split **before** the reject filter | portal 48 · core 40 · unclassified 12 |
+| Kept after dropping 13 rejected | 87 → portal 42 · core 35 · unclassified 10 |
 | Rejected bugs dropped | > 0 (resolution `Declined` ×13, plus status `Invalid`) |
 | Excerpts | never exceed 300 characters |
 | Real ADF descriptions flattened to > 40 chars | more than 10 |
 | Clusters | none below the threshold; no near-cluster at or above it |
 | CSV rows | exactly one per kept bug |
-| HTML | one document, a tab per area, nothing unescaped |
+| HTML | one document, a tab per area; every real summary containing `<>&"` present escaped and never raw |
 | Enabler plan | one per area with clusters; `calls` = enablers + subtasks + links |
 | Assignees | Frontend `5ef5c13914f60e0ac1c9b049`, Backend `63369fa788ed2ebef97cddfb`, inherited by every Sub-task |
 | Marker labels | `bug-clusters-portal-…` and `bug-clusters-core-…` (area token, not component) |
