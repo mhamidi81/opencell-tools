@@ -120,6 +120,20 @@ def test_subtask_lists_every_bug_of_its_cluster_and_links_them():
         assert key in text
 
 
+# ------------------------------------------------------------------------ CLI
+
+def test_a_comma_separated_project_is_rejected_before_anything_is_touched(tmp_path, capsys):
+    """bug_fetch splits --project on commas (KEY[,KEY…]); bug_enabler must not —
+    an Enabler lives in exactly one project. The model path is nonexistent, so a
+    return code of 2 with no traceback proves the check runs before the model is
+    even opened."""
+    rc = be.main(["--model", str(tmp_path / "does-not-exist.json"),
+                 "--project", "INTRD,MACRD",
+                 "--state", str(tmp_path / "state.json"), "--plan"])
+    assert rc == 2
+    assert "single" in capsys.readouterr().err.lower()
+
+
 # ------------------------------------------------------------------- plan shape
 
 def test_near_clusters_never_become_subtasks():

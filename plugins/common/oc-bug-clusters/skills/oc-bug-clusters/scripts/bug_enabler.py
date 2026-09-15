@@ -314,6 +314,12 @@ def main(argv=None):
     mode.add_argument("--apply", action="store_true")
     args = parser.parse_args(argv)
 
+    if "," in args.project:
+        sys.stderr.write(
+            f"--project must be a single key (got {args.project!r}); an Enabler "
+            f"is created in exactly one project. Pass e.g. --project INTRD.\n")
+        return 2
+
     with open(args.model, encoding="utf-8") as handle:
         model = json.load(handle)
 
