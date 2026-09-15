@@ -48,13 +48,27 @@ def test_search_stops_when_the_token_is_absent_even_without_is_last(env):
     assert [i["key"] for i in client.search("q", ["summary"])] == ["A-1"]
 
 
-def test_retries_429_then_succeeds(env):
+def test_retries_429_then_succeeds_on_get(env):
+    """Only GET is retried blind -- see test_a_post_503_is_not_retried for why."""
     slept = []
     opener = FakeOpener([http_error(429), {"ok": True}])
     client = jc.JiraClient(opener=opener, env=env, sleep=slept.append)
 
-    assert client.post("/x", {}) == {"ok": True}
+    assert client.get("/x") == {"ok": True}
     assert slept == [2]
+
+
+def test_a_post_503_is_not_retried(env):
+    """A 429/503 on POST /rest/api/3/issue may arrive AFTER Jira committed the
+    create -- retrying it blind would duplicate the issue. POST must fail on the
+    first attempt instead."""
+    slept = []
+    opener = FakeOpener([http_error(503)])
+    client = jc.JiraClient(opener=opener, env=env, sleep=slept.append)
+
+    with pytest.raises(jc.JiraError, match="503"):
+        client.post("/x", {})
+    assert slept == []
 
 
 def test_does_not_retry_a_400_and_reports_the_body(env):
