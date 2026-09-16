@@ -50,14 +50,24 @@ Fetch the PR metadata from the Bitbucket REST API (see **Access**).
 **Option A — PR id was given directly**
 
 ```bash
-curl -s -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
+# Auth scheme follows the token type (see Access). Repeated per block because
+# shell state does not persist between tool calls.
+BB_AUTH=(-u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}")
+[[ "$BITBUCKET_ACCESS_TOKEN" == ATCTT* ]] && BB_AUTH=(-H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}")
+
+curl -s "${BB_AUTH[@]}" \
   "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]"
 ```
 
 **Option B — A ticket was given (find its PR)**
 
 ```bash
-curl -s -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
+# Auth scheme follows the token type (see Access). Repeated per block because
+# shell state does not persist between tool calls.
+BB_AUTH=(-u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}")
+[[ "$BITBUCKET_ACCESS_TOKEN" == ATCTT* ]] && BB_AUTH=(-H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}")
+
+curl -s "${BB_AUTH[@]}" \
   "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests?q=title~%22[TICKET-NUMBER]%22&state=OPEN"
 ```
 
@@ -92,7 +102,12 @@ Work happens on the **same branch** used by the PR — never a new branch.
 - List the PR comments:
 
   ```bash
-  curl -s -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
+# Auth scheme follows the token type (see Access). Repeated per block because
+# shell state does not persist between tool calls.
+BB_AUTH=(-u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}")
+[[ "$BITBUCKET_ACCESS_TOKEN" == ATCTT* ]] && BB_AUTH=(-H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}")
+
+  curl -s "${BB_AUTH[@]}" \
     "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/comments?pagelen=100"
   ```
 
@@ -229,7 +244,12 @@ For every remark marked `Fixed` in Step 7:
 1. **Reply** under the original comment — `parent.id` threads it under the remark:
 
    ```bash
-   curl -s -X POST -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
+# Auth scheme follows the token type (see Access). Repeated per block because
+# shell state does not persist between tool calls.
+BB_AUTH=(-u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}")
+[[ "$BITBUCKET_ACCESS_TOKEN" == ATCTT* ]] && BB_AUTH=(-H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}")
+
+   curl -s -X POST "${BB_AUTH[@]}" \
      -H "Content-Type: application/json" \
      -d '{"content":{"raw":"Fixed in the latest push: [short summary of the change]."},"parent":{"id":[COMMENT-ID]}}' \
      "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/comments"
@@ -238,7 +258,12 @@ For every remark marked `Fixed` in Step 7:
 2. **Resolve** the comment thread:
 
    ```bash
-   curl -s -X POST -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
+# Auth scheme follows the token type (see Access). Repeated per block because
+# shell state does not persist between tool calls.
+BB_AUTH=(-u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}")
+[[ "$BITBUCKET_ACCESS_TOKEN" == ATCTT* ]] && BB_AUTH=(-H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}")
+
+   curl -s -X POST "${BB_AUTH[@]}" \
      "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/comments/[COMMENT-ID]/resolve"
    ```
 
@@ -289,14 +314,26 @@ the environment registers — the official plugin, or the claude.ai Atlassian co
 Bitbucket is **not** reachable over MCP: the Rovo server serves Bitbucket only under API-token auth,
 never over the OAuth flow the official plugin uses.
 
-`BITBUCKET_ACCESS_TOKEN` is an **Atlassian API token** (`ATATT…`, created at
-https://id.atlassian.com/manage/api-tokens). It authenticates with **Basic** auth as `email:token`, so
-`BITBUCKET_EMAIL` is required too — every call above uses
-`curl -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}"`. Sending an `ATATT…` token as
-`Authorization: Bearer` returns `401`. (A Bitbucket repository/workspace **Access Token** is the other
-valid credential type and does use `Bearer` with no email — substitute
-`-H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}"` if you use one.) App Passwords were removed
-2026-07-28.
+`BITBUCKET_ACCESS_TOKEN` may be **either** Bitbucket credential type, and the two use
+different schemes — so every call above builds `BB_AUTH` from the token itself instead of
+assuming one:
+
+- a repository/workspace **Access Token** (`ATCTT…`) → `Authorization: Bearer`, **no email**
+- an **Atlassian API token** (`ATATT…`, from https://id.atlassian.com/manage/api-tokens) →
+  Basic `email:token`, which also needs `BITBUCKET_EMAIL`
+
+```bash
+BB_AUTH=(-u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}")
+[[ "$BITBUCKET_ACCESS_TOKEN" == ATCTT* ]] && BB_AUTH=(-H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}")
+curl -s "${BB_AUTH[@]}" …
+```
+
+Sending either token the other way returns `401`. The scheme is keyed off the **token prefix**,
+not off whether `BITBUCKET_EMAIL` is set — it is commonly exported for other tooling, so
+"email present therefore Basic" picks the wrong scheme. The tokens configured for this
+workspace are `ATCTT…` access tokens, so the Bearer branch is the one that normally fires;
+hardcoding `-u` made every call `401` while the error blamed the opposite cause. App Passwords
+were removed 2026-07-28.
 
 If the credentials are missing or a call returns `401`, tell the user and stop — without them the
 review comments cannot be read.

@@ -78,11 +78,16 @@ A ticket often has **several PRs**, one per target branch (e.g. the same fix ope
 **4a. Collect every candidate.** Do not stop at the first match — gather the full list so the selection rule can see all target branches:
 
 ```bash
+# Auth scheme follows the token type (see Access). Repeated per block because
+# shell state does not persist between tool calls.
+BB_AUTH=(-u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}")
+[[ "$BITBUCKET_ACCESS_TOKEN" == ATCTT* ]] && BB_AUTH=(-H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}")
+
 # by title, open PRs
-curl -s -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
+curl -s "${BB_AUTH[@]}" \
   "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests?q=title~%22[TICKET-NUMBER]%22&state=OPEN&pagelen=50"
 # if that returns nothing, by source branch, open PRs
-curl -s -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
+curl -s "${BB_AUTH[@]}" \
   "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests?q=source.branch.name~%22[TICKET-NUMBER]%22&state=OPEN&pagelen=50"
 ```
 
@@ -111,12 +116,17 @@ Save the diff to a file — Step 5b counts the tests by scanning it, and the rep
 thing anyway:
 
 ```bash
+# Auth scheme follows the token type (see Access). Repeated per block because
+# shell state does not persist between tool calls.
+BB_AUTH=(-u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}")
+[[ "$BITBUCKET_ACCESS_TOKEN" == ATCTT* ]] && BB_AUTH=(-H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}")
+
 # diff (write it to disk, don't just read it inline)
-curl -sL -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
+curl -sL "${BB_AUTH[@]}" \
   "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/diff" \
   -o /tmp/oc-review-pr-[PR-ID].diff
 # changed files
-curl -sL -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
+curl -sL "${BB_AUTH[@]}" \
   "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/diffstat"
 ```
 
@@ -421,7 +431,12 @@ PRs from Step 4 are never touched.
 **10a. Post the review report as a PR comment — always.**
 
 ```bash
-curl -s -X POST -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
+# Auth scheme follows the token type (see Access). Repeated per block because
+# shell state does not persist between tool calls.
+BB_AUTH=(-u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}")
+[[ "$BITBUCKET_ACCESS_TOKEN" == ATCTT* ]] && BB_AUTH=(-H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}")
+
+curl -s -X POST "${BB_AUTH[@]}" \
   -H "Content-Type: application/json" \
   "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/comments" \
   -d @- <<'JSON'
@@ -464,7 +479,12 @@ reset — most notably `reviewers`**. Read the PR first and send the existing va
 2. Send the update, preserving what you read:
 
    ```bash
-   curl -s -X PUT -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
+# Auth scheme follows the token type (see Access). Repeated per block because
+# shell state does not persist between tool calls.
+BB_AUTH=(-u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}")
+[[ "$BITBUCKET_ACCESS_TOKEN" == ATCTT* ]] && BB_AUTH=(-H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}")
+
+   curl -s -X PUT "${BB_AUTH[@]}" \
      -H "Content-Type: application/json" \
      "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]" \
      -d '{ "title": "[PR-TITLE]", "draft": true, "reviewers": [ {"uuid":"[REVIEWER-UUID]"}, … ] }'
@@ -483,7 +503,12 @@ reset — most notably `reviewers`**. Read the PR first and send the existing va
 **Score 1-5 — decline the PR.** Declining **closes** the PR, so do it only after the report is posted:
 
 ```bash
-curl -s -X POST -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
+# Auth scheme follows the token type (see Access). Repeated per block because
+# shell state does not persist between tool calls.
+BB_AUTH=(-u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}")
+[[ "$BITBUCKET_ACCESS_TOKEN" == ATCTT* ]] && BB_AUTH=(-H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}")
+
+curl -s -X POST "${BB_AUTH[@]}" \
   "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/decline"
 ```
 
@@ -533,14 +558,26 @@ registers — the official plugin, or the claude.ai Atlassian connector (`mcp__�
 Bitbucket is **not** reachable over MCP: the Rovo server serves Bitbucket only under API-token auth,
 never over the OAuth flow the official plugin uses.
 
-`BITBUCKET_ACCESS_TOKEN` is an **Atlassian API token** (`ATATT…`, created at
-https://id.atlassian.com/manage/api-tokens). It authenticates with **Basic** auth as `email:token`, so
-`BITBUCKET_EMAIL` is required too — every call below uses
-`curl -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}"`. Sending an `ATATT…` token as
-`Authorization: Bearer` returns `401`. (A Bitbucket repository/workspace **Access Token** is the other
-valid credential type and does use `Bearer` with no email — substitute
-`-H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}"` if you use one.) App Passwords were removed
-2026-07-28.
+`BITBUCKET_ACCESS_TOKEN` may be **either** Bitbucket credential type, and the two use
+different schemes — so every call below builds `BB_AUTH` from the token itself instead of
+assuming one:
+
+- a repository/workspace **Access Token** (`ATCTT…`) → `Authorization: Bearer`, **no email**
+- an **Atlassian API token** (`ATATT…`, from https://id.atlassian.com/manage/api-tokens) →
+  Basic `email:token`, which also needs `BITBUCKET_EMAIL`
+
+```bash
+BB_AUTH=(-u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}")
+[[ "$BITBUCKET_ACCESS_TOKEN" == ATCTT* ]] && BB_AUTH=(-H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}")
+curl -s "${BB_AUTH[@]}" …
+```
+
+Sending either token the other way returns `401`. The scheme is keyed off the **token prefix**,
+not off whether `BITBUCKET_EMAIL` is set — it is commonly exported for other tooling, so
+"email present therefore Basic" picks the wrong scheme. The tokens configured for this
+workspace are `ATCTT…` access tokens, so the Bearer branch is the one that normally fires;
+hardcoding `-u` made every call `401` while the error blamed the opposite cause. App Passwords
+were removed 2026-07-28.
 
 Note that `GET …/pullrequests/[PR-ID]/diff` and `…/diffstat` both answer **302** to a signed URL, so
 they must be called with `curl -sL` — without `-L` the body comes back empty and the review would run on

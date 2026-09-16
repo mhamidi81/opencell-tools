@@ -1,0 +1,57 @@
+[
+  {
+    "update": {
+      "date": "2026-09-14T17:22:38.855120+00:00",
+      "state": "OPEN",
+      "draft": false
+    }
+  },
+  {
+    "update": {
+      "date": "2026-09-14T17:22:39.150301+00:00",
+      "state": "OPEN",
+      "draft": false
+    }
+  },
+  {
+    "update": {
+      "date": "2026-09-15T08:11:52.074709+00:00",
+      "state": "OPEN",
+      "changes": {
+        "draft": {
+          "old": false,
+          "new": true
+        }
+      },
+      "draft": true
+    }
+  },
+  {
+    "update": {
+      "date": "2026-09-15T09:08:12.575495+00:00",
+      "state": "OPEN",
+      "changes": {
+        "draft": {
+          "old": true,
+          "new": false
+        }
+      },
+      "draft": false
+    }
+  },
+  {
+    "approval": {
+      "date": "2026-09-15T09:08:45.365860+00:00"
+    }
+  },
+  {
+    "update": {
+      "date": "2026-09-15T09:13:28.345857+00:00",
+      "state": "MERGED",
+      "draft": false
+    }
+  },
+  {
+    "comment": {}
+  }
+]

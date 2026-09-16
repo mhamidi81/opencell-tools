@@ -46,7 +46,7 @@ skill/agent name (e.g. plugin `oc-fe-engineer` holds agent `oc-fe-engineer`).
 
 There are three kinds of plugins:
 
-1. **Skills & commands** — Slash commands users invoke directly: `/oc-cache-jira`, `/oc-commit`, `/oc-pull-request`, `/oc-review-pr`, `/oc-bug-clusters`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr`, `/oc-fe-create-ui`, `/oc-fe-write-tests`, `/oc-fe-create-e2e-test`, `/oc-fe-regression-test`, `/oc-fe-calculate-ai-use`, `/oc-ar-tech-design`, `/oc-be-implement`, `/oc-be-review`, the backend guide skills (`/oc-be-api-guide`, `/oc-be-db-guide`, `/oc-be-entity-guide`, `/oc-be-service-guide`), and the MCP skills (`/oc-figma`, `/oc-playwright`, `/oc-opencell`). Defined in `SKILL.md` files (or `commands/*.md` for `oc-be-tools`).
+1. **Skills & commands** — Slash commands users invoke directly: `/oc-cache-jira`, `/oc-commit`, `/oc-pull-request`, `/oc-review-pr`, `/oc-bug-clusters`, `/oc-pr-rejection-rate`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr`, `/oc-fe-create-ui`, `/oc-fe-write-tests`, `/oc-fe-create-e2e-test`, `/oc-fe-regression-test`, `/oc-fe-calculate-ai-use`, `/oc-ar-tech-design`, `/oc-be-implement`, `/oc-be-review`, the backend guide skills (`/oc-be-api-guide`, `/oc-be-db-guide`, `/oc-be-entity-guide`, `/oc-be-service-guide`), and the MCP skills (`/oc-figma`, `/oc-playwright`, `/oc-opencell`). Defined in `SKILL.md` files (or `commands/*.md` for `oc-be-tools`).
 2. **Sub-agents** — Specialized AI personas spawned by skills or the main agent: `oc-fe-engineer`, `oc-fe-reviewer`, `oc-fe-designer`, `oc-fe-test-writer`, `oc-fe-cypress-expert`, `oc-fe-e2e-expert`, and the backend agents `oc-be-entity-builder`, `oc-be-service-builder`, `oc-be-api-builder`, `oc-be-test-generator`, `oc-be-postman-generator`, `oc-be-pr-reviewer`. Defined in `.md` files under `agents/` with YAML frontmatter (`name`, `color`, `model`).
 3. **MCP Servers** — External service integrations configured in `plugin.json` under `mcpServers` (Figma, Playwright, Opencell, SonarQube, PostgreSQL), all under `plugins/mcp/`. **Atlassian is not one of them** — Jira/Confluence come from the official `atlassian` plugin in Anthropic's `claude-plugins-official` marketplace, which this repo does not vendor.
 
@@ -232,6 +232,47 @@ The two default Enabler assignees are pinned by `accountId` at the top of `SKILL
 Frontend `5ef5c13914f60e0ac1c9b049`, Backend `63369fa788ed2ebef97cddfb`. A handover is a
 one-line edit there.
 
+## PR rejection rate (`/oc-pr-rejection-rate`)
+
+`plugins/common/oc-pr-rejection-rate` reports, per repository and per period (default one
+week), the total pull requests, how many were rejected, and the rejection rate. Like
+`oc-bug-clusters` it ships **real Python files** under `skills/oc-pr-rejection-rate/scripts/`
+and a pytest suite:
+
+```bash
+python3 -m pytest plugins/common/oc-pr-rejection-rate/tests -q
+```
+
+Four things are not obvious from the code:
+
+- **Rejection is historical, not current state.** A reviewer who requests changes and
+  later approves clears the participant flag; a PR pushed back to draft and then fixed
+  reads as an ordinary ready PR. The rules are therefore evaluated against each PR's
+  **activity feed**, which costs one extra API call per PR. Rewriting this to read the PR
+  list alone would be faster and would silently undercount most rejections.
+- **A PR *opened* as a draft is not a rejection.** Only a **ready → draft** transition is
+  — which is what `/oc-review-pr` does at a review score of 6-7. Losing that distinction
+  turns every work-in-progress draft into a rejection.
+- **R3 declares how it was measured.** How Bitbucket represents a draft transition is
+  resolved at runtime into `activity` (exact), `current-flag` (approximate) or
+  `unavailable` (not measurable), and that mode appears in the Markdown, the HTML and the
+  CSV. Do not remove it: a re-drafted count of zero is meaningless without knowing which
+  mode produced it. The shapes are **verified against live Bitbucket**, not assumed:
+  `tests/fixtures/activity_drafted.json` pins a real re-drafted PR's feed, and Bitbucket
+  uses both forms in the same feed — `update.changes.draft` as `{"old","new"}` on the
+  flipping entry and a plain `update.draft` snapshot boolean elsewhere, always real JSON
+  booleans. Note each entry is `{"<kind>": {...}, "pull_request": {...}}` where the
+  `pull_request` sibling is metadata, comes *first*, and carries its own `draft` field —
+  read the event, not the first value that looks right.
+- **The window anchors on `created_on` and the reason columns overlap.** `--until` is
+  exclusive. A PR counts once in the rejected total but appears in every reason column
+  that applies, so the reason columns legitimately sum past it. A repository with no PRs
+  in the window reports `n/a`, never `0.0%`.
+
+It is **read-only** — no Bitbucket writes, no Jira writes — and uses the same
+`BITBUCKET_EMAIL` + `BITBUCKET_ACCESS_TOKEN` Basic auth as `/oc-review-pr`; see
+**Atlassian and Bitbucket Access**.
+
 ## MCP Servers Requiring Environment Variables
 
 All MCP plugins bundled here live under `plugins/mcp/`.
@@ -259,18 +300,35 @@ auth**, never over the OAuth flow the official plugin uses — an OAuth Rovo con
 Jira/Confluence/Compass tools and no `bitbucket*` tools at all. So every Bitbucket operation in
 `/oc-pull-request`, `/oc-review-pr` and `/oc-fe-fix-pr` uses REST `curl`.
 
-**Bitbucket REST auth — use Basic, not Bearer.** `BITBUCKET_ACCESS_TOKEN` holds an **Atlassian API
-token** (`ATATT…`, from https://id.atlassian.com/manage/api-tokens), which authenticates as
-`email:token` over **Basic** auth. Both variables are required:
+**Bitbucket REST auth — the scheme follows the token type, and both are in use.** Two credential
+types are valid and they are **not** interchangeable; sending either one the other way returns `401`:
+
+| Token | Scheme | Email |
+|---|---|---|
+| repository/workspace **Access Token** (`ATCTT…`) | `Authorization: Bearer` | not used |
+| **Atlassian API token** (`ATATT…`, id.atlassian.com/manage/api-tokens) | Basic `email:token` | required |
+
+Every Bitbucket call in this repo therefore selects the scheme from the token itself:
 
 ```bash
-curl -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" …     # correct
-curl -H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}" …  # 401 for ATATT… tokens
+BB_AUTH=(-u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}")
+[[ "$BITBUCKET_ACCESS_TOKEN" == ATCTT* ]] && BB_AUTH=(-H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}")
+curl -s "${BB_AUTH[@]}" …
 ```
 
-Bitbucket repository/workspace **Access Tokens** are the other valid credential type and *do* use
-`Bearer` with no email — but the tokens configured for this workspace are Atlassian API tokens, so the
-skills are written with `-u`. App Passwords were removed 2026-07-28.
+Three things this repo learned the hard way, verified live on 2026-09-16:
+
+- **The tokens actually configured for this workspace are `ATCTT…` access tokens**, not the `ATATT…`
+  API tokens this file used to claim. Skills written with a bare `curl -u` `401` on every call.
+- **Key the branch off the token prefix, never off whether `BITBUCKET_EMAIL` is set.** It is commonly
+  exported for other tooling, so "email present therefore Basic" picks the wrong scheme.
+- **Say both schemes in any `401` message.** A message asserting one cause sends the next reader in
+  precisely the wrong direction; that cost an hour here.
+
+`.bashrc` exports do **not** reach non-interactive shells — the usual `case $- in *i*) ;; *) return;;`
+guard returns before them, so a token that works in a terminal can be invisible to tooling.
+
+App Passwords were removed 2026-07-28.
 
 **The diff endpoints redirect.** `GET …/pullrequests/[PR-ID]/diff` **and** `…/diffstat` answer **302**
 to a signed URL; call both with `curl -sL`. Without `-L` the body is empty and a reviewer agent

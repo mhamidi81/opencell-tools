@@ -124,6 +124,11 @@
       "description": "Period-scoped bug clustering: classify the bugs created in a window onto a subject taxonomy, group subjects carrying at least 5 bugs, and optionally create one Jira Enabler per area with a Sub-task per cluster"
     },
     {
+      "name": "oc-pr-rejection-rate",
+      "source": "./plugins/common/oc-pr-rejection-rate",
+      "description": "Report the share of rejected pull requests on opencell-portal and opencell-core over a period, defaulting to the last seven days. A PR counts as rejected if it was declined, had changes requested at any point, or was pushed back from ready to draft - read from the Bitbucket activity feed, so a rejection that was later resolved is still counted. Prints Markdown and writes a date-stamped HTML + CSV to ./docs/. Read-only; reads Bitbucket via direct REST with BITBUCKET_EMAIL + BITBUCKET_ACCESS_TOKEN - no MCP."
+    },
+    {
       "name": "oc-figma-mcp",
       "source": "./plugins/mcp/oc-figma-mcp",
       "description": "Connect to Figma MCP server to extract design context, generate code from designs, and retrieve design tokens"

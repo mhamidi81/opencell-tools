@@ -29,12 +29,26 @@ export BITBUCKET_EMAIL="you@opencellsoft.com"
 export BITBUCKET_ACCESS_TOKEN="your-api-token"     # ATATT…
 ```
 
-> **Both variables are required.** An Atlassian API token (`ATATT…`) authenticates with **Basic**
-> auth as `email:token` — `curl -u "$BITBUCKET_EMAIL:$BITBUCKET_ACCESS_TOKEN"`. Sending it as
-> `Authorization: Bearer` returns `401`. (A Bitbucket repository/workspace **Access Token** is the
-> other valid credential type and *does* use `Bearer` without an email — if you use one of those,
-> swap the `-u` flag for `-H "Authorization: Bearer $BITBUCKET_ACCESS_TOKEN"`.) App Passwords were
-> removed 2026-07-28.
+`BITBUCKET_ACCESS_TOKEN` may be **either** Bitbucket credential type, and the two use
+different schemes — so every call below builds `BB_AUTH` from the token itself instead of
+assuming one:
+
+- a repository/workspace **Access Token** (`ATCTT…`) → `Authorization: Bearer`, **no email**
+- an **Atlassian API token** (`ATATT…`, from https://id.atlassian.com/manage/api-tokens) →
+  Basic `email:token`, which also needs `BITBUCKET_EMAIL`
+
+```bash
+BB_AUTH=(-u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}")
+[[ "$BITBUCKET_ACCESS_TOKEN" == ATCTT* ]] && BB_AUTH=(-H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}")
+curl -s "${BB_AUTH[@]}" …
+```
+
+Sending either token the other way returns `401`. The scheme is keyed off the **token prefix**,
+not off whether `BITBUCKET_EMAIL` is set — it is commonly exported for other tooling, so
+"email present therefore Basic" picks the wrong scheme. The tokens configured for this
+workspace are `ATCTT…` access tokens, so the Bearer branch is the one that normally fires;
+hardcoding `-u` made every call `401` while the error blamed the opposite cause. App Passwords
+were removed 2026-07-28.
 
 If the credentials are not set, the command will display a PR creation URL instead.
 
@@ -216,9 +230,14 @@ Bitbucket has no MCP tools available (see **Prerequisites**), so this is the aut
 `BITBUCKET_EMAIL` + `BITBUCKET_ACCESS_TOKEN`:
 
 ```bash
+# Auth scheme follows the token type (see Access). Repeated per block because
+# shell state does not persist between tool calls.
+BB_AUTH=(-u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}")
+[[ "$BITBUCKET_ACCESS_TOKEN" == ATCTT* ]] && BB_AUTH=(-H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}")
+
 curl -s -X POST \
   -H "Content-Type: application/json" \
-  -u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}" \
+  "${BB_AUTH[@]}" \
   "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests" \
   -d '{
     "title": "[PR-TITLE]",
