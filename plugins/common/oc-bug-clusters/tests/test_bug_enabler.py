@@ -25,12 +25,12 @@ def plan_for(**kwargs):
 # ------------------------------------------------------------------ marker label
 
 def test_marker_label_uses_the_area_token_not_the_component():
-    assert be.marker_label("portal", "2026-08-01", "2026-09-01") == \
-        "bug-clusters-portal-2026-08-01-2026-09-01"
+    assert be.marker_label("technical", "portal", "2026-08-01", "2026-09-01") == \
+        "bug-clusters-technical-portal-2026-08-01-2026-09-01"
 
 
 def test_marker_label_is_a_legal_jira_label():
-    label = be.marker_label("core", "2026-08-01", "2026-09-01")
+    label = be.marker_label("technical", "core", "2026-08-01", "2026-09-01")
     assert " " not in label and label.islower()
 
 
@@ -60,12 +60,12 @@ def test_enabler_carries_type_project_component_and_assignee():
 
 def test_enabler_summary_names_the_component_and_the_window():
     summary = plan_for()["areas"][0]["enabler"]["fields"]["summary"]
-    assert summary == "Bug clusters — Frontend — 2026-08-01 → 2026-09-01"
+    assert summary == "Bug clusters — Frontend — technical — 2026-08-01 → 2026-09-01"
 
 
 def test_enabler_carries_the_marker_label():
     fields = plan_for()["areas"][0]["enabler"]["fields"]
-    assert "bug-clusters-portal-2026-08-01-2026-09-01" in fields["labels"]
+    assert "bug-clusters-technical-portal-2026-08-01-2026-09-01" in fields["labels"]
 
 
 def test_enabler_description_mentions_the_clusters_and_the_report():
@@ -324,8 +324,9 @@ def test_apply_creates_the_enabler_then_its_subtasks():
     client = RecordingClient()
     be.apply_plan(client, plan_for(model=model_for(sizes=(("quoting", 6),))),
                   be.new_state())
-    assert created_issues(client) == ["Bug clusters — Frontend — 2026-08-01 → 2026-09-01",
-                                      "quoting — 6 bugs"]
+    assert created_issues(client) == [
+        "Bug clusters — Frontend — technical — 2026-08-01 → 2026-09-01",
+        "quoting — 6 bugs"]
 
 
 def test_subtask_is_given_the_enabler_as_its_parent():
@@ -411,7 +412,7 @@ def test_a_failed_link_is_warned_about_and_does_not_stop_the_run():
 
 
 def test_a_rejected_assignee_retries_the_create_unassigned():
-    summary = "Bug clusters — Frontend — 2026-08-01 → 2026-09-01"
+    summary = "Bug clusters — Frontend — technical — 2026-08-01 → 2026-09-01"
     client = RecordingClient(fail_on={
         summary: jc.JiraError("HTTP 400 on POST /rest/api/3/issue: "
                               '{"errors":{"assignee":"not permitted"}}')})
@@ -484,7 +485,8 @@ def test_empty_state_with_no_project_key_still_gets_stamped():
     assert result["project"] == "INTRD"
     assert result["markers"] == sorted(a["marker"] for a in plan_for()["areas"])
     assert created_issues(client) == [
-        "Bug clusters — Frontend — 2026-08-01 → 2026-09-01", "quoting — 6 bugs"]
+        "Bug clusters — Frontend — technical — 2026-08-01 → 2026-09-01",
+        "quoting — 6 bugs"]
 
 
 def test_apply_stamps_the_project_and_markers_onto_a_fresh_state():

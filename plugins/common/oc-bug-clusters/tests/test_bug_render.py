@@ -97,7 +97,7 @@ def test_markdown_covers_both_areas():
 
 def test_csv_starts_with_a_header_row():
     rows = bc.render_csv_rows(model_with())
-    assert rows[0] == ["key", "area", "component", "subject", "in_cluster",
+    assert rows[0] == ["key", "axis", "area", "component", "subject", "in_cluster",
                        "status", "created", "assignee", "labels", "summary", "url"]
 
 
@@ -111,21 +111,21 @@ def test_csv_marks_whether_a_bug_reached_a_cluster():
     bugs = (spread("A", "portal", 6, "quoting", assignments)
             + spread("B", "portal", 2, "rating", assignments))
     model = bc.build_model(document(bugs), assignments, min_cluster=5)
-    flags = {r[0]: r[4] for r in bc.render_csv_rows(model)[1:]}
+    flags = {r[0]: r[5] for r in bc.render_csv_rows(model)[1:]}
     assert flags["A-0"] == "yes" and flags["B-0"] == "no"
 
 
 def test_csv_leaves_an_unclassified_bug_without_a_subject():
     rows = bc.render_csv_rows(model_with(extra_bugs=[bug("U-1", None)]))
     row = next(r for r in rows if r[0] == "U-1")
-    assert row[1] == "" and row[3] == "" and row[4] == "no"
+    assert row[2] == "" and row[4] == "" and row[5] == "no"   # area, subject, in_cluster
 
 
 def test_csv_joins_labels_with_a_space():
     assignments = {"P-0": "quoting"}
     bugs = [bug("P-0", "portal", labels=["billing", "TNR"])]
     model = bc.build_model(document(bugs), assignments, min_cluster=5)
-    assert bc.render_csv_rows(model)[1][8] == "billing TNR"
+    assert bc.render_csv_rows(model)[1][9] == "billing TNR"
 
 
 # ------------------------------------------------------------------------ HTML

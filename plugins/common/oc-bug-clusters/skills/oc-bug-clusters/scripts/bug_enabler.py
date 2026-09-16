@@ -27,13 +27,18 @@ DEFAULT_ASSIGNEE = {
 LINK_TYPE = "Relates"
 
 
-def marker_label(area, since, until):
+def marker_label(axis, area, since, until):
     """The label that makes a re-run of the same window a no-op.
 
     Built from the area TOKEN (portal/core), never the component name, so the label
     matches the --repo value a user would type.
+
+    The AXIS is part of the identity: the same window legitimately yields two different
+    Enabler trees, one per axis. Without the axis here, a technical run over a window
+    already clustered functionally would match the existing marker and be skipped as a
+    duplicate — creating nothing and reporting success.
     """
-    return f"bug-clusters-{area}-{since}-{until}"
+    return f"bug-clusters-{axis}-{area}-{since}-{until}"
 
 
 # ------------------------------------------------------------------------- ADF
@@ -59,6 +64,7 @@ def adf_doc(blocks):
 def enabler_fields(project, area, model, assignee, report_path):
     window = model["window"]
     data = model["areas"][area]
+    axis = model.get("axis", "technical")
     overview = [
         f"{c['subject']} — {c['count']} bugs "
         f"({c['open']} open, {c['closed']} closed), "
@@ -68,15 +74,15 @@ def enabler_fields(project, area, model, assignee, report_path):
     return {
         "project": {"key": project},
         "issuetype": {"id": ENABLER_TYPE_ID},
-        "summary": (f"Bug clusters — {data['component']} — "
+        "summary": (f"Bug clusters — {data['component']} — {axis} — "
                     f"{window['since']} → {window['until']}"),
         "components": [{"name": data["component"]}],
         "assignee": {"id": assignee},
-        "labels": [marker_label(area, window["since"], window["until"])],
+        "labels": [marker_label(axis, area, window["since"], window["until"])],
         "description": adf_doc([
             adf_para(f"Bugs created {window['since']} → {window['until']} "
                      f"(exclusive) in {', '.join(model['projects'])}, "
-                     f"component {data['component']}."),
+                     f"component {data['component']}, grouped on the {axis} axis."),
             adf_para(f"{data['clustered_bugs']} of {data['bugs']} bugs fall into "
                      f"{len(data['clusters'])} cluster(s) of at least "
                      f"{model['min_cluster']} bugs on one subject."),
@@ -117,7 +123,8 @@ def build_plan(model, project, assignees, report_path):
         areas.append({
             "area": area,
             "component": data["component"],
-            "marker": marker_label(area, model["window"]["since"],
+            "marker": marker_label(model.get("axis", "technical"), area,
+                                   model["window"]["since"],
                                    model["window"]["until"]),
             "assignee": assignee,
             "enabler": {"fields": enabler_fields(project, area, model, assignee,

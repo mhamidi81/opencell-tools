@@ -5,6 +5,8 @@ a missing marketplace entry, and a directory name that disagrees with the plugin
 """
 import json
 import re
+
+import pytest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[4]
@@ -30,21 +32,31 @@ def test_skill_directory_name_matches_skill_name():
     assert (PLUGIN_DIR / "skills" / NAME).is_dir()
 
 
-def seeded_subjects():
-    text = (PLUGIN_DIR / "skills" / NAME / "references" / "subjects.md").read_text()
-    return re.findall(r"^## ([a-z0-9-]+)$", text, re.M)
+TAXONOMIES = ("functional-subjects.md", "technical-portal.md", "technical-core.md")
 
 
-def test_subjects_are_lower_kebab_and_unique():
-    subjects = seeded_subjects()
-    assert len(subjects) >= 15, "taxonomy too thin to classify against"
+def taxonomy_text(name):
+    return (PLUGIN_DIR / "skills" / NAME / "references" / name).read_text()
+
+
+def seeded_subjects(name="functional-subjects.md"):
+    return re.findall(r"^## ([a-z0-9-]+)$", taxonomy_text(name), re.M)
+
+
+@pytest.mark.parametrize("name,minimum", [("functional-subjects.md", 15),
+                                          ("technical-portal.md", 6),
+                                          ("technical-core.md", 6)])
+def test_subjects_are_lower_kebab_and_unique(name, minimum):
+    subjects = seeded_subjects(name)
+    assert len(subjects) >= minimum, f"{name} too thin to classify against"
     assert len(subjects) == len(set(subjects)), "duplicate subject heading"
     for s in subjects:
         assert re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", s), s
 
 
-def test_every_subject_has_a_description_line():
-    text = (PLUGIN_DIR / "skills" / NAME / "references" / "subjects.md").read_text()
+@pytest.mark.parametrize("name", TAXONOMIES)
+def test_every_subject_has_a_description_line(name):
+    text = taxonomy_text(name)
     for block in re.split(r"^## ", text, flags=re.M)[1:]:
         heading, _, body = block.partition("\n")
         assert body.strip(), f"subject '{heading}' has no description"

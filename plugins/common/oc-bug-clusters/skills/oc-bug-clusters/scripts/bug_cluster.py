@@ -36,9 +36,26 @@ class MissingAssignments(RuntimeError):
         super().__init__(f"no subject assigned for: {shown}{more}")
 
 
-def seeded_subjects(path):
-    with open(path, encoding="utf-8") as handle:
-        return SUBJECT_HEADING.findall(handle.read())
+DEFAULT_AXIS = "technical"
+AXES = ("technical", "functional")
+
+
+def seeded_subjects(paths):
+    """Read one taxonomy file, or merge several, preserving order and dropping repeats.
+
+    The technical axis ships one file per area, so a `--repo both` run reads two; the
+    functional axis ships a single shared file. Accepting either shape here keeps the
+    callers from branching.
+    """
+    if isinstance(paths, (str, bytes)) or hasattr(paths, "read_text"):
+        paths = [paths]
+    merged = []
+    for path in paths:
+        with open(path, encoding="utf-8") as handle:
+            for name in SUBJECT_HEADING.findall(handle.read()):
+                if name not in merged:
+                    merged.append(name)
+    return merged
 
 
 def _group(subject, bugs, seeded):
@@ -59,7 +76,7 @@ def _group(subject, bugs, seeded):
     }
 
 
-def build_model(document, assignments, min_cluster, seeded=()):
+def build_model(document, assignments, min_cluster, seeded=(), axis=DEFAULT_AXIS):
     bugs = document["bugs"]
     classifiable = [b for b in bugs if b["area"] is not None]
     missing = [b["key"] for b in classifiable if b["key"] not in assignments]
@@ -87,6 +104,7 @@ def build_model(document, assignments, min_cluster, seeded=()):
         }
 
     return {
+        "axis": axis,
         "window": document["window"],
         "projects": document["projects"],
         "repo": document["repo"],
@@ -106,6 +124,7 @@ def _window_line(model):
     w = model["window"]
     return (f"**{', '.join(model['projects'])}** · bugs created "
             f"`{w['since']}` → `{w['until']}` (exclusive) · "
+            f"**{model.get('axis', DEFAULT_AXIS)}** axis · "
             f"cluster threshold **{model['min_cluster']}**")
 
 
@@ -166,15 +185,17 @@ def render_markdown(model):
 
 # -------------------------------------------------------------------------- CSV
 
-CSV_HEADER = ["key", "area", "component", "subject", "in_cluster", "status",
+CSV_HEADER = ["key", "axis", "area", "component", "subject", "in_cluster", "status",
               "created", "assignee", "labels", "summary", "url"]
 
 
 def render_csv_rows(model):
     rows = [list(CSV_HEADER)]
 
+    axis = model.get("axis", DEFAULT_AXIS)
+
     def row(bug, area, subject, in_cluster):
-        return [bug["key"], area or "", bug["component"] or "", subject or "",
+        return [bug["key"], axis, area or "", bug["component"] or "", subject or "",
                 "yes" if in_cluster else "no", bug["status"] or "", bug["created"],
                 bug["assignee"] or "", " ".join(bug["labels"]), bug["summary"],
                 bug["url"]]
@@ -286,11 +307,12 @@ def _area_html(model, area, data):
 
 def render_html(model):
     w = model["window"]
-    title = f"Bug clusters {w['since']} → {w['until']}"
+    axis = model.get("axis", DEFAULT_AXIS)
+    title = f"Bug clusters — {axis} — {w['since']} → {w['until']}"
     areas = list(model["areas"].items())
 
     body = [f"<h1>{_e(title)}</h1>",
-            f'<p class="meta">{_e(", ".join(model["projects"]))} · threshold '
+            f'<p class="meta">{_e(", ".join(model["projects"]))} · {_e(axis)} axis · threshold '
             f'{model["min_cluster"]} · fetched {model["fetched"]} · dropped '
             f'{model["dropped_invalid"]} rejected · kept {model["kept"]} · generated '
             f'{_e(date.today().isoformat())}</p>']
@@ -330,7 +352,10 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Cluster classified bugs and report.")
     parser.add_argument("--bugs", required=True)
     parser.add_argument("--assignments", required=True)
-    parser.add_argument("--subjects", required=True)
+    parser.add_argument("--subjects", required=True, action="append",
+                        help="taxonomy file; repeat for the technical axis, which "
+                             "ships one file per area")
+    parser.add_argument("--axis", default=DEFAULT_AXIS, choices=list(AXES))
     parser.add_argument("--min-cluster", type=int, default=5)
     parser.add_argument("--out", required=True)
     parser.add_argument("--csv", required=True)
@@ -344,7 +369,7 @@ def main(argv=None):
 
     try:
         model = build_model(document, assignments, args.min_cluster,
-                            seeded_subjects(args.subjects))
+                            seeded_subjects(args.subjects), axis=args.axis)
     except MissingAssignments as ex:
         sys.stderr.write(f"{ex}\nClassify these and re-run.\n")
         return 2

@@ -185,7 +185,12 @@ and `/oc-time-report`.
 ## Bug clustering (`/oc-bug-clusters`)
 
 `plugins/common/oc-bug-clusters` groups a period's bugs by subject and can turn each
-cluster into Jira work. Unlike the other common plugins it ships **real Python files**
+cluster into Jira work. It has **two axes**: `--axis technical` (the **default**) groups by
+the source of the defect (`ag-grid`, `dto-mapping`, `transactions`) using one taxonomy per
+area, and `--axis functional` groups by product area (`quoting`, `invoicing`) using a single
+shared taxonomy. Both views are useful and neither replaces the other.
+
+Unlike the other common plugins it ships **real Python files**
 under `skills/oc-bug-clusters/scripts/` (invoked via `${CLAUDE_PLUGIN_ROOT}`, the same
 shape `oc-fn-tools` uses for `pptx/`) rather than embedding them in the Markdown, and it
 carries a pytest suite in `plugins/common/oc-bug-clusters/tests/`:
@@ -194,16 +199,19 @@ carries a pytest suite in `plugins/common/oc-bug-clusters/tests/`:
 python3 -m pytest plugins/common/oc-bug-clusters/tests -q
 ```
 
-Four constraints are not obvious from the code:
+Five constraints are not obvious from the code:
 
+- **The default axis is `technical`.** A bare `/oc-bug-clusters` groups by source of
+  defect, not by product area. The functional view costs a flag, so say so when reporting.
 - **Area is deterministic, subject is not.** `portal`/`core` is resolved in Python from
   the Jira component, with a **leading** `[front]`/`[back]` summary tag as fallback. It
   decides which Enabler a bug lands under, so it must never become an LLM judgement —
   the same window would produce a different split on every run.
-- **The marker label is the duplicate guard.** Every Enabler carries
-  `bug-clusters-<area-token>-<since>-<until>` and it is searched before any write. The
-  `created.json` state file only makes a resume cheaper; the *label* is what makes a
-  re-run safe, so never drop it from the payload.
+- **The marker label is the duplicate guard, and the axis is part of its identity.** Every
+  Enabler carries `bug-clusters-<axis>-<area-token>-<since>-<until>`, searched before any
+  write. Drop the axis and a technical run over a window already clustered functionally is
+  silently skipped as a duplicate. The `created.json` state file only makes a resume
+  cheaper; the *label* is what makes a re-run safe.
 - **The area token and the Jira component are two vocabularies.** `portal`/`core` is
   what `--repo` takes and what keys the label; `Frontend`/`Backend` is what goes on the
   issue. Mixing them silently breaks idempotency, because the label stops matching.
@@ -213,6 +221,12 @@ Four constraints are not obvious from the code:
   and `issuetype in (Bug, Sub-bug)` both return 133 for the same window. Keep the quotes —
   they cost nothing and other Jira versions may differ — but do not treat the claim as
   verified, and do not build anything on it.
+
+The three taxonomies live in `skills/oc-bug-clusters/references/` —
+`functional-subjects.md` (22 product areas, shared) and `technical-portal.md` /
+`technical-core.md` (10 each, per area). The two technical vocabularies must **not share a
+subject name**, or a cluster becomes ambiguous about which area produced it; a test asserts
+this.
 
 The two default Enabler assignees are pinned by `accountId` at the top of `SKILL.md` —
 Frontend `5ef5c13914f60e0ac1c9b049`, Backend `63369fa788ed2ebef97cddfb`. A handover is a

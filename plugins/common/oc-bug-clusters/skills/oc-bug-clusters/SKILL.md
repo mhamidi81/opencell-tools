@@ -1,7 +1,7 @@
 ---
 name: oc-bug-clusters
-description: Analyse the bugs created over a period, classify each onto a seeded subject taxonomy, and group any subject carrying at least 5 bugs into a cluster. Area (portal/core) comes from the Jira component with a [front]/[back] summary-tag fallback and is fully deterministic; the subject is the only LLM judgement. Prints Markdown and writes a date-stamped HTML + CSV to ./docs/. With --create-enabler it creates one Enabler per area (Frontend assigned to Mohamed Hamidi, Backend to Adil El Jaouhari) holding one Sub-task per cluster with the cluster's bugs linked - confirmed before writing, idempotent via a marker label, and resumable. Fetches Jira via direct Cloud REST with a mandatory JIRA_API_TOKEN - no Atlassian MCP.
-argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--repo portal|core|both] [--create-enabler] [--min-cluster N] [--project KEY] [--assignee-portal ID] [--assignee-core ID] [--out PATH] [--csv PATH] [--force]"
+description: Analyse the bugs created over a period, classify each onto a seeded subject taxonomy on one of two axes - technical (default: the source of the defect, e.g. ag-grid, dto-mapping) or functional (the product area, e.g. quoting, invoicing) -, and group any subject carrying at least 5 bugs into a cluster. Area (portal/core) comes from the Jira component with a [front]/[back] summary-tag fallback and is fully deterministic; the subject is the only LLM judgement. Prints Markdown and writes a date-stamped HTML + CSV to ./docs/. With --create-enabler it creates one Enabler per area (Frontend assigned to Mohamed Hamidi, Backend to Adil El Jaouhari) holding one Sub-task per cluster with the cluster's bugs linked - confirmed before writing, idempotent via a marker label, and resumable. Fetches Jira via direct Cloud REST with a mandatory JIRA_API_TOKEN - no Atlassian MCP.
+argument-hint: "[--axis technical|functional] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--repo portal|core|both] [--create-enabler] [--min-cluster N] [--project KEY] [--assignee-portal ID] [--assignee-core ID] [--out PATH] [--csv PATH] [--force]"
 ---
 
 ## Purpose
@@ -11,6 +11,13 @@ request — into scheduled work: one **Enabler per area**, each holding one **Su
 per cluster**, with the cluster's bugs linked to it.
 
 A cluster is **at least `--min-cluster` (default 5) bugs on the same subject**.
+
+**Two axes, and both are useful.** `--axis technical` (the default) groups by the *source*
+of the defect — `ag-grid`, `dto-mapping`, `transactions` — which is what tells you where to
+invest engineering effort. `--axis functional` groups by *product area* — `quoting`,
+`invoicing` — which is what tells you which feature is hurting users. The same window
+legitimately produces two different reports and two different Enabler trees. Neither
+replaces the other; mention the other axis when you present a report.
 
 Two properties are worth knowing before changing anything here:
 
@@ -40,6 +47,7 @@ days** of **portal** bugs in **INTRD** and only reports.
 
 | Argument | Default | Meaning |
 |---|---|---|
+| `--axis` | `technical` | `technical` groups by the source of the defect (`references/technical-portal.md`, `references/technical-core.md`); `functional` groups by product area (`references/functional-subjects.md`) |
 | `--since` | 30 days before `--until` | Start of the window, inclusive, on `created` |
 | `--until` | tomorrow | End of the window, **exclusive** — so today's bugs count, and `--since 2026-08-01 --until 2026-09-01` is exactly August |
 | `--repo` | `portal` | `portal` → component `Frontend`; `core` → `Backend`; `both` → each area clustered separately, one Enabler each |
@@ -48,21 +56,21 @@ days** of **portal** bugs in **INTRD** and only reports.
 | `--project` | `INTRD` | Portal *and* core both live in INTRD. `MACRD` is MACO — a different codebase, out of scope here |
 | `--assignee-portal` | `5ef5c13914f60e0ac1c9b049` | Frontend Enabler assignee (Mohamed Hamidi). Accepts an accountId or an email |
 | `--assignee-core` | `63369fa788ed2ebef97cddfb` | Backend Enabler assignee (Adil El Jaouhari). Same forms |
-| `--out` | `./docs/bug-clusters-<TODAY>.html` | HTML report |
-| `--csv` | `./docs/bug-clusters-<TODAY>.csv` | One row per bug |
+| `--out` | `./docs/bug-clusters-<AXIS>-<TODAY>.html` | HTML report |
+| `--csv` | `./docs/bug-clusters-<AXIS>-<TODAY>.csv` | One row per bug, with an `axis` column |
 | `--force` | off | Create a second Enabler for a window that already has one |
 
-`<TODAY>` is `date -u +%Y-%m-%d`. Compute missing dates with
+`<TODAY>` is `date -u +%Y-%m-%d`; `<AXIS>` is the resolved `--axis`. Compute missing dates with
 `date -u -d '30 days ago' +%Y-%m-%d`.
 
 **Echo the resolved window before doing any work**, e.g.
-`Analysing INTRD bugs, portal, 2026-08-16 → 2026-09-16`.
+`Analysing INTRD bugs, portal, technical axis, 2026-08-16 → 2026-09-16`.
 
 ## Task 1 — Fetch and area-tag
 
 ```bash
 S="${CLAUDE_PLUGIN_ROOT}/skills/oc-bug-clusters"
-RUN="${TMPDIR:-/tmp}/oc-bug-clusters/[PROJECT]_[REPO]_[SINCE]_[UNTIL]"
+RUN="${TMPDIR:-/tmp}/oc-bug-clusters/[PROJECT]_[REPO]_[AXIS]_[SINCE]_[UNTIL]"
 mkdir -p "$RUN"
 
 python3 "$S/scripts/bug_fetch.py" --since [SINCE] --until [UNTIL] \
@@ -81,7 +89,12 @@ next script. If it reports 0 bugs, say
 
 **This is the only step you perform yourself.**
 
-1. Read `$S/references/subjects.md`. Its `## <name>` headings are the vocabulary.
+1. Read the taxonomy for the chosen axis. Its `## <name>` headings are the vocabulary.
+   - `--axis technical` (default): `$S/references/technical-portal.md` for portal bugs and
+     `$S/references/technical-core.md` for core bugs. With `--repo both` you read **both**
+     and classify each bug against the file for its own area — the two vocabularies do not
+     overlap, so a portal bug never gets a core subject.
+   - `--axis functional`: `$S/references/functional-subjects.md`, one shared file.
 2. Read `$RUN/classify_input.jsonl` — one bug per line: `key`, `summary`, `excerpt`,
    `component`, `labels`. Process it in batches of **at most 60 lines**.
 3. Write `$RUN/assignments.json`: a flat object `{"INTRD-47162": "rating", …}` covering
@@ -96,9 +109,14 @@ Rules:
   coined subject can never be too small to be one. Report any new subject to the user
   at the end so `subjects.md` can be updated.
 - Names are **lower-kebab-case**.
-- Classify by what the bug is **about** — the product area it lives in — **never by its
-  symptom**. `quoting`, not `blank-screen`. A crash in the quote screen is `quoting`;
-  a crash caused by a slow query that times out everywhere is `performance`.
+- **On the `functional` axis**, classify by what the bug is **about** — the product area it
+  lives in — **never by its symptom**. `quoting`, not `blank-screen`. A crash in the quote
+  screen is `quoting`; a crash caused by a slow query that times out everywhere is
+  `performance`.
+- **On the `technical` axis**, classify by the **mechanism that produced the defect**, not
+  the screen or feature it surfaced in. A broken quote grid is `ag-grid`, not `quoting`. A
+  wrong invoice total caused by a copy constructor dropping a field is `dto-mapping`, not
+  `invoicing`. Ask "what would an engineer have to fix?", not "where did the user see it?".
 - **Do not trust the reporter's tag.** `[NEW UI]` and `[Quote New UI]` are the same
   subject; `[15.X]` is a version, not a subject.
 
@@ -106,12 +124,20 @@ Rules:
 
 ```bash
 python3 "$S/scripts/bug_cluster.py" --bugs "$RUN/bugs.json" \
-  --assignments "$RUN/assignments.json" --subjects "$S/references/subjects.md" \
+  --assignments "$RUN/assignments.json" --axis [AXIS] \
+  --subjects "$S/references/technical-portal.md" \
+  --subjects "$S/references/technical-core.md" \
   --min-cluster [MIN] --out [OUT] --csv [CSV] --model "$RUN/model.json"
 ```
 
+`--subjects` is **repeatable**. Pass the taxonomies for the axis and the areas in scope:
+both technical files for `--repo both --axis technical`, the single matching one for a
+single area, or `--subjects "$S/references/functional-subjects.md"` for the functional axis.
+
 It prints the Markdown report to stdout — relay it. Then tell the user where the HTML
-and CSV landed, and name any **new subject** you coined.
+and CSV landed, and name any **new subject** you coined. Say which axis produced the report, and remind the
+user the other axis exists — `--axis functional` for the product-area view, `--axis
+technical` for the source-of-defect view.
 
 Stop here unless `--create-enabler` was passed.
 
