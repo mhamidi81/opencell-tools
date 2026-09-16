@@ -46,7 +46,7 @@ skill/agent name (e.g. plugin `oc-fe-engineer` holds agent `oc-fe-engineer`).
 
 There are three kinds of plugins:
 
-1. **Skills & commands** — Slash commands users invoke directly: `/oc-cache-jira`, `/oc-commit`, `/oc-pull-request`, `/oc-review-pr`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr`, `/oc-fe-create-ui`, `/oc-fe-write-tests`, `/oc-fe-create-e2e-test`, `/oc-fe-regression-test`, `/oc-fe-calculate-ai-use`, `/oc-ar-tech-design`, `/oc-be-implement`, `/oc-be-review`, the backend guide skills (`/oc-be-api-guide`, `/oc-be-db-guide`, `/oc-be-entity-guide`, `/oc-be-service-guide`), and the MCP skills (`/oc-figma`, `/oc-playwright`, `/oc-opencell`). Defined in `SKILL.md` files (or `commands/*.md` for `oc-be-tools`).
+1. **Skills & commands** — Slash commands users invoke directly: `/oc-cache-jira`, `/oc-commit`, `/oc-pull-request`, `/oc-review-pr`, `/oc-bug-clusters`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr`, `/oc-fe-create-ui`, `/oc-fe-write-tests`, `/oc-fe-create-e2e-test`, `/oc-fe-regression-test`, `/oc-fe-calculate-ai-use`, `/oc-ar-tech-design`, `/oc-be-implement`, `/oc-be-review`, the backend guide skills (`/oc-be-api-guide`, `/oc-be-db-guide`, `/oc-be-entity-guide`, `/oc-be-service-guide`), and the MCP skills (`/oc-figma`, `/oc-playwright`, `/oc-opencell`). Defined in `SKILL.md` files (or `commands/*.md` for `oc-be-tools`).
 2. **Sub-agents** — Specialized AI personas spawned by skills or the main agent: `oc-fe-engineer`, `oc-fe-reviewer`, `oc-fe-designer`, `oc-fe-test-writer`, `oc-fe-cypress-expert`, `oc-fe-e2e-expert`, and the backend agents `oc-be-entity-builder`, `oc-be-service-builder`, `oc-be-api-builder`, `oc-be-test-generator`, `oc-be-postman-generator`, `oc-be-pr-reviewer`. Defined in `.md` files under `agents/` with YAML frontmatter (`name`, `color`, `model`).
 3. **MCP Servers** — External service integrations configured in `plugin.json` under `mcpServers` (Figma, Playwright, Opencell, SonarQube, PostgreSQL), all under `plugins/mcp/`. **Atlassian is not one of them** — Jira/Confluence come from the official `atlassian` plugin in Anthropic's `claude-plugins-official` marketplace, which this repo does not vendor.
 
@@ -181,6 +181,56 @@ paths, categories and which review command applies. Both projects are in scope f
 and `/oc-time-report`.
 
 **Identical across backend, frontend and QA:** the field (`customfield_10745`), the schema (`opencell.ai-usage/v1`), and the record key layout (`<domain>/<accountId>/<name>`, upserted by the `<domain>/<accountId>/` prefix, latest-only). Only the `domain` value, the `cat` sub-keys, the artifact-count keys and the tag names differ. One reporting tool reads every team's data from that one field — do not diverge from the shared parts.
+
+## Bug clustering (`/oc-bug-clusters`)
+
+`plugins/common/oc-bug-clusters` groups a period's bugs by subject and can turn each
+cluster into Jira work. It has **two axes**: `--axis technical` (the **default**) groups by
+the source of the defect (`ag-grid`, `dto-mapping`, `transactions`) using one taxonomy per
+area, and `--axis functional` groups by product area (`quoting`, `invoicing`) using a single
+shared taxonomy. Both views are useful and neither replaces the other.
+
+Unlike the other common plugins it ships **real Python files**
+under `skills/oc-bug-clusters/scripts/` (invoked via `${CLAUDE_PLUGIN_ROOT}`, the same
+shape `oc-fn-tools` uses for `pptx/`) rather than embedding them in the Markdown, and it
+carries a pytest suite in `plugins/common/oc-bug-clusters/tests/`:
+
+```bash
+python3 -m pytest plugins/common/oc-bug-clusters/tests -q
+```
+
+Five constraints are not obvious from the code:
+
+- **The default axis is `technical`.** A bare `/oc-bug-clusters` groups by source of
+  defect, not by product area. The functional view costs a flag, so say so when reporting.
+- **Area is deterministic, subject is not.** `portal`/`core` is resolved in Python from
+  the Jira component, with a **leading** `[front]`/`[back]` summary tag as fallback. It
+  decides which Enabler a bug lands under, so it must never become an LLM judgement —
+  the same window would produce a different split on every run.
+- **The marker label is the duplicate guard, and the axis is part of its identity.** Every
+  Enabler carries `bug-clusters-<axis>-<area-token>-<since>-<until>`, searched before any
+  write. Drop the axis and a technical run over a window already clustered functionally is
+  silently skipped as a duplicate. The `created.json` state file only makes a resume
+  cheaper; the *label* is what makes a re-run safe.
+- **The area token and the Jira component are two vocabularies.** `portal`/`core` is
+  what `--repo` takes and what keys the label; `Frontend`/`Backend` is what goes on the
+  issue. Mixing them silently breaks idempotency, because the label stops matching.
+- **`Sub-bug` is quoted in JQL defensively, not because it is known to be required.**
+  The commonly-cited "an unquoted hyphenated issue type silently undercounts" was
+  **tested against this instance and did not reproduce**: `issuetype in (Bug, "Sub-bug")`
+  and `issuetype in (Bug, Sub-bug)` both return 133 for the same window. Keep the quotes —
+  they cost nothing and other Jira versions may differ — but do not treat the claim as
+  verified, and do not build anything on it.
+
+The three taxonomies live in `skills/oc-bug-clusters/references/` —
+`functional-subjects.md` (22 product areas, shared) and `technical-portal.md` /
+`technical-core.md` (10 each, per area). The two technical vocabularies must **not share a
+subject name**, or a cluster becomes ambiguous about which area produced it; a test asserts
+this.
+
+The two default Enabler assignees are pinned by `accountId` at the top of `SKILL.md` —
+Frontend `5ef5c13914f60e0ac1c9b049`, Backend `63369fa788ed2ebef97cddfb`. A handover is a
+one-line edit there.
 
 ## MCP Servers Requiring Environment Variables
 
