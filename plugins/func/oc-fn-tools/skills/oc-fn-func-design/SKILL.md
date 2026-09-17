@@ -1,7 +1,7 @@
 ---
 name: oc-fn-func-design
-version: 1.31.0
-updated: 2026-09-14T12:20:00+02:00
+version: 1.33.0
+updated: 2026-09-17T13:02:56+02:00
 author: Stéphane Chambrin
 description: >
   Rules and reference data for working with Jira issues in the Opencell INTRD project
@@ -66,6 +66,15 @@ The Atlassian **Rovo MCP** is the **baseline transport that always works** — i
 | Edits guarded by the inline-media safety rule (below) | **Rovo MCP** |
 
 **Default to the `jira` helper when it is installed; otherwise use the Rovo MCP for every row.**
+
+**Atlassian's own `twg` CLI is a third transport, but only for two operations** — reading the
+*edit-only* custom fields (`twg jira workitem field update-metadata --id KEY`, the only way to list
+`customfield_10134`–`10137`, which `jira meta` cannot show because it reads the create screen) and
+posting a **rich Markdown comment** (`twg jira workitem comment create … --body-format markdown`,
+which converts to ADF client-side where `jira comment` is plain-text only). Everything else stays on
+the two transports above: `twg` is 7–12× more verbose on reads, and **`twg jira workitem create`
+silently drops fields absent from `createmeta` while returning `{"success": true}`** — never use it
+for a create. Measurements, scopes and the full trap: `rest-api.md` § *The `twg` CLI*.
 
 **A rich ADF body does not force you onto the MCP.** `jira raw` posts one from a file, so the blob never enters the context at all — recipe in `rest-api.md`. This holds for `customfield_10134`–`10137` too: direct REST writes ADF to all four correctly (verified across nine Stories plus a template rewrite, with formatting confirmed via `expand=renderedFields`). Because these payloads are large — ~330 KB of ADF across seven Stories — **REST is the preferred transport for bulk Story creation**: the MCP injects whole responses into context, while a generated `@file` payload never enters it. Only **edits guarded by the inline-media safety rule** stay on the MCP.
 
