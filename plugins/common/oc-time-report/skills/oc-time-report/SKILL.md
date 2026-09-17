@@ -519,7 +519,10 @@ def md_totals_lines(rows):
                    f"{round(g['logged'] + g['subBug'],1)} | {round(g['logged'],1)} | {round(g['subBug'],1)} | {g['ai']}/{g['tickets']} | "
                    f"{gain_two(g['aEst'], g['logged'], g['subBug'])} | {gain_two(g['dlEst'], g['logged'], g['subBug'])} | {g['bugs']} |")
     out.append(f"| Architect/PR/mgmt | – | – | – | {archpr_tot} | {archpr_tot} | – | – | – | – | – |")
-    out.append(f"| **Total** | | | | **{grand_log}** | **{grand_log}** | | | | | |")
+    t_aest = round(sum(tot[ar]["aEst"] for ar in AREAS), 1); t_dlest = round(sum(tot[ar]["dlEst"] for ar in AREAS), 1)
+    t_sub = round(sum(tot[ar]["subBug"] for ar in AREAS), 1); t_bugs = sum(tot[ar]["bugs"] for ar in AREAS)
+    grand_dev = round(grand_log + t_sub, 1)   # Total dev h = all logged (areas + Arch/PR) + all sub-bug
+    out.append(f"| **Total** | | {t_aest} | {t_dlest} | **{grand_dev}** | **{grand_log}** | {t_sub} | | | | {t_bugs} |")
     return out
 
 def html_totals_table(rows):
@@ -539,8 +542,13 @@ def html_totals_table(rows):
     h.append(f"<tr><td class='name'>Architect/PR/mgmt</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td>"
              f"<td class='r'>{archpr_tot}</td><td class='r'>{archpr_tot}</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td>"
              f"<td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td></tr>")
-    h.append(f"<tr class='tot'><td class='name'>Total</td><td></td><td></td><td></td>"
-             f"<td class='r'>{grand_log}</td><td class='r'>{grand_log}</td><td></td><td></td><td></td><td></td><td></td></tr>")
+    t_aest = round(sum(tot[ar]["aEst"] for ar in AREAS), 1); t_dlest = round(sum(tot[ar]["dlEst"] for ar in AREAS), 1)
+    t_sub = round(sum(tot[ar]["subBug"] for ar in AREAS), 1); t_bugs = sum(tot[ar]["bugs"] for ar in AREAS)
+    grand_dev = round(grand_log + t_sub, 1)   # Total dev h = all logged (areas + Arch/PR) + all sub-bug
+    h.append(f"<tr class='tot'><td class='name'>Total</td><td></td>"
+             f"<td class='r'>{t_aest}</td><td class='r'>{t_dlest}</td>"
+             f"<td class='r'>{grand_dev}</td><td class='r'>{grand_log}</td><td class='r'>{t_sub}</td>"
+             f"<td></td><td></td><td></td><td class='r'>{t_bugs}</td></tr>")
     h.append("</tbody></table></div>")
     return "".join(h)
 
@@ -585,12 +593,13 @@ def html_report_body(rs):
     by month) for a subset of rows — used inside each tab panel."""
     if not rs:
         return '<p class="dim" style="padding:1rem">No tickets of this type in this window.</p>'
-    _, _, grand = area_totals(rs)
+    tot_, _, grand = area_totals(rs)
+    _tsub = round(sum(tot_[ar]["subBug"] for ar in AREAS), 1)
     ms = months_of(rs)
     h = []; w = h.append
     w("<h2>Totals by area</h2>")
     w(html_totals_table(rs))
-    w(f'<p class="meta"><b>Total logged across all groups:</b> {grand} h</p>')
+    w(f'<p class="meta"><b>Total across all groups:</b> {grand} h logged + {_tsub} h sub-bug = <b>{round(grand + _tsub, 1)} h</b> total dev</p>')
     w('<p class="bm">By month</p>')
     for i, m in enumerate(ms):
         mr = [r for r in rs if r["month"] == m]; op = " open" if i == 0 else ""
@@ -820,7 +829,8 @@ def main():
     wdates = json.load(open(a.dates, encoding="utf-8")) if a.dates and os.path.exists(a.dates) else {}
     ns = nodes(json.load(open(a.issues, encoding="utf-8")))
     rows = build_ticket_rows(ns, tempo, devmap, a.project, wdates)
-    _, _, grand_log = area_totals(rows)
+    tot_all, _, grand_log = area_totals(rows)
+    _tsub = round(sum(tot_all[ar]["subBug"] for ar in AREAS), 1)
     mons = months_of(rows)
 
     # ---------- Markdown (per-area totals overall + by month; per-ticket grouped by month) ----------
@@ -831,7 +841,7 @@ def main():
     else:
         P("## Totals by area\n")
         for ln in md_totals_lines(rows): P(ln)
-        P(f"\n**Total logged across all groups:** {grand_log} h\n")
+        P(f"\n**Total across all groups:** {grand_log} h logged + {_tsub} h sub-bug = **{round(grand_log + _tsub, 1)} h** total dev\n")
         P("> **AI-assisted** = AI-assisted tickets / total tickets for the area — how many of the area's tickets carry an "
           "AI-metrics record (the ticket, or a same-area sub-task, records AI usage), out of all the area's tickets.\n")
         P("### Totals by area — by month\n")
