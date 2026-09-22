@@ -173,7 +173,7 @@ How would you like to proceed?
 
   > Committing with score X/10 and N unresolved critical issue(s). `/oc-review-pr` runs the same rubric
   > on the same code, so expect the same score — and it acts on it automatically: **8-10 leaves the PR
-  > open, 6-7 marks it Draft, 1-5 declines it.**
+  > open, 1-7 marks it Draft.** (A review never declines a PR; a draft is undone with *Mark as ready*.)
 
 - If user chooses **"Review details"**: Show the full detailed review, then ask again
 

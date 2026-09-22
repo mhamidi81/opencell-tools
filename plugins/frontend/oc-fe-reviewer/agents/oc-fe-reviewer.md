@@ -275,7 +275,7 @@ Then apply the ceiling that keeps the number consistent with the recommended act
   already land at 6 or below on their own.)
 
 The result is an **integer 1–10**. Never a range, never "N/A", never a half point — callers act on this
-number automatically (`/oc-review-pr` leaves 8–10 open, drafts 6–7, and declines 1–5).
+number automatically (`/oc-review-pr` leaves 8–10 open and marks 1–7 as Draft; it never declines a PR).
 
 ### Step 4 — show your work
 

@@ -18,8 +18,8 @@ reason column that applies:
    reviewer who requests changes and later approves clears the flag, but the PR was
    still sent back.
 3. **Re-drafted** — the PR moved ready → draft at least once. `/oc-review-pr` does this
-   at a review score of 6-7. A PR **opened** as a draft is ordinary work in progress and
-   is **not** a rejection.
+   at a review score of 1-7 (it never declines, so this is the only rejection it produces).
+   A PR **opened** as a draft is ordinary work in progress and is **not** a rejection.
 
 This command is **read-only**. It writes nothing to Bitbucket and nothing to Jira. It
 needs no git checkout and runs from any directory.
