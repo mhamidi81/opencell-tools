@@ -23,7 +23,7 @@ Fixed columns per row: **Ticket · Date · Type · Title · Status · Final**. T
 
 Output: a compact **Markdown** printout (Totals by area overall + by month, then a condensed per-ticket table grouped by month), plus a styled **HTML** file (the full wide per-area matrix, with the report split into **five tabs** — All · User Stories (All) · User Stories (Final) · Bugs (Final) · Bugs and Others — each showing Totals-by-area overall + expandable per-month, and the per-ticket matrix grouped by month) and a **CSV** (the full matrix flattened), all date-stamped in `./docs/`. Users/developers are ordered **by area, then name**.
 
-**Second report — finished-US per-developer summary.** The same run also writes `time-report-<TODAY>-us-summary.html` and `…-us-summary.csv` (derived from `--out`/`--csv` by inserting `-us-summary`). It considers **only User Stories in a final status**, credited to **each area's main developer** (up to three per US). The HTML has **two tabs**: **By month** (date → user: overall AI-true / AI-false tables plus an expandable per-month block) and **By developer** (user → date: each developer, ordered by area then name, expands to two month-by-month tables — AI-assisted true / false — of their finished US). Dev-table columns: **Developer · Area · US (final) · Avg sub-bugs / US · Sum A. Est h · Sum logged h · Sum sub-bug h · Sum total h · Gain (with sub-bugs) · Gain (no sub-bugs)**, each ending with a **Total** row (**Avg sub-bugs / US = total sub-bugs ÷ total US**). The CSV carries a leading **Month** and **AI assisted** column.
+**Second report — finished-US per-developer summary.** The same run also writes `time-report-<TODAY>-<SINCE>-<UNTIL>-us-summary.html` and `…-us-summary.csv` (derived from `--out`/`--csv` by inserting `-us-summary`). It considers **only User Stories in a final status**, credited to **each area's main developer** (up to three per US). The HTML has **two tabs**: **By month** (date → user: overall AI-true / AI-false tables plus an expandable per-month block) and **By developer** (user → date: each developer, ordered by area then name, expands to two month-by-month tables — AI-assisted true / false — of their finished US). Dev-table columns: **Developer · Area · US (final) · Avg sub-bugs / US · Sum A. Est d · Sum logged d · Sum sub-bug d · Sum total d · Gain (with sub-bugs) · Gain (no sub-bugs)** (hour sums shown in days, 1 d = 8 h), each ending with a **Total** row (**Avg sub-bugs / US = total sub-bugs ÷ total US**). The CSV carries a leading **Month** and **AI assisted** column.
 
 ## Access
 
@@ -39,8 +39,8 @@ Parse `$ARGUMENTS` — all optional. Bare `/oc-time-report` = **last 30 days**, 
 - `--since YYYY-MM-DD` — start (inclusive). Default: 30 days before `--until`.
 - `--until YYYY-MM-DD` — end (exclusive). Default: tomorrow.
 - `--project KEY[,KEY...]` — Jira project(s), comma-separated. Default `INTRD,MACRD` — backend work is raised in `INTRD` (core *and* overlay) and in `MACRD` (MACO R&D / overlay).
-- `--out PATH` — HTML output. Default `./docs/time-report-<TODAY>.html`.
-- `--csv PATH` — CSV output. Default `./docs/time-report-<TODAY>.csv`.
+- `--out PATH` — HTML output. Default `./docs/time-report-<TODAY>-<SINCE>-<UNTIL>.html` (run date, then window start and end).
+- `--csv PATH` — CSV output. Default `./docs/time-report-<TODAY>-<SINCE>-<UNTIL>.csv`.
 
 Compute dates with `date -u +%Y-%m-%d` etc.; echo the resolved window back to the user.
 
@@ -119,10 +119,10 @@ Write `time_report.py` (below) and run it:
 ```bash
 python "<SCRATCHPAD>/time_report.py" --tempo "<SCRATCHPAD>/tempo.json" --issues "<SCRATCHPAD>/issues.json" \
   --devmap "<SCRATCHPAD>/devmap.json" --dates "<SCRATCHPAD>/wdates.json" --since [SINCE] --until [UNTIL] --project [PROJECT] \
-  --md "<SCRATCHPAD>/report.md" --out "./docs/time-report-[TODAY].html" --csv "./docs/time-report-[TODAY].csv"
+  --md "<SCRATCHPAD>/report.md" --out "./docs/time-report-[TODAY]-[SINCE]-[UNTIL].html" --csv "./docs/time-report-[TODAY]-[SINCE]-[UNTIL].csv"
 ```
 
-Show the Markdown (`report.md`) to the user and report the HTML + CSV paths, **plus the second report** it also writes — a finished-User-Story per-developer summary at `./docs/time-report-[TODAY]-us-summary.{html,csv}`.
+Show the Markdown (`report.md`) to the user and report the HTML + CSV paths, **plus the second report** it also writes — a finished-User-Story per-developer summary at `./docs/time-report-[TODAY]-[SINCE]-[UNTIL]-us-summary.{html,csv}`.
 
 ### `fetch_tempo_users.py`
 
@@ -366,6 +366,7 @@ def gain_two_html(est, logged, bug):  # WITH / WITHOUT sub-bug hours
 def gain_cell(est, logged):
     g = gain_pct(est, logged); return "-" if (g is None or abs(g) > GAIN_CAP) else g
 def e(x): return html.escape(str(x))
+def days(h): return round((h or 0) / DAY_HOURS, 1)   # totals shown in days (1 d = 8 h)
 
 def build_ticket_rows(all_nodes, tempo, devmap, project, wdates=None):
     wdates = wdates or {}
@@ -510,37 +511,47 @@ def months_of(rows):
 
 # ---------- shared renderers (reused for the overall view and per month) ----------
 def md_totals_lines(rows):
-    tot, archpr_tot, grand_log = area_totals(rows)
-    out = ["| Area | Tickets | A. Est h | DL. Est h | Total dev h | Logged h | Sub-bug h | AI-assisted | Arch gain | DL gain | Sub-bugs |",
+    tot, archpr_tot, grand_log = area_totals(rows)   # all values in hours; shown as days below
+    out = ["| Area | Tickets | A. Est d | DL. Est d | Total dev d | Logged d | Sub-bug d | AI-assisted | Arch gain | DL gain | Sub-bugs |",
            "|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|"]
     for ar in AREAS:
         g = tot[ar]
-        out.append(f"| {AREA_LABEL[ar]} | {g['tickets']} | {round(g['aEst'],1)} | {round(g['dlEst'],1)} | "
-                   f"{round(g['logged'] + g['subBug'],1)} | {round(g['logged'],1)} | {round(g['subBug'],1)} | {g['ai']}/{g['tickets']} | "
+        out.append(f"| {AREA_LABEL[ar]} | {g['tickets']} | {days(g['aEst'])} | {days(g['dlEst'])} | "
+                   f"{days(g['logged'] + g['subBug'])} | {days(g['logged'])} | {days(g['subBug'])} | {g['ai']}/{g['tickets']} | "
                    f"{gain_two(g['aEst'], g['logged'], g['subBug'])} | {gain_two(g['dlEst'], g['logged'], g['subBug'])} | {g['bugs']} |")
-    out.append(f"| Architect/PR/mgmt | – | – | – | {archpr_tot} | {archpr_tot} | – | – | – | – | – |")
-    out.append(f"| **Total** | | | | **{grand_log}** | **{grand_log}** | | | | | |")
+    out.append(f"| Architect/PR/mgmt | – | – | – | {days(archpr_tot)} | {days(archpr_tot)} | – | – | – | – | – |")
+    t_sub_h = sum(tot[ar]["subBug"] for ar in AREAS)
+    t_aest = days(sum(tot[ar]["aEst"] for ar in AREAS)); t_dlest = days(sum(tot[ar]["dlEst"] for ar in AREAS))
+    t_sub = days(t_sub_h); t_bugs = sum(tot[ar]["bugs"] for ar in AREAS)
+    grand_dev = days(grand_log + t_sub_h)   # Total dev = all logged (areas + Arch/PR) + all sub-bug
+    out.append(f"| **Total** | | {t_aest} | {t_dlest} | **{grand_dev}** | **{days(grand_log)}** | {t_sub} | | | | {t_bugs} |")
     return out
 
 def html_totals_table(rows):
-    tot, archpr_tot, grand_log = area_totals(rows)
+    tot, archpr_tot, grand_log = area_totals(rows)   # all values in hours; shown as days below
     h = ["<div class=\"tw\"><table><thead><tr>"
-         "<th>Area</th><th class='r'>Tickets</th><th class='r'>A. Est h</th><th class='r'>DL. Est h</th>"
-         "<th class='r'>Total dev h</th><th class='r'>Logged h</th><th class='r'>Sub-bug h</th><th class='r'>AI-assisted</th>"
+         "<th>Area</th><th class='r'>Tickets</th><th class='r'>A. Est d</th><th class='r'>DL. Est d</th>"
+         "<th class='r'>Total dev d</th><th class='r'>Logged d</th><th class='r'>Sub-bug d</th><th class='r'>AI-assisted</th>"
          "<th class='r'>Arch gain</th><th class='r'>DL gain</th><th class='r'>Sub-bugs</th></tr></thead><tbody>"]
     for ar in AREAS:
         g = tot[ar]
         h.append(f"<tr><td class='name'>{AREA_LABEL[ar]}</td><td class='r'>{g['tickets']}</td>"
-                 f"<td class='r'>{round(g['aEst'],1)}</td><td class='r'>{round(g['dlEst'],1)}</td>"
-                 f"<td class='r'>{round(g['logged']+g['subBug'],1)}</td><td class='r'>{round(g['logged'],1)}</td>"
-                 f"<td class='r'>{round(g['subBug'],1)}</td><td class='r'>{g['ai']}/{g['tickets']}</td>"
+                 f"<td class='r'>{days(g['aEst'])}</td><td class='r'>{days(g['dlEst'])}</td>"
+                 f"<td class='r'>{days(g['logged']+g['subBug'])}</td><td class='r'>{days(g['logged'])}</td>"
+                 f"<td class='r'>{days(g['subBug'])}</td><td class='r'>{g['ai']}/{g['tickets']}</td>"
                  f"<td class='r'>{gain_two_html(g['aEst'],g['logged'],g['subBug'])}</td>"
                  f"<td class='r'>{gain_two_html(g['dlEst'],g['logged'],g['subBug'])}</td><td class='r'>{g['bugs']}</td></tr>")
     h.append(f"<tr><td class='name'>Architect/PR/mgmt</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td>"
-             f"<td class='r'>{archpr_tot}</td><td class='r'>{archpr_tot}</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td>"
+             f"<td class='r'>{days(archpr_tot)}</td><td class='r'>{days(archpr_tot)}</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td>"
              f"<td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td></tr>")
-    h.append(f"<tr class='tot'><td class='name'>Total</td><td></td><td></td><td></td>"
-             f"<td class='r'>{grand_log}</td><td class='r'>{grand_log}</td><td></td><td></td><td></td><td></td><td></td></tr>")
+    t_sub_h = sum(tot[ar]["subBug"] for ar in AREAS)
+    t_aest = days(sum(tot[ar]["aEst"] for ar in AREAS)); t_dlest = days(sum(tot[ar]["dlEst"] for ar in AREAS))
+    t_sub = days(t_sub_h); t_bugs = sum(tot[ar]["bugs"] for ar in AREAS)
+    grand_dev = days(grand_log + t_sub_h)   # Total dev = all logged (areas + Arch/PR) + all sub-bug
+    h.append(f"<tr class='tot'><td class='name'>Total</td><td></td>"
+             f"<td class='r'>{t_aest}</td><td class='r'>{t_dlest}</td>"
+             f"<td class='r'>{grand_dev}</td><td class='r'>{days(grand_log)}</td><td class='r'>{t_sub}</td>"
+             f"<td></td><td></td><td></td><td class='r'>{t_bugs}</td></tr>")
     h.append("</tbody></table></div>")
     return "".join(h)
 
@@ -585,12 +596,13 @@ def html_report_body(rs):
     by month) for a subset of rows — used inside each tab panel."""
     if not rs:
         return '<p class="dim" style="padding:1rem">No tickets of this type in this window.</p>'
-    _, _, grand = area_totals(rs)
+    tot_, _, grand = area_totals(rs)
+    _tsub = round(sum(tot_[ar]["subBug"] for ar in AREAS), 1)
     ms = months_of(rs)
     h = []; w = h.append
     w("<h2>Totals by area</h2>")
     w(html_totals_table(rs))
-    w(f'<p class="meta"><b>Total logged across all groups:</b> {grand} h</p>')
+    w(f'<p class="meta"><b>Total across all groups:</b> {days(grand)} d logged + {days(_tsub)} d sub-bug = <b>{days(grand + _tsub)} d</b> total dev <span class="sm">(1 d = {DAY_HOURS} h)</span></p>')
     w('<p class="bm">By month</p>')
     for i, m in enumerate(ms):
         mr = [r for r in rs if r["month"] == m]; op = " open" if i == 0 else ""
@@ -604,10 +616,11 @@ def html_report_body(rs):
 
 # ---------- second report: finished-US per-developer summary ----------
 US_COLS = [("dev", "Developer"), ("area", "Area"), ("nUS", "US (final)"),
-           ("avgSub", "Avg sub-bugs / US"), ("sumAEst", "Sum A. Est h"), ("sumLogged", "Sum logged h"),
-           ("sumSub", "Sum sub-bug h"), ("sumTotal", "Sum total h"),
+           ("avgSub", "Avg sub-bugs / US"), ("sumAEst", "Sum A. Est d"), ("sumLogged", "Sum logged d"),
+           ("sumSub", "Sum sub-bug d"), ("sumTotal", "Sum total d"),
            ("gainBug", "Gain (with sub-bugs)"), ("gainNoBug", "Gain (no sub-bugs)")]
 US_NUM = {"nUS", "avgSub", "sumAEst", "sumLogged", "sumSub", "sumTotal", "gainBug", "gainNoBug"}
+US_DAYCOLS = {"sumAEst", "sumLogged", "sumSub", "sumTotal"}   # hour sums rendered in days (1 d = 8 h)
 
 def finished_us_records(rows):
     """One record per (finished User Story, area with a main dev): that area's real main developer
@@ -648,6 +661,8 @@ def _us_cells_html(d):
             out.append(f'<td class="r {gain_cls(d[k])}">{gain_str(d[k])}</td>')
         elif k in ("dev", "area"):
             out.append(f'<td class="name">{e(d[k])}</td>')
+        elif k in US_DAYCOLS:
+            out.append(f'<td class="r">{days(d[k])}</td>')
         else:
             out.append(f'<td class="r">{d[k]}</td>')
     return "".join(out)
@@ -669,8 +684,8 @@ def _us_tables_html(recs):
 
 # by-developer view: per user (area, then name), a month-by-month table of their finished US
 UMONTH_COLS = [("month", "Month"), ("nUS", "US (final)"), ("avgSub", "Avg sub-bugs / US"),
-               ("sumAEst", "Sum A. Est h"), ("sumLogged", "Sum logged h"), ("sumSub", "Sum sub-bug h"),
-               ("sumTotal", "Sum total h"), ("gainBug", "Gain (with sub-bugs)"), ("gainNoBug", "Gain (no sub-bugs)")]
+               ("sumAEst", "Sum A. Est d"), ("sumLogged", "Sum logged d"), ("sumSub", "Sum sub-bug d"),
+               ("sumTotal", "Sum total d"), ("gainBug", "Gain (with sub-bugs)"), ("gainNoBug", "Gain (no sub-bugs)")]
 UMONTH_NUM = {"nUS", "avgSub", "sumAEst", "sumLogged", "sumSub", "sumTotal", "gainBug", "gainNoBug"}
 
 def _umonth_cells(d):
@@ -680,6 +695,8 @@ def _umonth_cells(d):
             out.append(f'<td class="r {gain_cls(d[k])}">{gain_str(d[k])}</td>')
         elif k == "month":
             out.append(f'<td class="name">{e(d[k])}</td>')
+        elif k in US_DAYCOLS:
+            out.append(f'<td class="r">{days(d[k])}</td>')
         else:
             out.append(f'<td class="r">{d[k]}</td>')
     return "".join(out)
@@ -708,7 +725,7 @@ def _us_by_user_html(recs):
     for dev in order:
         drecs = by_dev[dev]; area = AREA_LABEL[drecs[0]["area"]]; tot = _us_agg("Total", "", drecs)
         h.append(f'<details><summary>{e(dev)} <span class="cnt">({e(area)} &middot; {tot["nUS"]} US &middot; '
-                 f'{tot["aiUS"]} AI &middot; {tot["sumTotal"]}h)</span></summary>')
+                 f'{tot["aiUS"]} AI &middot; {days(tot["sumTotal"])}d)</span></summary>')
         for ai_flag, label in ((True, "true"), (False, "false")):
             h.append(f'<h4>AI-assisted: {label}</h4>')
             h.append(_umonth_table([x for x in drecs if x["ai"] == ai_flag]))
@@ -743,7 +760,7 @@ def write_us_summary(rows, html_path, csv_path, project, since, until):
              'sub-bug-fixing hours), so a token reviewer never wins and Architect/PR-review time sits in the Arch/PR bucket. '
              'A US worked across areas yields one row per area. <b>Area</b> is that developer\'s area. '
              '<b>Avg sub-bugs / US</b> = child Bug/Sub-bug count per US (the <b>Total</b> row uses total sub-bugs &divide; total US). '
-             '<b>Gain</b> = (Sum A. Est &minus; Sum logged)/Sum A. Est, <b>with / without</b> sub-bug hours; a dash marks a meaningless gain. '
+             '<b>Gain</b> = (Sum A. Est &minus; Sum logged)/Sum A. Est, <b>with / without</b> sub-bug hours; a dash marks a meaningless gain. All hour sums are shown in <b>days</b> (1 d = 8 h). '
              'Generated by <code>/oc-time-report</code>.</p>')
     doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -803,7 +820,9 @@ summary .cnt {{ color:var(--muted); font-weight:400; font-size:.9em; }}
                     for d in drows + ([total] if total else []):
                         row = [scope, lab]
                         for k, _ in US_COLS:
-                            row.append(gcell(d[k]) if k in ("gainBug", "gainNoBug") else d[k])
+                            if k in ("gainBug", "gainNoBug"): row.append(gcell(d[k]))
+                            elif k in US_DAYCOLS: row.append(days(d[k]))
+                            else: row.append(d[k])
                         w.writerow(row)
     return len(recs), mons
 
@@ -820,7 +839,8 @@ def main():
     wdates = json.load(open(a.dates, encoding="utf-8")) if a.dates and os.path.exists(a.dates) else {}
     ns = nodes(json.load(open(a.issues, encoding="utf-8")))
     rows = build_ticket_rows(ns, tempo, devmap, a.project, wdates)
-    _, _, grand_log = area_totals(rows)
+    tot_all, _, grand_log = area_totals(rows)
+    _tsub = round(sum(tot_all[ar]["subBug"] for ar in AREAS), 1)
     mons = months_of(rows)
 
     # ---------- Markdown (per-area totals overall + by month; per-ticket grouped by month) ----------
@@ -831,7 +851,7 @@ def main():
     else:
         P("## Totals by area\n")
         for ln in md_totals_lines(rows): P(ln)
-        P(f"\n**Total logged across all groups:** {grand_log} h\n")
+        P(f"\n**Total across all groups:** {days(grand_log)} d logged + {days(_tsub)} d sub-bug = **{days(grand_log + _tsub)} d** total dev  (totals in days, 1 d = {DAY_HOURS} h)\n")
         P("> **AI-assisted** = AI-assisted tickets / total tickets for the area — how many of the area's tickets carry an "
           "AI-metrics record (the ticket, or a same-area sub-task, records AI usage), out of all the area's tickets.\n")
         P("### Totals by area — by month\n")

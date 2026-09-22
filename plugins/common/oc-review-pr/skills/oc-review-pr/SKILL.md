@@ -1,6 +1,6 @@
 ---
 name: oc-review-pr
-description: Review the pull request linked to a JIRA ticket — frontend (opencell-portal) PRs are reviewed here with oc-fe-reviewer, the report (headed by the number of Vitest tests the PR adds) is always posted on the PR, and the PR status follows the score (8-10 left open, 6-7 drafted, 1-5 declined); backend (opencell-core) PRs are delegated to the /oc-be-review command.
+description: Review the pull request linked to a JIRA ticket — frontend (opencell-portal) PRs are reviewed here with oc-fe-reviewer, the report (headed by the number of Vitest tests the PR adds) is always posted on the PR, and the PR status follows the score (8-10 left open, 1-7 marked Draft — a PR is never declined); backend (opencell-core) PRs are delegated to the /oc-be-review command.
 argument-hint: <TICKET-ID> (e.g., INTRD-36922)
 ---
 
@@ -8,7 +8,7 @@ argument-hint: <TICKET-ID> (e.g., INTRD-36922)
 
 Review the pull request associated with a JIRA ticket. This command resolves the ticket → its PR, then routes by repository:
 
-- **opencell-portal (frontend)** → reviewed **here** with the `oc-fe-reviewer:oc-fe-reviewer` agent. The report — which **starts with the number of Vitest tests the PR adds** (Step 5b), so it is the first thing visible on the Bitbucket comment — is **always posted as a comment on the PR** and the ticket is always tagged `ai_code_review_Front`. The **PR status then follows the score**: 8-10 left open, 6-7 marked Draft, 1-5 declined. All of it automatic, without asking.
+- **opencell-portal (frontend)** → reviewed **here** with the `oc-fe-reviewer:oc-fe-reviewer` agent. The report — which **starts with the number of Vitest tests the PR adds** (Step 5b), so it is the first thing visible on the Bitbucket comment — is **always posted as a comment on the PR** and the ticket is always tagged `ai_code_review_Front`. The **PR status then follows the score**: 8-10 left open, 1-7 marked Draft. A review **never declines a PR**. All of it automatic, without asking.
 - **opencell-core (backend)** → **not reviewed here.** This command hands off to the **`/oc-be-tools:oc-be-review`** command, which owns the backend review (the `oc-be-pr-reviewer` agent + guidelines), the confirm-first PR comment and verdict, and the `ai_code_review_back` Jira tag. Keeping a single backend owner avoids two divergent backend-review paths.
 
 When the ticket has **several PRs** (the same change opened against different target branches), exactly **one** is reviewed, commented and has its status changed: the one targeting **`dev`** if it exists. See **Selecting a single PR** in Step 4.
@@ -240,7 +240,7 @@ handling; security.
 >
 > So: do not add criteria of your own, do not re-weight anything, and do not adjust the number the agent
 > returns. If the score does not follow from the returned Category Verdicts table, send it back to the
-> agent rather than patching the figure — this command *declines PRs* on that number (Step 10b).
+> agent rather than patching the figure — this command *drafts PRs* on that number (Step 10b).
 >
 > One legitimate reason the two scores differ: the developer changed the code between the commit and the
 > PR. Any other gap means one of the two callers drifted from the rubric — fix the caller.
@@ -370,7 +370,7 @@ tests is a `Fail` there, which caps the score at 7.
 
 - **Approve**: Score 8-10 → "This PR is ready to merge." (PR left **open**.)
 - **Request changes**: Score 6-7 → "Please address the warnings before merging." (PR set to **Draft**.)
-- **Decline**: Score 1-5 → "This PR needs rework — declining, please reopen once addressed." (PR **declined**.)
+- **Request rework**: Score 1-5 → "This PR needs rework — mark it ready again once addressed." (PR set to **Draft**.)
 
 ---
 
@@ -452,27 +452,35 @@ JSON
 
 **10b. Set the PR status from the score.**
 
-The action is decided **solely by `[REVIEW-SCORE]`** from Step 8. The three bands cover 1–10 with no
+The action is decided **solely by `[REVIEW-SCORE]`** from Step 8. The two bands cover 1–10 with no
 gaps and no overlap:
 
 | `[REVIEW-SCORE]` | Action on the PR | Effect |
 |---|---|---|
 | **8, 9, 10** | **Leave open — change nothing** | PR stays mergeable as-is |
-| **6, 7** | **Mark as Draft** | merging blocked until *Mark as ready* |
-| **1–5** | **Decline** | PR is closed |
+| **1–7** | **Mark as Draft** | merging blocked until *Mark as ready* |
 
-Read the boundaries exactly: **8 leaves the PR open** (it is not drafted), and **5 is declined** (it is
-not drafted). Only 6 and 7 produce a draft.
+Read the boundary exactly: **8 leaves the PR open** (it is not drafted) and **7 and everything below it
+is drafted**. A 2 and a 7 get the same PR state — the severity is carried by the review comment, not by
+the PR's status.
+
+**Never decline a pull request.** This command has no decline path: `POST …/pullrequests/[PR-ID]/decline`
+is never called, whatever the score, and no review ever closes a PR. Draft already blocks the merge
+while leaving the PR open, in the author's list and one click from *Mark as ready*; declining would take
+it out of the normal flow for no extra protection. If a score of 1 or 2 looks like it warrants more than
+a draft, say so in the report and leave the decision to a human.
 
 Preconditions for any status change:
 
 - **Only open PRs can be mutated.** If `[PR-STATE]` is not `OPEN`, skip 10b entirely and say so.
-- The report from 10a must already be posted, so the reason for a draft or decline is visible on the PR.
+- The report from 10a must already be posted, so the reason for the draft is visible on the PR.
+  If 10a failed, still draft — a draft is reversible and loses nothing — but say the report is missing
+  and print it.
 
 **Score 8-10 — leave open.** Take no action on the PR status. Do not draft it, do not decline it, do not
 approve it. Report `PR status: open (unchanged)`.
 
-**Score 6-7 — mark as Draft.** `PUT` accepts a partial pull request object, but **omitted fields can be
+**Score 1-7 — mark as Draft.** `PUT` accepts a partial pull request object, but **omitted fields can be
 reset — most notably `reviewers`**. Read the PR first and send the existing values back alongside `draft`:
 
 1. `GET …/pullrequests/[PR-ID]` and keep `title` and the `reviewers` array.
@@ -499,26 +507,8 @@ BB_AUTH=(-u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}")
 - Never drop reviewers. If the `GET` in step 1 fails, skip the draft rather than sending a `PUT` that
   could clear them.
 - **Draft blocks merging and suppresses reviewer notifications** until someone selects *Mark as ready*.
-
-**Score 1-5 — decline the PR.** Declining **closes** the PR, so do it only after the report is posted:
-
-```bash
-# Auth scheme follows the token type (see Access). Repeated per block because
-# shell state does not persist between tool calls.
-BB_AUTH=(-u "${BITBUCKET_EMAIL}:${BITBUCKET_ACCESS_TOKEN}")
-[[ "$BITBUCKET_ACCESS_TOKEN" == ATCTT* ]] && BB_AUTH=(-H "Authorization: Bearer ${BITBUCKET_ACCESS_TOKEN}")
-
-curl -s -X POST "${BB_AUTH[@]}" \
-  "https://api.bitbucket.org/2.0/repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/decline"
-```
-
-- The endpoint takes **no body**. The explanation lives in the review comment from 10a — which is why
-  10a must succeed first. **If the 10a comment failed to post, do not decline**: warn the user and leave
-  the PR open, so a PR is never closed without a stated reason.
-- Verify by re-`GET`ting the PR: `state` should be `DECLINED`.
-- Declining is **not** deleting — the author can reopen the PR from `[PR-URL]` after addressing the
-  review. Say so in the report so the outcome is not mistaken for a dead end.
-- If the decline fails, report the PR as still open and leave it alone.
+- A draft is **reversible and non-destructive** — the author fixes the remarks (`/oc-fe-fix-pr`) and
+  selects *Mark as ready*. Say so in the report so the outcome is not mistaken for a rejection.
 
 **10c. Report the outcome and offer follow-ups.**
 
@@ -528,18 +518,17 @@ State the score and the resulting status explicitly, so the decision is auditabl
 Score:          [REVIEW-SCORE]/10
 Vitest tests:   [VITEST-ADDED] added in [VITEST-FILES] spec file(s) (net [VITEST-NET])
 Review posted:  [COMMENT-URL]
-PR status:      <one of the three below>
+PR status:      <one of the two below>
 ```
 
 - Score 8-10 → `open (unchanged) — ready to merge at [PR-URL]`
-- Score 6-7 → `Draft — merging blocked until "Mark as ready"`
-- Score 1-5 → `Declined — reopen at [PR-URL] once the review is addressed`
+- Score 1-7 → `Draft — merging blocked until "Mark as ready"`
 
 Then:
 
 - If there are critical issues or warnings with suggested fixes:
   - "Would you like me to apply the suggested fixes automatically?" — if yes, use the `oc-fe-reviewer` agent to apply fixes to the local codebase.
-- If a status change was skipped (PR not open, API refused the draft, comment failed so the decline was withheld), say which and what the user needs to do manually.
+- If a status change was skipped (PR not open, API refused the draft), say which and what the user needs to do manually.
 
 ---
 

@@ -10,21 +10,53 @@ trusting a flag.
 
 ## 1. Browser (per machine, once)
 
-`@playwright/mcp` defaults to the **Chrome channel** (branded Google Chrome at
-`/opt/google/chrome/chrome`), *not* Playwright's bundled Chromium. Install it system-wide —
-the `.deb` pulls its own OS dependencies via apt:
+**Prefer `@playwright/mcp`'s bundled Chromium over the system Chrome channel.** The two drift
+apart independently — system Chrome auto-updates on its own schedule, `@playwright/mcp` pins a
+specific bundled Chromium revision — and that drift is a **confirmed** cause of a silent failure:
+`browser_click` reports success (URL/title even update on plain navigations) but real in-page
+state changes (a tab switch, a row click) never fire, with no error anywhere. Reproduced and fixed
+on `sabretooth` 2026-09-16 against `18x.oc-nsb.eu`: switching from Chrome-channel to matched
+bundled Chromium turned a dead click-probe (no reaction, confirmed via `browser_network_requests`
+showing nothing fired) into a working one (`tab "Refund" [selected]` right after the click).
+
+Install the browser **already matched** to the registered `@playwright/mcp` version — do not use
+the generic `playwright` CLI for this, see the gotcha below:
+
+```bash
+npx @playwright/mcp install-browser chrome-for-testing
+```
+
+This downloads to your own cache (`~/.cache/ms-playwright/chromium-<rev>`), never root's, and
+needs no `sudo`. Then register with `--browser chromium` (§3) instead of leaving the channel at
+its Chrome-channel default.
+
+> **Gotcha — `npx playwright install chromium` is NOT the same install.** It resolves through
+> whatever `playwright` core version `npx` happens to fetch, which can pin a *different* bundled
+> Chromium revision than the one your already-registered `@playwright/mcp` version expects.
+> Observed: `npx playwright install chromium` fetched revision `1243`; the registered
+> `@playwright/mcp@0.0.81` demanded `1244` and refused to launch ("Browser 'chrome-for-testing' is
+> not installed; expected executable at .../chromium-1244/..."). Always install *through*
+> `@playwright/mcp` itself (the command above), which guarantees the matching revision. Re-run it
+> after every `@playwright/mcp` version bump — the pin can move.
+
+**Alternative — system Chrome channel.** Still supported if you deliberately want branded Chrome
+(e.g. to match a proprietary codec or DRM dependency the bundled Chromium lacks — irrelevant for
+Portal navigation). The `.deb` pulls its own OS dependencies via apt:
 
 ```bash
 sudo npx playwright install chrome
 ```
 
-The MCP server does **not** auto-install the browser — run this first. Verify:
-`google-chrome --version`.
+Verify: `google-chrome --version`. Leave `--browser` unset in the registration (§3) to use this
+channel (the `@playwright/mcp` default).
 
-> Do **not** use `sudo npx playwright install chromium`: it (a) installs the *bundled
-> Chromium*, which the server won't use unless you also pass `--browser chromium`, and (b)
-> when run under `sudo`, downloads it into **root's** cache (`/root/.cache/ms-playwright`),
-> where the user-run MCP server can't find it. The Chrome channel above avoids both traps.
+> Do **not** run `sudo npx playwright install chromium` while intending to use the Chrome
+> channel — it downloads Chromium (not Chrome) into **root's** cache
+> (`/root/.cache/ms-playwright`), where the user-run MCP server can't find it, and the server
+> won't use it anyway unless you also pass `--browser chromium`.
+
+**Either way, the MCP server does not auto-install the browser** — run one of the two installs
+above first.
 
 ## 2. Runtime dirs + credentials (per machine, once)
 
@@ -55,6 +87,7 @@ for the flags:
 claude mcp add -s user oc-fn-playwright -- \
   npx -y @playwright/mcp@latest \
   --headless \
+  --browser chromium \
   --image-responses=omit \
   --console-level=error \
   --viewport-size=1280x720 \
@@ -63,6 +96,9 @@ claude mcp add -s user oc-fn-playwright -- \
   --user-data-dir="$HOME/.local/state/oc-fn-portal/profile" \
   --output-dir="$HOME/.local/state/oc-fn-portal/output"
 ```
+
+**`--browser chromium`** pairs with the bundled-Chromium install in §1 (the now-default choice —
+drop this flag only if you deliberately installed the system Chrome channel instead).
 
 **`--secrets` is required, not optional** — it is what makes login possible at all without the
 password entering the conversation. See § 6 for the mechanism and for why the alternatives are
@@ -230,5 +266,16 @@ is nothing here for a pure-PowerShell install to hook into.
   session **cannot drive this app**: fall back to read-only screenshots and tell the user. **Never
   report it as a Portal bug** — see `SKILL.md` § *What you observe is not evidence about the
   product*.
+
+  **Confirmed fix (2026-09-16, `sabretooth` against `18x.oc-nsb.eu`):** switch from the system
+  Chrome channel to `@playwright/mcp`'s own bundled Chromium — §1's `npx @playwright/mcp
+  install-browser chrome-for-testing` + `--browser chromium` in the registration (§3), then
+  reconnect (`/mcp` or restart). Re-ran the same click-probe (a tab switch) immediately after and
+  it worked (`tab "Refund" [selected]`), where it had previously done nothing at all. Root cause
+  read as system-Chrome-channel drift: `@playwright/mcp` pins a specific bundled Chromium
+  revision, while the Chrome channel auto-updates independently — the two fall out of sync with no
+  warning, and that skew is what breaks synthetic event dispatch. If you still hit this after
+  switching, the bundled Chromium itself may now be behind the registered `@playwright/mcp` — rerun
+  the install-browser command in §1 to re-pin it.
 - **Server flag rejected after a package update:** re-check `npx @playwright/mcp@latest --help`
   and update the args in the `claude mcp add` command in §3 above.

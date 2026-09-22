@@ -1,6 +1,6 @@
 ---
 name: oc-ai-report
-description: Produce a cross-ticket AI-usage report over a period. AI metrics grouped by developer domain (backend/frontend/QA); per-area Architect estimate (custom fields) and Dev-lead estimate (ticket field / sum of child sub-task estimates); ticket type; bug counts and hours-logged-on-bugs per area; logged hours per user & ticket via the Tempo API (fallback Jira worklogs); time gain without/with bug hours; sections ordered Totals → Summary → Detail. Fetches Jira via direct Cloud REST (enhanced /search/jql, fields-limited, no descriptions, paginated) using a mandatory JIRA_API_TOKEN — no Atlassian MCP; Tempo optional. Prints Markdown and writes a styled, date-stamped HTML file to ./docs/ai-usage-report-<date>.html.
+description: Produce a cross-ticket AI-usage report over a period. AI metrics grouped by developer domain (backend/frontend/QA); per-area Architect estimate (custom fields) and Dev-lead estimate (ticket field / sum of child sub-task estimates); ticket type; bug counts and hours-logged-on-bugs per area; logged hours per user & ticket via the Tempo API (fallback Jira worklogs); time gain without/with bug hours; sections ordered Totals → Summary → Detail. Fetches Jira via direct Cloud REST (enhanced /search/jql, fields-limited, no descriptions, paginated) using a mandatory JIRA_API_TOKEN — no Atlassian MCP; Tempo optional. Prints Markdown and writes a styled HTML file to ./docs/ai-usage-report-<date>-<start>-<end>.html. Totals-by-area shown in days (1 d = 8 h).
 argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD,MACRD] [--out PATH]"
 ---
 
@@ -28,8 +28,8 @@ Parse `$ARGUMENTS` — **all optional**. A bare `/oc-ai-report` reports the **la
 - `--project KEY[,KEY…]` — Jira project(s), comma-separated. **Default: `INTRD,MACRD`.** Backend work
   is raised in `INTRD` (core *and* overlay) and in `MACRD` (MACO R&D / overlay), so both are in scope
   by default. Areas are by discipline, not repository — overlay Java/xhtml records arrive as `backend`.
-- `--out PATH` — where to write the HTML report. **Default: `./docs/ai-usage-report-<TODAY>.html`** where `<TODAY>` is the run date (`date -u +%Y-%m-%d`), e.g. `./docs/ai-usage-report-2026-08-05.html` (relative to the current directory; the `docs/` folder is created if missing).
-- `--csv PATH` — also write the **ticket-detail rows** as CSV (spreadsheet-friendly). **Default: `./docs/ai-usage-report-<TODAY>.csv`** (same folder/date-stamp as the HTML).
+- `--out PATH` — where to write the HTML report. **Default: `./docs/ai-usage-report-<TODAY>-<SINCE>-<UNTIL>.html`** where `<TODAY>` is the run date (`date -u +%Y-%m-%d`) and `<SINCE>`/`<UNTIL>` the window bounds, e.g. `./docs/ai-usage-report-2026-09-17-2026-01-01-2026-09-18.html` (relative to the current directory; the `docs/` folder is created if missing).
+- `--csv PATH` — also write the **ticket-detail rows** as CSV (spreadsheet-friendly). **Default: `./docs/ai-usage-report-<TODAY>-<SINCE>-<UNTIL>.csv`** (same folder/name-stamp as the HTML).
 
 Compute any missing date with the shell — `date -u +%Y-%m-%d` (today), `date -u -d 'tomorrow' +%Y-%m-%d`, `date -u -d '30 days ago' +%Y-%m-%d`; if `date -d` is unavailable, use Python `datetime`. Echo the resolved window back to the user (e.g. "Reporting INTRD, 2026-07-04 → 2026-08-03") so the defaults are visible.
 
@@ -236,6 +236,7 @@ def nodes(data):
     return issues or []
 
 def hours(s): return round((s or 0) / 3600, 1)
+def days(h): return round((h or 0) / DAY_HOURS, 1)   # Totals-by-area shown in days (1 d = 8 h)
 def num(x): return x if isinstance(x, (int, float)) else 0
 
 def area_of(fields):
@@ -439,15 +440,15 @@ def main():
         g = areas[r["area"]]; g["contrib"].append(r["contrib"]); g["retain"].append(r["retain"])
         g["rows"].append(r)
         for k in SUM: g[k] += r[k]
-    P("## Totals by area (sum of detail rows)\n")
-    P("| Area | Rows | AI Contrib | Retain | Review phase | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Total dev h | Logged h | Sub-bug h | Arch gain | DL gain | Sub-bugs |")
+    P("## Totals by area (sum of detail rows; hours shown in days, 1 d = 8 h)\n")
+    P("| Area | Rows | AI Contrib | Retain | Review phase | U.tests +/~ | P.tests | Requests | A. Est d | DL. Est d | Total dev d | Logged d | Sub-bug d | Arch gain | DL gain | Sub-bugs |")
     P("|---|--:|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
     for ar in AREAS:
         g = areas[ar]
         if not g["contrib"]: continue
         P(f"| {ar.capitalize()} | {len(g['contrib'])} | {avg(g['contrib'])}% | {avg(g['retain'])}% | {avg([r['rework'] for r in g['rows']])}% | "
-          f"{g['utAdd']}/{g['utMod']} | {g['pmTests']} | {g['turns']} | {round(g['aEst'],1)} | {round(g['dlEst'],1)} | "
-          f"{round(g['logged'] + g['bugLogged'],1)} | {round(g['logged'],1)} | {round(g['bugLogged'],1)} | {gain_two(*gain_basis(g['rows'], 'aEst'))} | "
+          f"{g['utAdd']}/{g['utMod']} | {g['pmTests']} | {g['turns']} | {days(g['aEst'])} | {days(g['dlEst'])} | "
+          f"{days(g['logged'] + g['bugLogged'])} | {days(g['logged'])} | {days(g['bugLogged'])} | {gain_two(*gain_basis(g['rows'], 'aEst'))} | "
           f"{gain_two(*gain_basis(g['rows'], 'dlEst'))} | {bugs_label(g['bugs'], sum_foreign(g['rows']), sum_foreign_h(g['rows']))} |")
 
     # ---- Summary by user ----
@@ -490,18 +491,18 @@ if __name__ == "__main__":
 
 ## Task 3 — Write the HTML report
 
-Also render a **self-contained, styled HTML file** from the same `tickets.json`. Write the script below to your scratchpad as `ai_report_html.py` and run it, pointing `--out` at the resolved output path (default `./docs/ai-usage-report-<TODAY>.html`, `<TODAY>` = `date -u +%Y-%m-%d` — the date-stamp keeps successive reports side by side rather than overwriting):
+Also render a **self-contained, styled HTML file** from the same `tickets.json`. Write the script below to your scratchpad as `ai_report_html.py` and run it, pointing `--out` at the resolved output path (default `./docs/ai-usage-report-<TODAY>-<SINCE>-<UNTIL>.html`, `<TODAY>` = `date -u +%Y-%m-%d` — the date-stamp keeps successive reports side by side rather than overwriting):
 
 ```bash
 python "<SCRATCHPAD>/ai_report_html.py" --input "<SCRATCHPAD>/tickets.json" \
   --children "<SCRATCHPAD>/children.json" --tempo "<SCRATCHPAD>/tempo.json" \
   --since [SINCE] --until [UNTIL] --project [PROJECT] \
-  --out "./docs/ai-usage-report-[TODAY].html" --csv "./docs/ai-usage-report-[TODAY].csv"
+  --out "./docs/ai-usage-report-[TODAY]-[SINCE]-[UNTIL].html" --csv "./docs/ai-usage-report-[TODAY]-[SINCE]-[UNTIL].csv"
 ```
 
 The page is theme-aware (light/dark) and embeds all CSS — no external assets — so it opens straight from disk. **Five tabs (HTML only):** an **All** tab (every ticket, the default), a **User Stories (All)** tab (US only), a **User Stories (Final)** tab (US whose status is terminal, Final = T), a **Bugs (final)** tab (Bug/Sub-bug tickets in a terminal status) and a **Bugs and others** tab (every non-US ticket); each tab holds the full report (KPI cards + the three sections) filtered to that ticket set. Tabs are pure CSS (`<input type="radio">` + `:checked` sibling selectors) — no JavaScript. Within each tab, KPI cards lead, then the three sections mirroring the Markdown. **Grouping (HTML only):** *Totals by area* shows the overall table, then an expandable `<details>` block per month (the date is the record's `at`, newest open). *Summary by user* shows the overall one-row-per-user table (each developer's name **links down to their Detail-per-user section** in the same tab), then an expandable `<details>` block **per user**, each holding that developer's month-by-month breakdown (user → month). *Detail per user* groups each developer's tickets into expandable months, and every ticket key is a link to its Jira issue. (Anchor ids are prefixed per tab, so the same developer is uniquely addressable in each tab.) Tell the user the absolute path and that they can open it in a browser (Windows: `start "" "<path>"`).
 
-`--csv` additionally writes the **ticket-detail rows** (one row per ticket × developer, all detail columns, both time-gain values and a trailing **URL** column with the ticket's Jira link) to a spreadsheet-friendly CSV (UTF-8 with BOM so Excel renders accented names). Default `./docs/ai-usage-report-<TODAY>.csv`. Report both file paths to the user.
+`--csv` additionally writes the **ticket-detail rows** (one row per ticket × developer, all detail columns, both time-gain values and a trailing **URL** column with the ticket's Jira link) to a spreadsheet-friendly CSV (UTF-8 with BOM so Excel renders accented names). Default `./docs/ai-usage-report-<TODAY>-<SINCE>-<UNTIL>.csv`. Report both file paths to the user.
 
 ### `ai_report_html.py`
 
@@ -644,6 +645,7 @@ def gain_cell(est, logged):  # CSV: capped integer or dash
     return "-" if (g is None or abs(g) > GAIN_CAP) else g
 def gain_cls(g): return "" if (g is None or abs(g) > GAIN_CAP) else ("pos" if g >= 0 else "neg")
 def e(x): return html.escape(str(x))
+def days(h): return round((h or 0) / DAY_HOURS, 1)   # Totals-by-area shown in days (1 d = 8 h)
 
 def build_rows(parents, children, tempo, since, until):
     ch_by_parent = defaultdict(list)
@@ -758,7 +760,7 @@ def main():
     ap.add_argument("--input", required=True); ap.add_argument("--children"); ap.add_argument("--tempo")
     ap.add_argument("--since"); ap.add_argument("--until"); ap.add_argument("--out", required=True)
     ap.add_argument("--csv")   # optional: also write the ticket-detail rows as CSV
-    ap.add_argument("--project", default="INTRD,MACRD")
+    ap.add_argument("--project", default="INTRD")
     a = ap.parse_args()
     parents = nodes(json.load(open(a.input, encoding="utf-8")))
     children = nodes(json.load(open(a.children, encoding="utf-8"))) if a.children else []
@@ -779,7 +781,7 @@ def main():
     if not rows:
         W('<p class="empty">No AI-usage records in this window.</p>')
     else:
-        AH = ["Rows","Avg AI contrib","Avg retain","Avg review phase","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Total dev h","Logged h","Sub-bug h","Arch gain","DL gain","Sub-bugs"]
+        AH = ["Rows","Avg AI contrib","Avg retain","Avg review phase","U.tests +/~","P.tests","Requests","A. Est d","DL. Est d","Total dev d","Logged d","Sub-bug d","Arch gain","DL gain","Sub-bugs"]
         HEAD = ["AI Contrib","Retain","Review phase","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Total dev h","Logged h","Sub-bug h","Arch gain","DL gain","Sub-bugs"]
         DHEAD = ["Ticket","Date","Type","Area","Summary","Status","Final","AI Contrib","Retain","Review phase","U.tests +/~","P.tests","Requests","A. Est h","DL. Est h","Total dev h","Logged h","Sub-bug h","Arch gain","DL gain","Sub-bugs"]
         _left = ("Ticket", "Date", "Type", "Area", "Summary", "Status"); _cent = ("Final",)
@@ -804,8 +806,8 @@ def main():
                   f'<td class="r">{pct(avg(g["contrib"]))}</td><td class="r">{pct(avg(g["retain"]))}</td>'
                   f'<td class="r">{pct(avg([r["rework"] for r in g["rows"]]))}</td>'
                   f'<td class="r">{g["utAdd"]}/{g["utMod"]}</td><td class="r">{g["pmTests"]}</td>'
-                  f'<td class="r">{g["turns"]}</td><td class="r">{round(g["aEst"],1)}</td><td class="r">{round(g["dlEst"],1)}</td>'
-                  f'<td class="r">{round(g["logged"] + g["bugLogged"],1)}</td><td class="r">{round(g["logged"],1)}</td><td class="r">{round(g["bugLogged"],1)}</td>'
+                  f'<td class="r">{g["turns"]}</td><td class="r">{days(g["aEst"])}</td><td class="r">{days(g["dlEst"])}</td>'
+                  f'<td class="r">{days(g["logged"] + g["bugLogged"])}</td><td class="r">{days(g["logged"])}</td><td class="r">{days(g["bugLogged"])}</td>'
                   f'<td class="r {gain_cls(gp)}">{gain_two(*ba)}</td>'
                   f'<td class="r {gain_cls(gpd)}">{gain_two(*bd)}</td><td class="r">{e(bugs_label(g["bugs"], sum_foreign(g["rows"]), sum_foreign_h(g["rows"])))}</td></tr>')
             h.append("</tbody></table></div>")
@@ -923,7 +925,7 @@ def main():
                 w(f'<div class="card"><div class="v">{e(val)}</div><div class="l">{e(label)}</div></div>')
             w('</div>')
             # Totals by area (overall, then expandable by month)
-            w("<h2>Totals by area <span class=\"sub\">(sum of detail rows)</span></h2>")
+            w("<h2>Totals by area <span class=\"sub\">(sum of detail rows; hours in days, 1 d = 8 h)</span></h2>")
             w(totals_area_html(rs)); w('<p class="bm">By month</p>'); w(month_details(rs, totals_area_html))
             # Summary by user (overall, then expandable per user -> month)
             w("<h2>Summary by user</h2>")
