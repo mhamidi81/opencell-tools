@@ -1,42 +1,47 @@
 ---
 name: oc-time-report
-description: Produce an estimation-vs-logged-hours report over a period, independent of the AI-usage JSON. Tempo-worklog driven, TICKET-based with PER-AREA columns — one row per ticket, a column group for each area (Backend/Frontend/QA) giving that area's main developer, Architect & Dev-lead estimates, logged & sub-bug hours, AI flag, two time gains (with/without sub-bugs) and sub-bug count, plus an Architect/PR/mgmt logged column and a total; each area's main dev is its top contributor by dev+sub-bug hours, and a multi-role reviewer's hours go to the Arch/PR column. Tickets carry a Date (latest worklog date) and are grouped by month; the HTML has five tabs (All, User Stories All/Final, Bugs Final, Bugs and Others). Also writes a second finished-User-Story per-developer summary (per area, split by AI, by month). Prints Markdown and writes date-stamped HTML + CSV to ./docs/. Fetches Jira via direct REST (mandatory JIRA_API_TOKEN) and Tempo per-user (mandatory TEMPO_API_TOKEN) — no Atlassian MCP.
-argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD,MACRD,PRT730] [--out PATH] [--csv PATH]"
+description: Produce an estimation-vs-logged-hours report over a period, independent of the AI-usage JSON. Tempo-worklog driven and TICKET-based with PER-AREA columns: tickets are selected by their date (resolutiondate, else updated) in the window, and every worklog on a selected ticket counts (all-time, so per-ticket totals match Jira's aggregatetimespent). One row per ticket, a column group per area (Backend/Frontend/QA) giving that area's main developer, Architect & Dev-lead estimates, logged & sub-bug hours, AI flag, two time gains (with/without sub-bugs) and sub-bug count; a single Arch-gain B/F/Q column (considering bugs) right after the Final flag; and closing Overhead h / Overhead people / Total log h columns. Overhead people (Architect/PO/DevOps/Consultant/management) never count as an area developer — their hours go to the Overhead bucket, itemised per person with hours. Totals-by-area (shown in days) add a % Logged share column. Also writes a second finished-User-Story per-developer summary. Prints Markdown and writes date-stamped HTML + CSV to ./docs/. Jira via direct REST (mandatory JIRA_API_TOKEN), Tempo per-user (mandatory TEMPO_API_TOKEN) — no Atlassian MCP.
+argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD,MACRD] [--out PATH] [--csv PATH]"
 ---
 
 ## Purpose
 
 A team **estimation-vs-actual** report. Unlike `/oc-ai-report`, this one is **not** tied to the AI-usage JSON field — it is driven by **Tempo worklogs** and is **ticket-based with per-area columns**: one row per ticket, with a **column group for each of the three areas** (Backend / Frontend / QA), comparing each area's estimate to its actual logged time.
 
-Fixed columns per row: **Ticket · Date · Type · Title · Status · Final**. Then, **for each area**, a group of: **Main dev · A. Est h · DL. Est h · Total dev h · Logged h · Sub-bug h · AI · Arch gain (with · without bugs) · DL gain (with · without bugs) · #Sub-bugs**. Then two closing columns: **Arch/PR h** and **Total log h**.
+**Ticket selection is by DATE, not by worklog.** A ticket is in scope when its **ticket date** — `resolutiondate`, or `updated` when it has no resolution date — falls in `[--since, --until)`. Once a ticket is selected, **every worklog booked on it and its sub-issues counts** (all-time, never clipped to the window), so a ticket's total logged time matches Jira's `aggregatetimespent`.
 
+Fixed columns per row: **Ticket · Date · Type · Title · Status · Final**, then a single **Arch gain B/F/Q** column, then **for each area** a group of: **Main dev · A. Est h · DL. Est h · Total dev h · Logged h · Sub-bug h · AI · Arch gain (with · without bugs) · DL gain (with · without bugs) · #Sub-bugs**. Then three closing columns: **Overhead h · Overhead people · Total log h**.
+
+- **Arch gain B/F/Q** (right after Final) — one column with **three percentages**: each area's **Architect gain considering sub-bugs** = `(A.Est − (Logged + Sub-bug h)) / A.Est`, labelled **B** (backend), **F** (frontend), **Q** (QA); green positive / red negative, `-` when meaningless.
 - **Main dev** (per area) — the area's roster developer with the **most total work on the ticket** = non-bug logged + their own **sub-bug-fixing** hours. So a genuine bug-fixer outranks someone who only did a token review/touch on the parent. (A US worked by all three areas therefore credits three developers.)
-- **Date** — the ticket's **latest Tempo worklog date** (last activity); tickets are **grouped by that month**. The report window (`--since/--until`) is applied to worklog dates at fetch time.
-- **Logged h** (per area) — non-bug Tempo hours booked by that area's developers. A **multi-role Architect/PR-review developer** (`archpr`) who is **not** their area's main dev on the ticket has their non-bug hours moved to the **Arch/PR h** column instead (so per-area numbers reflect real development, not review).
+- **Date** — the ticket's **resolutiondate** (else **updated**); tickets are **grouped by that month**.
+- **Logged h** (per area) — non-bug Tempo hours booked by that area's developers. Hours booked by **overhead** people (Architect / PO / DevOps / Consultant / management — roster area `overhead`) are moved out of the areas into the **Overhead h** bucket instead (so per-area numbers reflect real area development).
 - **Sub-bug h / #Sub-bugs** — hours that area's developers logged fixing the ticket's child Bug/Sub-bug sub-issues, and the count of such sub-bugs they worked on (attributed by the **fixer's area**, so nothing is lost when a sub-bug has no component).
 - **Total dev h** (per area) = Logged h + Sub-bug h.
 - **A. Est h** (Architect) — the area's per-area estimate custom field (days ×8), else the ticket's own estimate. **DL. Est h** (Dev-lead) — a US sums that area's child sub-task estimates (sub-bugs excluded), else the ticket's estimate.
-- **Arch gain / DL gain** — `(Est − (Logged+Sub-bug h))/Est` **with** bugs, then `(Est − Logged)/Est` **without** bugs, per area. A gain shows as **`-`** when meaningless (placeholder estimate ≤0.5h, no logged time, magnitude beyond ±1000%); green positive / red negative in the HTML.
+- **Arch gain / DL gain** (per area group) — `(Est − (Logged+Sub-bug h))/Est` **with** bugs, then `(Est − Logged)/Est` **without** bugs. A gain shows as **`-`** when meaningless (placeholder estimate ≤0.5h, no logged time, magnitude beyond ±1000%); green positive / red negative in the HTML.
 - **AI** (per area) — a badge when that area has an AI-metrics record on the ticket (or a same-area sub-task carries the field). Totals show **AI-assisted** = AI-assisted tickets / total tickets per area.
 - **Status / Final** — the ticket's Jira status and a **T** flag when terminal for its type (Bug: Done/Invalid; US: Ready for Sprint review / Need documentation / Ready for release / Released; others: Done).
-- **Arch/PR h** — non-bug hours from multi-role (`archpr`) developers reviewing/architecting a ticket they don't own. **Total log h** — logged across all groups (areas + Arch/PR).
+- **Overhead h** — logged hours from overhead people (Architect / PO / DevOps / Consultant / management) on the ticket. **Overhead people** — those contributors named with their individual hours (e.g. `Adil El Jaouhari 12.0h, Stéphane Chambrin 3.0h`). **Total log h** — logged across all groups (areas + Overhead).
 
-Output: a compact **Markdown** printout (Totals by area overall + by month, then a condensed per-ticket table grouped by month), plus a styled **HTML** file (the full wide per-area matrix, with the report split into **five tabs** — All · User Stories (All) · User Stories (Final) · Bugs (Final) · Bugs and Others — each showing Totals-by-area overall + expandable per-month, and the per-ticket matrix grouped by month) and a **CSV** (the full matrix flattened), all date-stamped in `./docs/`. Users/developers are ordered **by area, then name**.
+**Totals by area** (Backend / Frontend / QA, then an **Overhead** row and a **Total** row) are shown in **days** (1 d = 8 h) and carry a **% Logged** column — each area's (and Overhead's) share of the total logged hours.
 
-**Second report — finished-US per-developer summary.** The same run also writes `time-report-<TODAY>-<SINCE>-<UNTIL>-us-summary.html` and `…-us-summary.csv` (derived from `--out`/`--csv` by inserting `-us-summary`). It considers **only User Stories in a final status**, credited to **each area's main developer** (up to three per US). The HTML has **two tabs**: **By month** (date → user: overall AI-true / AI-false tables plus an expandable per-month block) and **By developer** (user → date: each developer, ordered by area then name, expands to two month-by-month tables — AI-assisted true / false — of their finished US). Dev-table columns: **Developer · Area · US (final) · Avg sub-bugs / US · Sum A. Est d · Sum logged d · Sum sub-bug d · Sum total d · Gain (with sub-bugs) · Gain (no sub-bugs)** (hour sums shown in days, 1 d = 8 h), each ending with a **Total** row (**Avg sub-bugs / US = total sub-bugs ÷ total US**). The CSV carries a leading **Month** and **AI assisted** column.
+Output: a compact **Markdown** printout (Totals by area overall + by month, then a condensed per-ticket table grouped by month), plus a styled **HTML** file (the full wide per-area matrix, split into **five tabs** — All · User Stories (All) · User Stories (Final) · Bugs (Final) · Bugs and Others — each with Totals-by-area overall + expandable per-month, and the per-ticket matrix grouped by month) and a **CSV** (the full matrix flattened), all date-stamped in `./docs/`. Users/developers are ordered **by area, then name**.
+
+**Second report — finished-US per-developer summary.** The same run also writes `time-report-<TODAY>-<SINCE>-<UNTIL>-us-summary.html` and `…-us-summary.csv` (derived from `--out`/`--csv` by inserting `-us-summary`). It considers **only User Stories in a final status**, credited to **each area's main developer** (up to three per US). The HTML has **two tabs**: **By month** (date → user: overall AI-true / AI-false tables plus an expandable per-month block) and **By developer** (user → date: each developer, ordered by area then name, expands to two month-by-month tables — AI-assisted true / false — of their finished US). Dev-table columns: **Developer · Area · US (final) · Avg sub-bugs / US · Sum A. Est d · Sum logged d · Sum sub-bug d · Sum total d · Gain (with sub-bugs) · Gain (no sub-bugs)** (hour sums in days), each ending with a **Total** row. The CSV carries a leading **Month** and **AI assisted** column.
 
 ## Access
 
 Both tokens are **mandatory** and read from the environment (never passed on the command line). If either is missing, tell the user how to create it and **stop**.
 
-- **`JIRA_API_TOKEN`** (+ **`JIRA_EMAIL`**, default `andrius.karpavicius@opencellsoft.com`) — an Atlassian API token from *id.atlassian.com → Security → API tokens*. All Jira reads go through the **Jira Cloud REST enhanced search** (`POST https://opencellsoft.atlassian.net/rest/api/3/search/jql`, Basic auth `email:token`) via `jira_fetch.py` below. **Do not use the Atlassian MCP `searchJiraIssuesUsingJql` in this report** — it force-includes each issue's full `description` and caps at ~5 issues/call with no cursor, which cannot fetch the thousands of tickets a real window needs. Direct REST honours the `fields` list (excludes `description`), returns 100/page and paginates via `nextPageToken`, so the whole fetch is one scripted job.
+- **`JIRA_API_TOKEN`** (+ **`JIRA_EMAIL`**, default `andrius.karpavicius@opencellsoft.com`) — an Atlassian API token from *id.atlassian.com → Security → API tokens*. All Jira reads go through the **Jira Cloud REST enhanced search** (`POST https://opencellsoft.atlassian.net/rest/api/3/search/jql`, Basic auth `email:token`) via `jira_fetch_dates.py` below. **Do not use the Atlassian MCP `searchJiraIssuesUsingJql` in this report** — it force-includes each issue's full `description` and caps at ~5 issues/call with no cursor. Direct REST honours the `fields` list (excludes `description`), returns 100/page and paginates via `nextPageToken`.
 - **`TEMPO_API_TOKEN`** (each developer's own token, *Tempo → Settings → API keys*, worklog **read** scope) — logged hours are the whole point. Fetched **per-user** (`/worklogs/user/{accountId}`), which has org-wide visibility across all areas.
 
 ## Arguments
 
 Parse `$ARGUMENTS` — all optional. Bare `/oc-time-report` = **last 30 days**, projects **INTRD and MACRD** — and, because **PRT730 is a Protected project**, **ask the user whether to include PRT730** before running (see the `--project` note below).
 
-- `--since YYYY-MM-DD` — start (inclusive). Default: 30 days before `--until`.
+- `--since YYYY-MM-DD` — start (inclusive), matched against each ticket's date (resolutiondate, else updated). Default: 30 days before `--until`.
 - `--until YYYY-MM-DD` — end (exclusive). Default: tomorrow.
 - `--project KEY[,KEY...]` — Jira project(s), comma-separated. Backend work is raised in `INTRD` (core *and* overlay) and `MACRD` (MACO R&D / overlay), so both are always in scope. **When the user passes `--project` explicitly, honour it verbatim and do NOT ask anything.** **When `--project` is NOT passed, the base default is `INTRD,MACRD`, and — because `PRT730` (Protected - 730) is a Protected project — you MUST ask the user before report generation whether PRT730 should be included** (e.g. "PRT730 is a Protected project — include it in this report? (yes/no)"). On **yes**, run with `--project INTRD,MACRD,PRT730`; on **no**, run with `--project INTRD,MACRD`. Echo the resolved project list back with the window.
 - `--out PATH` — HTML output. Default `./docs/time-report-<TODAY>-<SINCE>-<UNTIL>.html` (run date, then window start and end).
@@ -44,85 +49,471 @@ Parse `$ARGUMENTS` — all optional. Bare `/oc-time-report` = **last 30 days**, 
 
 Compute dates with `date -u +%Y-%m-%d` etc.; echo the resolved window back to the user.
 
-## Developer roster (name → area)
+## Developer roster (embedded)
 
-Area is per developer. Resolve each name to a Jira **accountId** via Jira REST user search — `GET https://opencellsoft.atlassian.net/rest/api/3/user/search?query=<name>` (Basic auth `JIRA_EMAIL:JIRA_API_TOKEN`), pick the active `@opencellsoft.com` account whose `displayName` best matches (names below may differ slightly; warn on any you cannot resolve). Write the resolved map to `devmap.json` as `{ "<accountId>": {"name": "<display>", "area": "backend|frontend|qa", "archpr": true|false} }`. Set **`archpr: true`** for the multi-role developers who also do **Architect / PR-review / management** work (see table); everyone else `false`. Additionally set **`archOnly: true`** for a **pure reviewer/architect with no dev role** (Adil El Jaouhari, Rachid Ait Yazza): all of their time — non-bug logged *and* sub-bug fixing — always goes to the **Arch/PR h** column, they are never an area's main developer, and they are excluded from the finished-US per-developer summary. (Mohamed Hamidi keeps his Frontend dev role: `archpr: true`, `archOnly: false`.) (If a `devmap.json` from a previous run already covers the roster, reuse it — accountIds are stable.)
+The roster is **embedded** below and keyed by Jira **accountId** — write it verbatim to `<SCRATCHPAD>/devmap.json` (accountIds are stable, so no per-run name resolution is needed). Schema: `{ "<accountId>": {"name", "area", "role", "active"} }`, where **area ∈ `backend` | `frontend` | `qa` | `overhead`** and `role` is the person's function (BACK / FRONT / QA / ARCHI / PO / DEVOPS / CONSULTANT / NONE).
 
-| Developer | Area |
-|---|---|
-| Mohamed Amtiou | qa |
-| Rajae Halabi | qa |
-| Brahim Aachiq | qa |
-| Souhayla Msellek | qa |
-| Mohamed Hamidi | frontend + **archpr** (PR review, Architect) |
-| Mohamed Houssa | frontend |
-| Oussama El Idrissi | frontend |
-| Aissam Bahari | frontend |
-| Vladimir Morev | frontend |
-| Abdelmounaim Akakid | backend |
-| Anas Rouaguebe | backend |
-| Tarik Fakhouri | backend |
-| Z Bariki | backend |
-| Adil El Jaouhari | **PR reviewer only** (archpr + archOnly — no dev role) |
-| M Stitane | backend |
-| Hatim Oudad | backend |
-| Zakaria El Meliani | backend |
-| Andrius Karpavicius | backend |
-| Mohamed El Azzouzi | backend |
-| Rachid Ait Yazza | **Architect only** (archpr + archOnly — no dev role) |
-| E Znibar | backend |
-| Amine Tazi | backend |
-| Maria Ait Brahim | backend |
-| Mounir Boukaya | backend |
-| Abdelhadi Nasseh | backend |
-| Mbarek Ait Yazza | backend |
-| Abdelatif Bari | backend |
+**Overhead rule.** Everyone whose role is **ARCHI, PO, DEVOPS, CONSULTANT** (or NONE — e.g. Vincent Naudion, Jean-Bertrand Rouquette) has **area `overhead`**: their logged hours never land in an area column and never make them an area's main developer — all of it goes to the ticket's **Overhead** bucket (shown per person with hours) and they are absent from the finished-US per-developer summary. Only `backend` / `frontend` / `qa` people are area developers.
 
-## Task 1 — Resolve the roster to accountIds
+**If the roster changes** (someone joins/leaves or is mis-mapped), resolve the person via the **full user directory** — `GET /rest/api/3/users/search?startAt=&maxResults=200` (Basic auth `JIRA_EMAIL:JIRA_API_TOKEN`), which lists **all** users incl. deactivated and exposes their `@opencellsoft.com` emails — then add/update their entry here (match by `firstname.lastname@opencellsoft.com`). Do **not** rely on `/user/search?query=` (it misses deactivated accounts and mis-matches).
 
-Resolve each roster name via Jira REST user search (`GET /rest/api/3/user/search?query=<name>`, Basic auth `JIRA_EMAIL:JIRA_API_TOKEN`) and build `devmap.json`; or reuse an existing `devmap.json` (accountIds are stable). Keep only successfully resolved developers and list any unresolved names in the report's Notes. (Tempo is fetched per-user directly from `devmap.json`, so no separate accountId list is needed.)
-
-## Task 2 — Fetch Tempo worklogs for the window (Pass T)
-
-Fetch **per-user** (not the bulk `/worklogs` endpoint — that only surfaces some authors). Write `fetch_tempo_users.py` (below) to scratchpad and run it against `devmap.json`. It iterates each roster accountId, pages `GET https://api.tempo.io/4/worklogs/user/{accountId}?from=<SINCE>&to=<UNTIL-1day>` (Tempo `to` is inclusive; pass the last in-window day, following `metadata.next`), and writes:
-- `tempo.json` — `{ "<issueId>": { "<accountId>": seconds } }`
-- `worklog_ids.txt` — the distinct worklogged **issue ids**, comma-separated.
-- `wdates.json` — `{ "<issueId>": "<latest worklog date>" }` (used for the ticket **Date** column and month grouping).
-
-```bash
-python "<SCRATCHPAD>/fetch_tempo_users.py" --devmap "<SCRATCHPAD>/devmap.json" \
-  --from [SINCE] --to [UNTIL-1day] --out "<SCRATCHPAD>/tempo.json" --ids-out "<SCRATCHPAD>/worklog_ids.txt" \
-  --dates-out "<SCRATCHPAD>/wdates.json"
+```json
+{
+"5e62049035753d0cdaaaceee": {
+"name": "Abdelhadi Nasseh",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"63160f1d3778a7aadf197540": {
+"name": "Abdellah Slimani",
+"area": "overhead",
+"role": "CONSULTANT",
+"active": true
+},
+"5cb069776f37be21fe5cd9d6": {
+"name": "Abdellatif Bari",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"5e620492cf54800ce3a05791": {
+"name": "Abdelmounaim Akadid",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"63369fa788ed2ebef97cddfb": {
+"name": "Adil El Jaouhari",
+"area": "overhead",
+"role": "ARCHI",
+"active": true
+},
+"63369fa8140ba0bf651c59b2": {
+"name": "Aissam BAHARI",
+"area": "frontend",
+"role": "FRONT",
+"active": true
+},
+"5c35d1059760f569b627c08d": {
+"name": "Amine Tazi",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"62b044340c77011bdfdb349e": {
+"name": "Anas Rouaguebe",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"5dbb097eb6788b0c37755176": {
+"name": "Andrius Karpavičius",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"557058:1c9100d3-2928-4e82-b007-03d9e6b8711e": {
+"name": "Antoine Michéa",
+"area": "overhead",
+"role": "DEVOPS",
+"active": true
+},
+"5f156ae707efc40028457d87": {
+"name": "Brahim Aachiq",
+"area": "qa",
+"role": "QA",
+"active": true
+},
+"61adcdd53618cd006f2e513f": {
+"name": "Chamseddine Chrifa",
+"area": "overhead",
+"role": "DEVOPS",
+"active": true
+},
+"5cb463decef84c118d766129": {
+"name": "Elhoussine Znibar",
+"area": "overhead",
+"role": "ARCHI",
+"active": true
+},
+"6294da839bc7150068ccdbcd": {
+"name": "Emmanuel Pierre",
+"area": "overhead",
+"role": "PO",
+"active": false
+},
+"5e1dc7362538f60cab4be626": {
+"name": "Florence Delille",
+"area": "overhead",
+"role": "CONSULTANT",
+"active": true
+},
+"5c375ec136647b5b9101bcac": {
+"name": "Hatim Oudad",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"5f841dd256eec00076581403": {
+"name": "Jérôme Ngo",
+"area": "overhead",
+"role": "CONSULTANT",
+"active": true
+},
+"5f203a95ef11df00258c0743": {
+"name": "Mbarek Ait-Yaazza",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"631075e8b433b060db55baba": {
+"name": "Mehdi Bourras",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"60d01ea55c64b10071543c4f": {
+"name": "Mohamed Amine Houssa",
+"area": "frontend",
+"role": "FRONT",
+"active": true
+},
+"5c35cef68ee3ae5b8b0746ec": {
+"name": "Mohamed Amtiou",
+"area": "qa",
+"role": "QA",
+"active": true
+},
+"5f1eff30b7a35e002a5063b1": {
+"name": "Mohamed El Azouzzi",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"5ef5c13914f60e0ac1c9b049": {
+"name": "Mohamed Hamidi",
+"area": "frontend",
+"role": "FRONT",
+"active": true
+},
+"5fd0b645fee79300751a7487": {
+"name": "Mohamed Stitane",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"5f15a83c70b8a90025e140a6": {
+"name": "Mounir Boukayoua",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"630f66116856bdd60a9ea766": {
+"name": "Olivier MARTIN",
+"area": "overhead",
+"role": "CONSULTANT",
+"active": false
+},
+"60d01ec9b215610069ee0e6c": {
+"name": "Oussama El Idrissi",
+"area": "frontend",
+"role": "FRONT",
+"active": false
+},
+"5f2032a7f78bea0016478dab": {
+"name": "Rachid Aityaazza",
+"area": "overhead",
+"role": "ARCHI",
+"active": true
+},
+"6360d863fe5ff375235b6511": {
+"name": "Raja Halabi",
+"area": "qa",
+"role": "QA",
+"active": true
+},
+"609bccb59b362f006977d7de": {
+"name": "Raynald Bardin",
+"area": "overhead",
+"role": "CONSULTANT",
+"active": true
+},
+"5bed52e5f9c8c708ecdb4d6f": {
+"name": "Stéphane Chambrin",
+"area": "overhead",
+"role": "PO",
+"active": true
+},
+"5fea087091bb2e0108889a79": {
+"name": "Tarik Fakhouri",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"5da44c09f094440c44b9596f": {
+"name": "Vladimir Morev",
+"area": "frontend",
+"role": "FRONT",
+"active": true
+},
+"61d5834ba54af9006978ba16": {
+"name": "Yassine Chetoui",
+"area": "overhead",
+"role": "PO",
+"active": true
+},
+"62f0e931a41ecbd0ba192725": {
+"name": "Zakaria El Meliani",
+"area": "backend",
+"role": "BACK",
+"active": false
+},
+"712020:b5101fc8-7b37-4103-a46a-03aa28677bcc": {
+"name": "Coumba Diallo",
+"area": "overhead",
+"role": "PO",
+"active": false
+},
+"712020:fae05cb2-52a0-48da-af7e-b6b22117e60a": {
+"name": "Souhayla Msellek",
+"area": "qa",
+"role": "QA",
+"active": true
+},
+"712020:1f278e2e-d260-4991-86d3-a5b960db5241": {
+"name": "Ghassen Trabelsi",
+"area": "overhead",
+"role": "CONSULTANT",
+"active": true
+},
+"712020:47d76bfb-8afa-4a2c-9559-f53589466845": {
+"name": "thanh.nguyen",
+"area": "frontend",
+"role": "FRONT",
+"active": false
+},
+"712020:1861da56-f0cd-456b-b39e-e743ce3847ac": {
+"name": "trung-anh.tran",
+"area": "frontend",
+"role": "FRONT",
+"active": false
+},
+"712020:1a5b97a4-782c-4ecc-bb95-785913e1777c": {
+"name": "Yasmine Mehidi",
+"area": "overhead",
+"role": "PO",
+"active": false
+},
+"5d3592e9825be60c3a4e7c6d": {
+"name": "Abdelkader Bouazza",
+"area": "backend",
+"role": "BACK",
+"active": false
+},
+"712020:5503a1fc-031c-4a8a-9847-f26355178b62": {
+"name": "cong.phan-huy",
+"area": "frontend",
+"role": "FRONT",
+"active": false
+},
+"712020:cd53d6f5-8104-430f-8242-b130c01349af": {
+"name": "Adem Chrifa",
+"area": "overhead",
+"role": "DEVOPS",
+"active": true
+},
+"5e26ca98c55f580c9fc945c3": {
+"name": "Maria Ait-Brahim",
+"area": "qa",
+"role": "QA",
+"active": false
+},
+"712020:5d3a425c-2362-4fdc-8fa2-3846904b21b3": {
+"name": "Ahmed Bahri",
+"area": "backend",
+"role": "BACK",
+"active": false
+},
+"712020:d07079fa-1364-43f6-8a71-236e9635e960": {
+"name": "Mohamed Moindjie",
+"area": "backend",
+"role": "BACK",
+"active": false
+},
+"712020:2659f143-12ce-44f7-9b18-310091b6aa6a": {
+"name": "Fatima-Ezzahra Toulali",
+"area": "qa",
+"role": "QA",
+"active": false
+},
+"5efd904574183a0bb3709bd4": {
+"name": "Jean-Bertrand Rouquette",
+"area": "overhead",
+"role": "NONE",
+"active": true
+},
+"5a38e6265a6ecc387ffb966c": {
+"name": "Vincent Naudion",
+"area": "overhead",
+"role": "NONE",
+"active": true
+},
+"712020:8bdf0412-9821-4712-be40-4255b8a9bc93": {
+"name": "Nolwenn Nizard",
+"area": "overhead",
+"role": "PO",
+"active": false
+},
+"712020:f9cbce79-0b38-4e13-8284-a80872729dd5": {
+"name": "Ronan Le Borgne",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"712020:56839b2d-fd0e-48e3-92e5-009cb9d1629d": {
+"name": "charlotte.thomas",
+"area": "overhead",
+"role": "PO",
+"active": false
+},
+"5f4cfbecfcaf93003b30bcb8": {
+"name": "Zakaria Bariki",
+"area": "backend",
+"role": "BACK",
+"active": true
+}
+}
 ```
 
-It prints a per-developer worklog/issue count to stderr; report which developers actually had worklogs. If Tempo returns nothing, tell the user and stop. (Most logged time is cross-project — INTRD + MACRD + SUPS support + others; the aggregator keeps only tickets in the requested projects, so the ticket report is a subset of the raw logged hours.)
+## Task 1 — Write the roster
 
-## Task 3 — Fetch ticket metadata (Jira, direct REST)
+Write the embedded `devmap.json` (above) to `<SCRATCHPAD>/devmap.json` verbatim. (Only re-resolve names via the full directory if the team has changed since this was captured.)
 
-The rows are at **parent-ticket** granularity, so we need each worklogged issue plus its parent chain and the parents' full sub-task lists. Write `jira_fetch.py` (below) to scratchpad and run it — it does all three fetch phases against the Jira REST enhanced-search endpoint (fields-limited, `description` excluded, 100/page, `nextPageToken` paging) and writes `issues.json`:
+## Task 2 — Select the in-window tickets (Jira, direct REST)
+
+Rows are at **parent-ticket** granularity and selected by **ticket date**. Write `jira_fetch_dates.py` (below) to scratchpad and run it — it selects tickets whose `resolutiondate` (else, for unresolved tickets, `updated`) is in `[--since, --until)`, then adds their parents and the parents' full sub-task lists, and writes `issues.json`:
 
 ```bash
-python "<SCRATCHPAD>/jira_fetch.py" --ids "<SCRATCHPAD>/worklog_ids.txt" --project [PROJECT] \
-  --out "<SCRATCHPAD>/issues.json"
+python "<SCRATCHPAD>/jira_fetch_dates.py" --since [SINCE] --until [UNTIL] --project [PROJECT]   --out "<SCRATCHPAD>/issues.json"
 ```
 
-The script: (1) fetches metadata for every worklogged issue id (`id in (…)`, batched by 100), (2) fetches any `fields.parent.key` not already present (for roll-up), (3) fetches all sub-tasks of the project's Story/Enabler parents (`parent in (…)`) so Dev-lead estimate & bug counts see every sub-task. It requests fields `["summary","issuetype","status","components","timeoriginalestimate","timespent","parent","customfield_10157","customfield_10158","customfield_10189","customfield_10745"]` and writes `{issues:{nodes:[…]}}` keyed with the numeric `id` (the aggregator joins Tempo by id).
+It requests fields `["summary","issuetype","status","components","timeoriginalestimate","timespent","parent","resolutiondate","updated","aggregatetimespent","customfield_10157","customfield_10158","customfield_10189","customfield_10745"]` and writes `{issues:{nodes:[…]}}` keyed with the numeric `id` (the aggregator joins Tempo by id).
 
 - `status` drives the **Status** column and the **Final** flag: a ticket is *final* when its Jira status (case-insensitive) is terminal for its type — **Bug**: Done / Invalid; **US**: Ready for Sprint review / Need documentation / Ready for release / Released; **any other type**: Done. The finished-User-Story summary counts only US with Final = true.
-- `customfield_10745` is the **"AI metrics"** field: its presence marks an area as **developed with AI assistance** (per-ticket **AI** badge; aggregated as **AI-assisted** = AI-assisted tickets / total tickets per area); an area is flagged when the ticket carries a record for that domain, or a same-area sub-task carries the field.
+- `customfield_10745` is the **"AI metrics"** field: its presence marks an area as **developed with AI assistance** (per-ticket **AI** badge; aggregated as **AI-assisted**); an area is flagged when the ticket carries a record for that domain, or a same-area sub-task carries the field.
 - Estimate custom fields are `customfield_10157` = *Architect estimate back*, `customfield_10158` = *front*, `customfield_10189` = *QA estimate* (days).
+
+## Task 3 — Fetch Tempo worklogs (per-user, all-time)
+
+Fetch **per-user** (not the bulk `/worklogs` endpoint — that only surfaces some authors). Write `fetch_tempo_users.py` (below) to scratchpad and run it against `devmap.json`. Because a selected ticket's worklogs may pre-date the window, fetch **all-time** worklogs (use a very early `--from`, e.g. `2010-01-01`, through `--to` = the last in-window day) so per-ticket totals match Jira's `aggregatetimespent`; the aggregator does the ticket-date windowing:
+
+```bash
+python "<SCRATCHPAD>/fetch_tempo_users.py" --devmap "<SCRATCHPAD>/devmap.json"   --from 2010-01-01 --to [UNTIL-1day] --out "<SCRATCHPAD>/tempo.json" --ids-out "<SCRATCHPAD>/worklog_ids.txt"   --dates-out "<SCRATCHPAD>/wdates.json"
+```
+
+It writes `tempo.json` = `{ "<issueId>": { "<accountId>": seconds } }` and `wdates.json` = `{ "<issueId>": "<latest worklog date>" }` (and a `worklog_ids.txt` that the date-driven flow does not need). It prints a per-developer worklog/issue count to stderr; report which developers had worklogs. If Tempo returns nothing, tell the user and stop. (Most logged time is cross-project; the aggregator keeps only tickets in the requested projects.)
 
 ## Task 4 — Aggregate & render
 
 Write `time_report.py` (below) and run it:
 
 ```bash
-python "<SCRATCHPAD>/time_report.py" --tempo "<SCRATCHPAD>/tempo.json" --issues "<SCRATCHPAD>/issues.json" \
-  --devmap "<SCRATCHPAD>/devmap.json" --dates "<SCRATCHPAD>/wdates.json" --since [SINCE] --until [UNTIL] --project [PROJECT] \
-  --md "<SCRATCHPAD>/report.md" --out "./docs/time-report-[TODAY]-[SINCE]-[UNTIL].html" --csv "./docs/time-report-[TODAY]-[SINCE]-[UNTIL].csv"
+python "<SCRATCHPAD>/time_report.py" --tempo "<SCRATCHPAD>/tempo.json" --issues "<SCRATCHPAD>/issues.json"   --devmap "<SCRATCHPAD>/devmap.json" --dates "<SCRATCHPAD>/wdates.json" --since [SINCE] --until [UNTIL] --project [PROJECT]   --md "<SCRATCHPAD>/report.md" --out "./docs/time-report-[TODAY]-[SINCE]-[UNTIL].html" --csv "./docs/time-report-[TODAY]-[SINCE]-[UNTIL].csv"
 ```
 
+If the aggregator prints an **UNKNOWN worklog authors** warning to stderr (accountIds with logged hours that are not in `devmap.json`), it also writes `unknown_authors.json`; **ask the user how those hours should be attributed before presenting the report**, then add the resolved people to `devmap.json` and re-run. (Set `PYTHONIOENCODING=utf-8` when running so accented developer names print cleanly on Windows.)
+
 Show the Markdown (`report.md`) to the user and report the HTML + CSV paths, **plus the second report** it also writes — a finished-User-Story per-developer summary at `./docs/time-report-[TODAY]-[SINCE]-[UNTIL]-us-summary.{html,csv}`.
+
+### `jira_fetch_dates.py`
+
+```python
+#!/usr/bin/env python3
+"""Select report tickets by DATE (resolutiondate, else updated) via Jira Cloud REST enhanced JQL,
+then fetch their parents + all sub-issues. Writes issues.json. Auth: JIRA_EMAIL:JIRA_API_TOKEN."""
+import os, sys, json, time, base64, argparse, urllib.request, urllib.error
+BASE="https://opencellsoft.atlassian.net"
+EMAIL=os.environ.get("JIRA_EMAIL") or "andrius.karpavicius@opencellsoft.com"
+TOK=os.environ["JIRA_API_TOKEN"]
+AUTH=base64.b64encode(f"{EMAIL}:{TOK}".encode()).decode()
+FIELDS=["summary","issuetype","status","components","timeoriginalestimate","timespent","parent",
+        "resolutiondate","updated","aggregatetimespent",
+        "customfield_10157","customfield_10158","customfield_10189","customfield_10745"]
+
+def post(path, body):
+    for attempt in range(5):
+        req=urllib.request.Request(BASE+path, data=json.dumps(body).encode(),
+            headers={"Authorization":f"Basic {AUTH}","Accept":"application/json","Content-Type":"application/json"})
+        try:
+            with urllib.request.urlopen(req,timeout=60) as r: return json.load(r)
+        except urllib.error.HTTPError as ex:
+            if ex.code in (429,503): time.sleep(2*(attempt+1)); continue
+            sys.stderr.write(f"HTTP {ex.code}: {ex.read()[:200]}\n"); raise
+    raise RuntimeError("retries exhausted")
+
+def fetch_jql(jql):
+    out=[]; token=None
+    while True:
+        body={"jql":jql,"fields":FIELDS,"maxResults":100}
+        if token: body["nextPageToken"]=token
+        d=post("/rest/api/3/search/jql", body)
+        out+=d.get("issues") or []
+        if d.get("isLast") or not d.get("nextPageToken"): break
+        token=d["nextPageToken"]
+    return out
+
+def slim(n):
+    f=n.get("fields") or {}; p=f.get("parent") or {}
+    return {"id":n["id"],"key":n["key"],"fields":{
+        "summary":f.get("summary"),"issuetype":{"name":(f.get("issuetype") or {}).get("name")},
+        "status":{"name":(f.get("status") or {}).get("name")},"components":f.get("components") or [],
+        "timeoriginalestimate":f.get("timeoriginalestimate"),"timespent":f.get("timespent"),
+        "resolutiondate":f.get("resolutiondate"),"updated":f.get("updated"),
+        "aggregatetimespent":f.get("aggregatetimespent"),
+        "parent":{"key":p.get("key")} if p.get("key") else None,
+        "customfield_10157":f.get("customfield_10157"),"customfield_10158":f.get("customfield_10158"),
+        "customfield_10189":f.get("customfield_10189"),"customfield_10745":f.get("customfield_10745")}}
+
+def batched(seq,n):
+    for i in range(0,len(seq),n): yield seq[i:i+n]
+
+def main():
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--since", required=True); ap.add_argument("--until", required=True)
+    ap.add_argument("--project", default="INTRD,MACRD,PRT730"); ap.add_argument("--out", required=True)
+    a=ap.parse_args()
+    PROJS=[x.strip() for x in a.project.split(",") if x.strip()]; PSTR=", ".join(PROJS)
+    def in_scope(k): return any(str(k).startswith(q+"-") for q in PROJS)
+    # Pass A: tickets whose ticket-date (resolutiondate, else updated) is in the window
+    jqlA=f'project in ({PSTR}) AND resolutiondate >= "{a.since}" AND resolutiondate < "{a.until}"'
+    jqlB=f'project in ({PSTR}) AND resolution is EMPTY AND updated >= "{a.since}" AND updated < "{a.until}"'
+    by_id={}
+    for n in fetch_jql(jqlA)+fetch_jql(jqlB): by_id[str(n["id"])]=slim(n)
+    sys.stderr.write(f"Pass A/B (date-selected): {len(by_id)} issues\n")
+    by_key={v["key"]:v for v in by_id.values()}
+    # Pass C: parents of any selected sub-issue not already present (so a subtask maps to its row)
+    pkeys=sorted({(v["fields"].get("parent") or {}).get("key") for v in list(by_id.values())
+                  if (v["fields"].get("parent") or {}).get("key") and (v["fields"]["parent"]["key"] not in by_key)})
+    for b in batched(pkeys,100):
+        for n in fetch_jql("key in ("+",".join(b)+")"):
+            s=slim(n); by_id[str(n["id"])]=s; by_key[s["key"]]=s
+    sys.stderr.write(f"Pass C (parents): +{len(pkeys)}, total {len(by_id)}\n")
+    # Pass D: all sub-issues of the in-scope Story/Enabler parents (DL estimate, sub-bugs, roll-up)
+    story_parents=sorted({v["key"] for v in list(by_id.values())
+        if in_scope(v["key"]) and (v["fields"]["issuetype"]["name"] or "") in ("Story","Enabler")})
+    seen=set(by_id)
+    for i,b in enumerate(batched(story_parents,60)):
+        for n in fetch_jql("parent in ("+",".join(b)+")"):
+            if str(n["id"]) not in seen: s=slim(n); by_id[str(n["id"])]=s
+        if i%10==0: sys.stderr.write(f"  subtask batch {i}: total {len(by_id)}\n")
+    sys.stderr.write(f"Pass D done: total {len(by_id)} nodes\n")
+    json.dump({"issues":{"nodes":list(by_id.values())}}, open(a.out,"w",encoding="utf-8"))
+    inp=sum(1 for v in by_id.values() if in_scope(v["key"]))
+    sys.stderr.write(f"WROTE {a.out}: {len(by_id)} total, {inp} in {PSTR}\n")
+
+if __name__=="__main__": main()
+```
 
 ### `fetch_tempo_users.py`
 
@@ -177,102 +568,6 @@ def main():
 if __name__=="__main__": main()
 ```
 
-### `jira_fetch.py`
-
-```python
-#!/usr/bin/env python3
-"""Fetch INTRD ticket metadata via direct Jira Cloud REST (enhanced JQL search).
-Honours `fields` (excludes description), paginates via nextPageToken. Auth: email:JIRA_API_TOKEN."""
-import os, sys, json, time, base64, urllib.request, urllib.error
-BASE="https://opencellsoft.atlassian.net"
-EMAIL=os.environ.get("JIRA_EMAIL") or "andrius.karpavicius@opencellsoft.com"
-TOK=os.environ["JIRA_API_TOKEN"]
-AUTH=base64.b64encode(f"{EMAIL}:{TOK}".encode()).decode()
-FIELDS=["summary","issuetype","status","components","timeoriginalestimate","timespent","parent",
-        "customfield_10157","customfield_10158","customfield_10189","customfield_10745"]
-
-def post(path, body):
-    for attempt in range(5):
-        req=urllib.request.Request(BASE+path, data=json.dumps(body).encode(),
-            headers={"Authorization":f"Basic {AUTH}","Accept":"application/json","Content-Type":"application/json"})
-        try:
-            with urllib.request.urlopen(req,timeout=60) as r: return json.load(r)
-        except urllib.error.HTTPError as ex:
-            if ex.code in (429,503):
-                time.sleep(2*(attempt+1)); continue
-            sys.stderr.write(f"HTTP {ex.code}: {ex.read()[:200]}\n"); raise
-    raise RuntimeError("retries exhausted")
-
-def fetch_jql(jql):
-    nodes=[]; token=None
-    while True:
-        body={"jql":jql,"fields":FIELDS,"maxResults":100}
-        if token: body["nextPageToken"]=token
-        d=post("/rest/api/3/search/jql", body)
-        nodes+= d.get("issues") or []
-        if d.get("isLast") or not d.get("nextPageToken"): break
-        token=d["nextPageToken"]
-    return nodes
-
-def slim(n):
-    f=n.get("fields") or {}
-    p=f.get("parent") or {}
-    return {"id":n["id"],"key":n["key"],"fields":{
-        "summary":f.get("summary"),"issuetype":{"name":(f.get("issuetype") or {}).get("name")},
-        "status":{"name":(f.get("status") or {}).get("name")},"components":f.get("components") or [],
-        "timeoriginalestimate":f.get("timeoriginalestimate"),"timespent":f.get("timespent"),
-        "parent":{"key":p.get("key")} if p.get("key") else None,
-        "customfield_10157":f.get("customfield_10157"),"customfield_10158":f.get("customfield_10158"),
-        "customfield_10189":f.get("customfield_10189"),"customfield_10745":f.get("customfield_10745")}}
-
-def batched(seq,n):
-    for i in range(0,len(seq),n): yield seq[i:i+n]
-
-def main():
-    import argparse
-    ap=argparse.ArgumentParser()
-    ap.add_argument("--ids", required=True)      # file: comma-separated worklogged issue ids
-    ap.add_argument("--out", required=True)       # issues.json
-    ap.add_argument("--project", default="INTRD,MACRD")
-    a=ap.parse_args()
-    PROJS=[x.strip() for x in a.project.split(",") if x.strip()]; PSTR=",".join(PROJS)
-    def in_scope(k): return any(str(k).startswith(q+"-") for q in PROJS)
-    wl=[x for x in open(a.ids).read().split(",") if x]
-    by_id={}
-    # Phase 1: metadata for every worklogged issue (all projects) by id
-    for i,b in enumerate(batched(wl,100)):
-        for n in fetch_jql("id in ("+",".join(b)+")"):
-            by_id[str(n["id"])]=slim(n)
-        if i%10==0: sys.stderr.write(f"  worklog batch {i}: {len(by_id)} nodes\n")
-    sys.stderr.write(f"Phase1 done: {len(by_id)} worklogged issues\n")
-    by_key={v["key"]:v for v in by_id.values()}
-    # Phase 2: parents (for roll-up) not already fetched
-    pkeys=set()
-    for v in by_id.values():
-        pk=(v["fields"].get("parent") or {}).get("key")
-        if pk and pk not in by_key: pkeys.add(pk)
-    pkeys=sorted(pkeys)
-    for i,b in enumerate(batched(pkeys,100)):
-        for n in fetch_jql("key in ("+",".join(b)+")"):
-            s=slim(n); by_id[str(n["id"])]=s; by_key[s["key"]]=s
-    sys.stderr.write(f"Phase2 done: +{len(pkeys)} parents, total {len(by_id)}\n")
-    # Phase 3: all sub-tasks of PROJECT Story/Enabler parents (for DL est + bug counts)
-    story_parents=sorted({v["key"] for v in list(by_id.values())
-        if in_scope(v["key"]) and (v["fields"]["issuetype"]["name"] or "") in ("Story","Enabler")})
-    seen=set(by_id)
-    for i,b in enumerate(batched(story_parents,60)):
-        for n in fetch_jql("parent in ("+",".join(b)+")"):
-            if str(n["id"]) not in seen:
-                s=slim(n); by_id[str(n["id"])]=s
-        if i%10==0: sys.stderr.write(f"  subtask batch {i}: total {len(by_id)}\n")
-    sys.stderr.write(f"Phase3 done: total {len(by_id)} nodes\n")
-    json.dump({"issues":{"nodes":list(by_id.values())}}, open(a.out,"w",encoding="utf-8"))
-    inp=sum(1 for v in by_id.values() if in_scope(v["key"]))
-    sys.stderr.write(f"WROTE {a.out}: {len(by_id)} total, {inp} in {PSTR}\n")
-
-if __name__=="__main__": main()
-```
-
 ### `time_report.py`
 
 ```python
@@ -322,6 +617,10 @@ def ticket_type(f):
     return TYPE_MAP.get(n.lower(), n or "?")
 def status_of(f): return ((f.get("status") or {}).get("name") or "").strip()
 def is_final(ttype, status): return (status or "").strip().lower() in FINAL_STATUS.get(ttype, DEFAULT_FINAL)
+def ticket_date(f):
+    """The ticket's date for range-filtering & grouping: resolutiondate, else updated. YYYY-MM-DD."""
+    d = f.get("resolutiondate") or f.get("updated") or ""
+    return d[:10]
 
 def area_of(f):
     for c in f.get("components") or []:
@@ -368,8 +667,12 @@ def gain_cell(est, logged):
 def e(x): return html.escape(str(x))
 def days(h): return round((h or 0) / DAY_HOURS, 1)   # totals shown in days (1 d = 8 h)
 
-def build_ticket_rows(all_nodes, tempo, devmap, project, wdates=None):
+def build_ticket_rows(all_nodes, tempo, devmap, project, wdates=None, since=None, until=None):
+    """Rows are PARENT tickets whose ticket date (resolutiondate, else updated) is in
+    [since, until); every worklog on the ticket + its sub-issues counts (all-time, not
+    date-clipped). unknown = accountIds seen in worklogs but absent from devmap."""
     wdates = wdates or {}
+    unknown = defaultdict(float)
     by_id = {str(n.get("id")): n for n in all_nodes}
     by_key = {n.get("key"): n for n in all_nodes}
     children = defaultdict(list)
@@ -393,9 +696,11 @@ def build_ticket_rows(all_nodes, tempo, devmap, project, wdates=None):
             b = tk[tkey]["subbugs"].setdefault(str(iid), {"perdev": defaultdict(float)})
             for acc, sec in per.items():
                 if acc in devmap: b["perdev"][acc] += sec
+                else: unknown[acc] += sec
         else:
             for acc, sec in per.items():
                 if acc in devmap: tk[tkey]["devLogged"][acc] += sec
+                else: unknown[acc] += sec
 
     rows = []
     for tkey, agg in tk.items():
@@ -404,6 +709,9 @@ def build_ticket_rows(all_nodes, tempo, devmap, project, wdates=None):
         if not tnode: continue
         tf = tnode.get("fields") or {}
         if not agg["devLogged"] and not agg["subbugs"]: continue
+        tdate = ticket_date(tf)                       # resolutiondate, else updated
+        if since and (not tdate or tdate < since): continue
+        if until and (not tdate or tdate >= until): continue
         ttype = ticket_type(tf); status = status_of(tf); final = is_final(ttype, status)
         pa = area_of(tf); rec = record_domains(tf)
 
@@ -416,7 +724,7 @@ def build_ticket_rows(all_nodes, tempo, devmap, project, wdates=None):
         for b in agg["subbugs"].values():
             touched = set()
             for acc, sec in b["perdev"].items():
-                if devmap[acc].get("archOnly"):   # pure reviewer/architect -> Arch/PR, not an area
+                if devmap[acc]["area"] == "overhead":   # ARCHI/PO/DEVOPS/CONSULTANT -> overhead, not an area
                     archpr_logged += sec; archpr_devs[devmap[acc]["name"]] = archpr_devs.get(devmap[acc]["name"], 0.0) + sec
                     continue
                 ar = devmap[acc]["area"]; area_sub_h[ar] += sec; sub_dev[ar][acc] += sec; touched.add(ar)
@@ -427,19 +735,19 @@ def build_ticket_rows(all_nodes, tempo, devmap, project, wdates=None):
         # who only did a token review/touch on the parent.
         by_area_dev = defaultdict(dict)
         for acc, sec in agg["devLogged"].items():
-            if devmap[acc].get("archOnly"): continue   # pure reviewer/architect is never an area main dev
+            if devmap[acc]["area"] == "overhead": continue   # overhead people are never an area main dev
             by_area_dev[devmap[acc]["area"]][acc] = by_area_dev[devmap[acc]["area"]].get(acc, 0) + sec
         for ar in AREAS:
             for acc, sec in sub_dev.get(ar, {}).items():
                 by_area_dev[ar][acc] = by_area_dev[ar].get(acc, 0) + sec
         main = {ar: max(d, key=lambda a: d[a]) for ar, d in by_area_dev.items() if d}
 
-        # attribute each developer's NON-BUG logged hours: own area, except a multi-role dev who is
-        # NOT their area's main dev on this ticket -> Architect/PR/mgmt bucket.
+        # attribute each developer's NON-BUG logged hours: own area, except overhead people
+        # (ARCHI/PO/DEVOPS/CONSULTANT/blank) whose hours go to the ticket-overhead bucket.
         area_logged = {ar: 0.0 for ar in AREAS}
         for acc, sec in agg["devLogged"].items():
             ar = devmap[acc]["area"]
-            if devmap[acc].get("archOnly") or (devmap[acc].get("archpr") and main.get(ar) != acc):
+            if ar == "overhead":
                 archpr_logged += sec; archpr_devs[devmap[acc]["name"]] = archpr_devs.get(devmap[acc]["name"], 0.0) + sec
             else:
                 area_logged[ar] += sec
@@ -482,15 +790,16 @@ def build_ticket_rows(all_nodes, tempo, devmap, project, wdates=None):
         archpr_h = hours(archpr_logged)
         total_logged = round(sum(areas_out[ar]["logged"] for ar in AREAS) + archpr_h, 1)
         total_dev = round(sum(areas_out[ar]["totalDev"] for ar in AREAS) + archpr_h, 1)
-        date = agg["date"]; month = (date or "")[:7] or "no-date"
+        date = tdate; month = (date or "")[:7] or "no-date"
         rows.append({"key": tkey, "ttype": ttype, "title": (tf.get("summary") or "")[:60],
                      "status": status, "final": final, "date": date, "month": month, "areas": areas_out,
-                     "archprH": archpr_h, "archprDevs": sorted(archpr_devs, key=lambda n: -archpr_devs[n]),
+                     "archprH": archpr_h,
+                     "archprDevs": [(n, hours(archpr_devs[n])) for n in sorted(archpr_devs, key=lambda n: -archpr_devs[n])],
                      "totalLogged": total_logged, "totalDev": total_dev,
                      "aiAny": any(areas_out[ar]["ai"] for ar in AREAS),
                      "bugsTotal": sum(area_bug_ct[ar] for ar in AREAS)})
-    rows.sort(key=lambda r: (r["date"], r["totalLogged"]), reverse=True)   # newest activity first
-    return rows
+    rows.sort(key=lambda r: (r["date"], r["totalLogged"]), reverse=True)   # newest ticket-date first
+    return rows, unknown
 
 # ---------- per-area totals (across tickets) ----------
 def area_totals(rows):
@@ -512,56 +821,59 @@ def months_of(rows):
 # ---------- shared renderers (reused for the overall view and per month) ----------
 def md_totals_lines(rows):
     tot, archpr_tot, grand_log = area_totals(rows)   # all values in hours; shown as days below
-    out = ["| Area | Tickets | A. Est d | DL. Est d | Total dev d | Logged d | Sub-bug d | AI-assisted | Arch gain | DL gain | Sub-bugs |",
-           "|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|"]
+    def pl(v): return f"{round(v / grand_log * 100)}%" if grand_log else "–"   # % of total logged h
+    out = ["| Area | Tickets | A. Est d | DL. Est d | Total dev d | Logged d | Sub-bug d | AI-assisted | % Logged | Arch gain | DL gain | Sub-bugs |",
+           "|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|"]
     for ar in AREAS:
         g = tot[ar]
         out.append(f"| {AREA_LABEL[ar]} | {g['tickets']} | {days(g['aEst'])} | {days(g['dlEst'])} | "
-                   f"{days(g['logged'] + g['subBug'])} | {days(g['logged'])} | {days(g['subBug'])} | {g['ai']}/{g['tickets']} | "
+                   f"{days(g['logged'] + g['subBug'])} | {days(g['logged'])} | {days(g['subBug'])} | {g['ai']}/{g['tickets']} | {pl(g['logged'])} | "
                    f"{gain_two(g['aEst'], g['logged'], g['subBug'])} | {gain_two(g['dlEst'], g['logged'], g['subBug'])} | {g['bugs']} |")
-    out.append(f"| Architect/PR/mgmt | – | – | – | {days(archpr_tot)} | {days(archpr_tot)} | – | – | – | – | – |")
+    out.append(f"| Overhead | – | – | – | {days(archpr_tot)} | {days(archpr_tot)} | – | – | {pl(archpr_tot)} | – | – | – |")
     t_sub_h = sum(tot[ar]["subBug"] for ar in AREAS)
     t_aest = days(sum(tot[ar]["aEst"] for ar in AREAS)); t_dlest = days(sum(tot[ar]["dlEst"] for ar in AREAS))
     t_sub = days(t_sub_h); t_bugs = sum(tot[ar]["bugs"] for ar in AREAS)
-    grand_dev = days(grand_log + t_sub_h)   # Total dev = all logged (areas + Arch/PR) + all sub-bug
-    out.append(f"| **Total** | | {t_aest} | {t_dlest} | **{grand_dev}** | **{days(grand_log)}** | {t_sub} | | | | {t_bugs} |")
+    grand_dev = days(grand_log + t_sub_h)   # Total dev = all logged (areas + Overhead) + all sub-bug
+    out.append(f"| **Total** | | {t_aest} | {t_dlest} | **{grand_dev}** | **{days(grand_log)}** | {t_sub} | | 100% | | | {t_bugs} |")
     return out
 
 def html_totals_table(rows):
     tot, archpr_tot, grand_log = area_totals(rows)   # all values in hours; shown as days below
+    def pl(v): return f"{round(v / grand_log * 100)}%" if grand_log else "&ndash;"   # % of total logged h
     h = ["<div class=\"tw\"><table><thead><tr>"
          "<th>Area</th><th class='r'>Tickets</th><th class='r'>A. Est d</th><th class='r'>DL. Est d</th>"
-         "<th class='r'>Total dev d</th><th class='r'>Logged d</th><th class='r'>Sub-bug d</th><th class='r'>AI-assisted</th>"
+         "<th class='r'>Total dev d</th><th class='r'>Logged d</th><th class='r'>Sub-bug d</th><th class='r'>AI-assisted</th><th class='r'>% Logged</th>"
          "<th class='r'>Arch gain</th><th class='r'>DL gain</th><th class='r'>Sub-bugs</th></tr></thead><tbody>"]
     for ar in AREAS:
         g = tot[ar]
         h.append(f"<tr><td class='name'>{AREA_LABEL[ar]}</td><td class='r'>{g['tickets']}</td>"
                  f"<td class='r'>{days(g['aEst'])}</td><td class='r'>{days(g['dlEst'])}</td>"
                  f"<td class='r'>{days(g['logged']+g['subBug'])}</td><td class='r'>{days(g['logged'])}</td>"
-                 f"<td class='r'>{days(g['subBug'])}</td><td class='r'>{g['ai']}/{g['tickets']}</td>"
+                 f"<td class='r'>{days(g['subBug'])}</td><td class='r'>{g['ai']}/{g['tickets']}</td><td class='r'>{pl(g['logged'])}</td>"
                  f"<td class='r'>{gain_two_html(g['aEst'],g['logged'],g['subBug'])}</td>"
                  f"<td class='r'>{gain_two_html(g['dlEst'],g['logged'],g['subBug'])}</td><td class='r'>{g['bugs']}</td></tr>")
-    h.append(f"<tr><td class='name'>Architect/PR/mgmt</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td>"
-             f"<td class='r'>{days(archpr_tot)}</td><td class='r'>{days(archpr_tot)}</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td>"
+    h.append(f"<tr><td class='name'>Overhead</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td>"
+             f"<td class='r'>{days(archpr_tot)}</td><td class='r'>{days(archpr_tot)}</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>{pl(archpr_tot)}</td>"
              f"<td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td></tr>")
     t_sub_h = sum(tot[ar]["subBug"] for ar in AREAS)
     t_aest = days(sum(tot[ar]["aEst"] for ar in AREAS)); t_dlest = days(sum(tot[ar]["dlEst"] for ar in AREAS))
     t_sub = days(t_sub_h); t_bugs = sum(tot[ar]["bugs"] for ar in AREAS)
-    grand_dev = days(grand_log + t_sub_h)   # Total dev = all logged (areas + Arch/PR) + all sub-bug
+    grand_dev = days(grand_log + t_sub_h)   # Total dev = all logged (areas + Overhead) + all sub-bug
     h.append(f"<tr class='tot'><td class='name'>Total</td><td></td>"
              f"<td class='r'>{t_aest}</td><td class='r'>{t_dlest}</td>"
              f"<td class='r'>{grand_dev}</td><td class='r'>{days(grand_log)}</td><td class='r'>{t_sub}</td>"
-             f"<td></td><td></td><td></td><td class='r'>{t_bugs}</td></tr>")
+             f"<td></td><td class='r'>100%</td><td></td><td></td><td class='r'>{t_bugs}</td></tr>")
     h.append("</tbody></table></div>")
     return "".join(h)
 
 MATRIX_SUB = ["Main dev", "A.Est", "DL.Est", "Tot dev", "Logged", "Sub-bug h", "AI", "Arch gain", "DL gain", "#SB"]
 def html_matrix_head():
     head1 = ['<th rowspan="2">Ticket</th><th rowspan="2">Date</th><th rowspan="2">Type</th><th rowspan="2">Title</th>'
-             '<th rowspan="2">Status</th><th rowspan="2" class="c">F</th>']
+             '<th rowspan="2">Status</th><th rowspan="2" class="c">F</th>'
+             '<th rowspan="2" class="c gaincol">Arch gain B/F/Q<br><span class="sm">w/ bugs</span></th>']
     for ar in AREAS:
         head1.append(f'<th colspan="{len(MATRIX_SUB)}" class="grp {ar}">{AREA_LABEL[ar]}</th>')
-    head1.append('<th rowspan="2" class="r">Arch/PR h</th><th rowspan="2" class="r">Total log h</th>')
+    head1.append('<th rowspan="2" class="r">Overhead h</th><th rowspan="2">Overhead people</th><th rowspan="2" class="r">Total log h</th>')
     head2 = []
     for ar in AREAS:
         for i, s in enumerate(MATRIX_SUB):
@@ -576,6 +888,13 @@ def html_matrix_body(rows):
                f'<td class="sm">{e(r["date"] or "–")}</td>'
                f'<td>{e(r["ttype"])}</td><td class="ti">{e(r["title"])}</td><td>{e(r["status"])}</td>'
                f'<td class="c">{"<span class=fin>T</span>" if r["final"] else ""}</td>']
+        # single column: back / front / QA Architect gain, considering sub-bugs (est vs logged+sub-bug)
+        AG_LBL = {"backend": "B", "frontend": "F", "qa": "Q"}
+        ag_parts = []
+        for ar in AREAS:
+            x = r["areas"][ar]
+            ag_parts.append(f'{AG_LBL[ar]}&nbsp;{gain_span(gain_pct(x["aEst"], x["logged"] + x["subBug"]))}')
+        tds.append(f'<td class="c gaincol sm">{" ".join(ag_parts)}</td>')
         for ar in AREAS:
             x = r["areas"][ar]; blank = not (x["logged"] or x["subBug"] or x["aEst"] or x["dlEst"] or x["main"])
             if blank:
@@ -586,8 +905,10 @@ def html_matrix_body(rows):
                        f'<td class="c area-{ar}">{"<span class=aibadge>AI</span>" if x["ai"] else ""}</td>'
                        f'<td class="r area-{ar}">{gain_two_html(x["aEst"], x["logged"], x["subBug"])}</td>'
                        f'<td class="r area-{ar}">{gain_two_html(x["dlEst"], x["logged"], x["subBug"])}</td><td class="r area-{ar}">{x["bugs"]}</td>')
-        arch = f'{r["archprH"]}' + (f'<span class="sm"> {e(", ".join(r["archprDevs"]))}</span>' if r["archprDevs"] else "")
-        tds.append(f'<td class="r">{arch if r["archprH"] else "&ndash;"}</td><td class="r tot">{r["totalLogged"]}</td>')
+        people = ", ".join(f'{e(n)} {h}h' for n, h in r["archprDevs"])
+        tds.append(f'<td class="r">{r["archprH"] if r["archprH"] else "&ndash;"}</td>'
+                   f'<td class="sm">{people if people else "&ndash;"}</td>'
+                   f'<td class="r tot">{r["totalLogged"]}</td>')
         out.append("<tr>" + "".join(tds) + "</tr>")
     return "".join(out)
 
@@ -831,14 +1152,21 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tempo", required=True); ap.add_argument("--issues", required=True)
     ap.add_argument("--devmap", required=True); ap.add_argument("--dates")   # {issueId: latest worklog date}
-    ap.add_argument("--since"); ap.add_argument("--until"); ap.add_argument("--project", default="INTRD,MACRD")
+    ap.add_argument("--since"); ap.add_argument("--until"); ap.add_argument("--project", default="INTRD,MACRD,PRT730")
     ap.add_argument("--md"); ap.add_argument("--out", required=True); ap.add_argument("--csv")
     a = ap.parse_args()
     tempo = json.load(open(a.tempo, encoding="utf-8"))
     devmap = json.load(open(a.devmap, encoding="utf-8"))
     wdates = json.load(open(a.dates, encoding="utf-8")) if a.dates and os.path.exists(a.dates) else {}
     ns = nodes(json.load(open(a.issues, encoding="utf-8")))
-    rows = build_ticket_rows(ns, tempo, devmap, a.project, wdates)
+    rows, unknown = build_ticket_rows(ns, tempo, devmap, a.project, wdates, a.since, a.until)
+    if unknown:
+        import sys as _sys
+        tot_unk = round(sum(unknown.values())/3600, 1)
+        _sys.stderr.write(f"\n*** UNKNOWN worklog authors (not in devmap): {len(unknown)} accountIds, {tot_unk} h total ***\n")
+        for acc, sec in sorted(unknown.items(), key=lambda x: -x[1])[:30]:
+            _sys.stderr.write(f"    {acc}  {round(sec/3600,1)} h\n")
+        json.dump({a: sec for a, sec in unknown.items()}, open(os.path.join(os.path.dirname(a.out) or ".", "unknown_authors.json"), "w"))
     tot_all, _, grand_log = area_totals(rows)
     _tsub = round(sum(tot_all[ar]["subBug"] for ar in AREAS), 1)
     mons = months_of(rows)
@@ -864,14 +1192,15 @@ def main():
         for m in mons:
             mr = [r for r in rows if r["month"] == m]
             P(f"\n### {m} ({len(mr)} tickets)\n")
-            P("| Ticket | Date | Type | Status | F | Back (dev · log) | Front (dev · log) | QA (dev · log) | Arch/PR h | Total h |")
-            P("|---|---|---|---|:-:|---|---|---|--:|--:|")
+            P("| Ticket | Date | Type | Status | F | Back (dev · log) | Front (dev · log) | QA (dev · log) | Overhead h | Overhead people | Total h |")
+            P("|---|---|---|---|:-:|---|---|---|--:|---|--:|")
             for r in mr:
                 def cell(ar):
                     x = r["areas"][ar]
                     return f"{x['main']} · {x['logged']}" if x["logged"] else "–"
+                people = ", ".join(f"{n} {h}h" for n, h in r["archprDevs"]) or "–"
                 P(f"| {r['key']} | {r['date']} | {r['ttype']} | {r['status']} | {'T' if r['final'] else ''} | "
-                  f"{cell('backend')} | {cell('frontend')} | {cell('qa')} | {r['archprH'] or '–'} | {r['totalLogged']} |")
+                  f"{cell('backend')} | {cell('frontend')} | {cell('qa')} | {r['archprH'] or '–'} | {people} | {r['totalLogged']} |")
     md_text = "\n".join(md)
     if a.md: open(a.md, "w", encoding="utf-8").write(md_text)
     print(md_text)
@@ -883,7 +1212,7 @@ def main():
                   "Arch gain (w bug)", "Arch gain (no bug)", "DL gain (w bug)", "DL gain (no bug)", "Sub-bugs"]
         header = ["Ticket", "Date", "Month", "Type", "Title", "Status", "Final"]
         for ar in AREAS: header += [f"{AREA_LABEL[ar]} {c}" for c in percol]
-        header += ["Arch/PR/mgmt logged h", "Arch/PR/mgmt devs", "Total logged h", "Total dev h"]
+        header += ["Overhead logged h", "Overhead devs", "Total logged h", "Total dev h"]
         with open(a.csv, "w", encoding="utf-8-sig", newline="") as fh:
             w = csv.writer(fh); w.writerow(header)
             for r in rows:
@@ -895,7 +1224,7 @@ def main():
                             gain_cell(x["aEst"], x["logged"] + x["subBug"]), gain_cell(x["aEst"], x["logged"]),
                             gain_cell(x["dlEst"], x["logged"] + x["subBug"]), gain_cell(x["dlEst"], x["logged"]),
                             x["bugs"]]
-                row += [r["archprH"], "; ".join(r["archprDevs"]), r["totalLogged"], r["totalDev"]]
+                row += [r["archprH"], "; ".join(f"{n} {h}h" for n, h in r["archprDevs"]), r["totalLogged"], r["totalDev"]]
                 w.writerow(row)
 
     # ---------- HTML (wide per-area matrix) ----------
@@ -929,18 +1258,22 @@ def main():
         W(f'<section class="panel panel-other">{html_report_body(other_rows)}</section>')
         W('</div>')
     W('<p class="foot">One row per ticket, with a column group per area (Backend / Frontend / QA). '
-      '<b>Date</b> = the ticket\'s latest Tempo worklog date (last activity); tickets are grouped into that month. '
+      '<b>Date</b> = the ticket\'s date (resolutiondate, else updated); tickets are selected and grouped into that month. '
+      '<b>Arch gain B/F/Q</b> (right after Final) is a single column giving each area\'s Architect gain <i>considering sub-bugs</i> '
+      '(A.Est vs Logged + Sub-bug h): B = backend, F = frontend, Q = QA. '
       '<b>Main dev</b> = the roster developer of that area with the most logged hours on the ticket. '
-      '<b>Logged h</b> = hours booked by that area\'s developers (a multi-role Architect/PR-review developer who is '
-      '<i>not</i> their area\'s main dev on the ticket has their hours moved to the <b>Arch/PR h</b> column instead). '
+      '<b>Logged h</b> = hours booked by that area\'s developers. Hours logged by <b>overhead</b> people '
+      '(Architect / PO / DevOps / Consultant / management) are moved out of the areas into the <b>Overhead h</b> column, and each '
+      'contributing person is named with their hours in the <b>Overhead people</b> column. '
       '<b>Sub-bug h</b> / <b>#SB</b> = hours this area\'s developers logged fixing the ticket\'s child Bug/Sub-bug sub-issues, and '
       'the count of such sub-bugs they worked on (attributed by the fixer\'s area, so nothing is lost when a sub-bug has no component). '
       '<b>Total dev h</b> = Logged + Sub-bug h. <b>A.Est</b> (Architect, per-area estimate '
       'field &times;8) and <b>DL.Est</b> (Dev-lead; a US sums that area\'s child sub-task estimates, else the ticket estimate). '
       '<b>Arch/DL gain</b> = (Est&minus;Logged)/Est shown with / without sub-bug hours; green positive, red negative, "-" when meaningless. '
       'The per-ticket <b>AI</b> badge marks an area developed with AI assistance (the ticket carries an AI-metrics record for '
-      'that area, or a same-area sub-task does); in the Totals, <b>AI-assisted</b> = AI-assisted tickets / total tickets for that area. '
-      '<b>Total log h</b> = logged across all groups (areas + Arch/PR). '
+      'that area, or a same-area sub-task does); in the Totals, <b>AI-assisted</b> = AI-assisted tickets / total tickets for that area, and '
+      '<b>% Logged</b> = that area\'s (or Overhead\'s) share of the total logged hours. '
+      '<b>Total log h</b> = logged across all groups (areas + Overhead). '
       'Generated by <code>/oc-time-report</code>.</p>')
     doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -981,6 +1314,7 @@ tbody tr:nth-child(even) {{ background:var(--zebra); }}
 .matrix td.area-backend {{ background:color-mix(in srgb, var(--back) 30%, transparent); }}
 .matrix td.area-frontend {{ background:color-mix(in srgb, var(--front) 30%, transparent); }}
 .matrix td.area-qa {{ background:color-mix(in srgb, var(--qa) 30%, transparent); }}
+.matrix th.gaincol, .matrix td.gaincol {{ border-left:2px solid var(--line); border-right:2px solid var(--line); white-space:nowrap; }}
 tr.tot td {{ font-weight:700; background:var(--head); }}
 td.tot {{ font-weight:700; }}
 details {{ border:1px solid var(--line); border-radius:10px; margin:.4rem 0; padding:0 .6rem; }}
@@ -1028,12 +1362,8 @@ if __name__ == "__main__":
 
 ## Notes & limitations
 
-- **Tempo token visibility.** On this instance `TEMPO_API_TOKEN` has **organisation-wide** worklog visibility — the per-user endpoint (`/worklogs/user/{accountId}`) returns worklogs for **every** roster area (backend, frontend, QA), verified across all 27 developers. There is **no backend-only restriction**; report all areas. (A missing area therefore means those developers had no in-window worklogs or the roster name failed to resolve to an accountId — not a Tempo permission gap.)
-- **Point-in-time.** Logged hours reflect the Tempo state when you run it. It requires `TEMPO_API_TOKEN`.
-- **Per-area columns.** Each ticket has a column group per area (Backend/Frontend/QA); a developer's hours land in **their own roster area**. A multi-role `archpr` developer who isn't their area's main dev on a ticket has their non-bug hours moved to the **Arch/PR h** column, so per-area numbers reflect real development, not review.
-- **Main dev = top by total work.** Per area, the main developer is the roster dev with the most **dev-logged + own sub-bug-fixing** hours — a token reviewer never wins, and an **`archOnly`** reviewer/architect is never eligible. The **second report** credits each finished US to each area's main dev (up to three per US).
-- **`archOnly` reviewers/architects** (Adil, Rachid) have **no dev role**: all their logged + sub-bug hours go to the **Arch/PR h** column, they never count in an area or as a main dev, and they are omitted from the finished-US summary.
-- **Roll-up.** Worklogs on a Story's non-bug sub-tasks fold into that Story's per-area **Logged h**; worklogs on its Bug/Sub-bug sub-tasks fold into per-area **Sub-bug h** (by the fixer's area). A top-level Bug the developer logged on is its own row (all time = that area's Logged h).
-- **Date & month.** Each ticket's Date is its latest Tempo worklog date; tickets are grouped by that month (a long-running ticket's full hours land in its last-activity month).
-- **Estimates.** A. Est needs the per-area estimate custom fields on the Story; DL. Est needs child sub-task estimates (Story) or the ticket estimate (Bug/Enabler). Areas with no estimate show `0` / `–` time gain.
-- **Read-only** — the command never writes to Jira; outbound calls are read-only: the Jira REST enhanced-search reads (Task 3) and the Tempo per-user fetch (Task 2).
+- **Ticket selection = date, worklogs = all-time.** The window filters **tickets** by `resolutiondate` (else `updated`); for a selected ticket, **all** worklogs (any date) count, so a ticket's logged total matches Jira `aggregatetimespent`. Tempo is therefore fetched all-time per user, and the aggregator applies the date window to the ticket, not to the worklogs.
+- **Overhead bucket.** Roster area `overhead` (roles ARCHI / PO / DEVOPS / CONSULTANT / NONE) is never an area developer; all their logged hours go to the **Overhead** column (itemised per person in **Overhead people**) and they are excluded from the finished-US per-developer summary.
+- **Tempo token visibility.** On this instance `TEMPO_API_TOKEN` has **organisation-wide** worklog visibility — the per-user endpoint returns worklogs for **every** roster area. A missing area means those developers had no worklogs on in-window tickets, not a permission gap.
+- **Unknown authors.** With a complete roster, `tempo.json` only carries known accountIds. If someone logs time who is not in `devmap.json`, add them (resolve via the full directory) so their hours are attributed rather than dropped.
+- **Read-only** — the command never writes to Jira, Tempo or git; all calls are read-only.
