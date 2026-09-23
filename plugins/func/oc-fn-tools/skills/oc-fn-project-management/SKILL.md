@@ -114,6 +114,30 @@ These never scale away, even for a single big Epic:
    minor units + ISO-4217, never floats; idempotent everywhere; never persist/log PAN/CVV;
    `RECONCILING` before retry. Yours will differ — name them in Phase 1 and carry them into
    the technical design and lint/arch-tests.)*
+8. **Never write a bare reference code. Always code *and* name.** Every identifier this
+   methodology generates — estimate blocks, decision-register entries, ADRs, spec rules,
+   invariants, NFRs, use cases, requirements, phases, work items — is opaque on its own. A reader
+   who meets `Block 2` or `DR-27` has to stop and go look it up, and in a meeting they simply
+   won't. Write **`Block 2 — Relations & the trigger engine`**, **`DR-27 — how purchase-side cost
+   is contained`**, **`INV-1 (no revenue drift)`**, **`ADR-0009 (build the purchasing catalog)`**,
+   **`PR-4 — staged, then accepted`**, **`UC-15 — reconcile a provider invoice`**,
+   **`INTRD-45709 — French conformance fixes`**.
+
+   - **It applies everywhere**, not just to documents: briefs, decks, Jira, Confluence, commit
+     messages, ADRs, the design `.md`s, and conversational replies to the sponsor.
+   - **First mention in full, and again whenever the reader has lost the thread** — a new section,
+     a table cell read out of order, a summary paragraph. Inside one tight passage the bare code is
+     fine once the name has been given; across a document it is not.
+   - **In a table**, put the name in the same cell as the code rather than trusting a column header
+     to carry it, because tables are read by row and quoted by row.
+   - **Work-item keys keep their own rule on top of this** (global `CLAUDE.md`): a clickable link
+     carrying the full key, never a bare number — *and* the name beside it.
+   - The one exception is a **dense enumeration whose whole purpose is the list of codes**
+     (a traceability matrix, a coverage table). Name them in the sentence that introduces it.
+
+   *(Recorded 2026-09-23 on the sponsor's instruction, after a Cost & Margin brief and several
+   sessions leaned on bare `Block N` and `DR-nn`: "that forces me — and the other readers — to
+   always check what they refer to".)*
 
 ## 4. The phased delivery model
 

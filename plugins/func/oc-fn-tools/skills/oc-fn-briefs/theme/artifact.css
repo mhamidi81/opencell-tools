@@ -1,0 +1,100 @@
+/* @brand opencell-artifact — screen layer over brand.css for claude.ai Artifacts.
+ *
+ * brand.css is tuned for a printed A4 page: point sizes, a white sheet, no dark mode. An
+ * Artifact is read on a screen — often a phone — inside a viewer that has its own light/dark
+ * theme. This file is loaded AFTER brand.css and only adapts it; the palette, components and
+ * vocabulary stay brand.css's. Never restate a brand colour here that brand.css already owns.
+ *
+ * LIGHT IS THE DEFAULT, deliberately (Stéphane, 2026-09-23: most Opencellers dislike dark
+ * themes). A dark OS setting is ignored — there is no prefers-color-scheme block, and don't
+ * add one back. Dark applies only on an explicit choice, in precedence order:
+ *   1. the page's own switch in the header band → [data-oc-theme] on the root, remembered
+ *      per viewer in localStorage (template script);
+ *   2. claude.ai's theme setting → [data-theme="dark"] stamped on the root by the viewer.
+ * Either is a choice this viewer made, not a default imposed on everyone.
+ *
+ * The dark palette is derived from the Charte Graphique palette only: brand black (#121011) as
+ * the ground, the #EDE4E9 tint family for text, coral (#FA5757) replacing --oc-red-ink as the
+ * red that reads on a dark ground. The red header band and the pills keep --oc-red in both.
+ *
+ * Every token has its light value on bare :root; the dark block only redefines tokens.
+ * Components read tokens only — nothing is coloured directly inside a theme block.
+ */
+
+:root{
+  --oc-page:#ffffff;       /* page ground */
+  --oc-surface:#ffffff;    /* KPI tiles, cards */
+  --oc-zebra:#fbf9fa;      /* even table rows (brand.css's literal, now a token) */
+  --oc-pill-ink:var(--oc-black);
+  --oc-moon:block; --oc-sun:none;   /* theme-switch icon: offer dark while light, and back */
+}
+
+:root[data-theme="dark"]:not([data-oc-theme="light"]),
+:root[data-oc-theme="dark"]{
+  color-scheme:dark;
+  --oc-page:#121011; --oc-surface:#1c1719; --oc-zebra:#171314;
+  --oc-ink:#efe7eb; --oc-grey:#a89ca2; --oc-line:#322a2d;
+  --oc-tint:#2a1a1e; --oc-tint2:#2a2326; --oc-red-ink:#fa5757; --oc-pill-ink:#3d3438;
+  --oc-moon:none; --oc-sun:block;
+}
+
+/* ── Theme switch, in the header band (red in both themes, so its white is fixed) ─────── */
+.band-end{display:flex;align-items:center;gap:10px}
+.oc-theme{appearance:none;display:inline-grid;place-items:center;width:30px;height:26px;padding:0;
+  border:1px solid rgba(255,255,255,.55);border-radius:3px;background:transparent;color:#fff;cursor:pointer}
+.oc-theme:hover{background:rgba(255,255,255,.14)}
+.oc-theme:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.band .oc-theme svg{width:15px;height:15px}
+.band .oc-theme .moon{display:var(--oc-moon)}
+.band .oc-theme .sun{display:var(--oc-sun)}
+
+/* ── Ground and reading size ─────────────────────────────────────────────────────────── */
+/* brand.css zeroes html padding; the Artifact skeleton pads :root by the phone's safe-area
+ * insets so content clears the system bars — restore it rather than inherit the zero. */
+:root{padding-block:env(safe-area-inset-top,0px) env(safe-area-inset-bottom,0px)}
+body{background:var(--oc-page);color:var(--oc-ink);font-size:16px;line-height:1.55}
+.sheet{padding-block:0 40px}                 /* brand.css keeps the 22px side gutter */
+.band{margin-bottom:22px}
+
+h1{font-size:1.65rem;text-wrap:balance}
+h2{font-size:1.15rem;margin-top:30px;text-wrap:balance}
+h2 .hint{font-size:.8rem}
+h3{text-wrap:balance}
+.meta{font-size:.85rem}
+.lead{font-size:1.02rem}
+.band .tag{font-size:.7rem}
+p,li{max-width:68ch}
+
+/* ── Components: literal whites in brand.css become tokens ────────────────────────────── */
+.kpis{flex-wrap:wrap}
+.kpi{flex:1 1 150px;background:var(--oc-surface)}
+.kpi .n{font-size:1.75rem;font-variant-numeric:tabular-nums}
+.kpi .n small{font-size:.9rem}
+.kpi .l{font-size:.72rem}
+
+.cards{flex-wrap:wrap}
+.card{flex:1 1 260px;background:var(--oc-surface)}
+.card h3{font-size:.9rem}
+.card .big{font-size:1.1rem}
+.card p{font-size:.9rem}
+
+.x{font-size:.72rem}
+.x.ink{background:var(--oc-pill-ink)}
+
+.note{font-size:.85rem}
+
+/* ── Tables: scroll inside their own box, never the page ──────────────────────────────── */
+.tscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 0 4px}
+table{font-size:.88rem}
+thead th{font-size:.74rem}
+tbody tr:nth-child(even) td{background:var(--oc-zebra)}
+td .why{font-size:.8rem}
+.solo .val{font-size:.85rem;font-variant-numeric:tabular-nums}
+
+/* ── Code ─────────────────────────────────────────────────────────────────────────────── */
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88em;
+  background:var(--oc-tint2);padding:.1em .35em;border-radius:3px}
+pre{overflow-x:auto;background:var(--oc-tint2);padding:10px 12px;border-radius:5px}
+pre code{background:none;padding:0}
+
+a:focus-visible{outline:2px solid var(--oc-red-ink);outline-offset:2px}
