@@ -1,22 +1,28 @@
 ---
 name: oc-fn-briefs
-version: 1.3.0
-updated: 2026-08-07T23:20:00+02:00
+version: 1.6.0
+updated: 2026-09-23T17:00:00+02:00
 author: Stéphane Chambrin
 description: >
   Author and render branded Opencell DOCUMENTS — one-pagers, analysis notes,
   briefs, memos, short reports — styled with the Charte Graphique 2023 and
-  rendered to a print-ready A4 HTML/PDF via headless Chromium. Two authoring
+  rendered to a print-ready A4 HTML/PDF via headless Chromium — or, from the same
+  source, to a branded claude.ai Artifact page (how Opencell shares internal reports
+  as a link: screen/phone layout, light by default with a light/dark switch, reproducible from git). Two authoring
   tiers: markdown-first (a `.md` source rendered through Pandoc — the default,
   the "Marp for documents" workflow) and hand-authored self-contained HTML (the
   escape hatch for bespoke layouts). Load this skill whenever the user wants a
   branded one-pager, note, brief, memo, fact-sheet, summary sheet, or short
   standalone document (not slides), or asks to render Markdown/HTML content to a
-  branded PDF. Carries the document brand theme (`theme/brand.css` + shared
+  branded PDF — and whenever the user wants to publish, share or send an internal
+  report, note or analysis as an Artifact / artefact / claude.ai page / a link, or to
+  republish or update one. Carries the document brand theme (`theme/brand.css` + shared
   logos + `theme/oc-brief.lua`), a markdown source template
   (`templates/one-pager.md`) with its Pandoc HTML template, a ready-to-fill
-  hand-authored `templates/one-pager.html`, the `YYYYMMDD_` dated-filename
-  rule, the render commands, and the screenshot verification step. NOT for
+  hand-authored `templates/one-pager.html`, the Artifact lane
+  (`render-artifact.sh` + `templates/artifact.pandoc.html` + `theme/artifact.css`
+  + `theme/oc-artifact.lua`, with its git-reproducibility guard), the `YYYYMMDD_`
+  dated-filename rule, the render commands, and the screenshot verification step. NOT for
   slide decks (that is `oc-fn-decks`), NOT for Confluence pages (that is
   `oc-fn-documentation`), and NOT for Jira functional designs / requirement
   briefs (that is `oc-fn-func-design`).
@@ -212,6 +218,97 @@ chromium --headless=new --no-sandbox --disable-gpu --hide-scrollbars \
 Fix by tightening copy or adjusting a component, not by shrinking the brand type. A 2-page PDF is fine
 for a dense note; force one page only if it stays readable.
 
+## Artifact lane — the same brief as a claude.ai page
+
+**Opencell shares internal reports as claude.ai Artifacts** (decided 2026-09-23; every Openceller has
+a Claude account on the Team plan, so a link reaches any colleague). This lane renders the **same
+Tier-1 `.md`** — same vocabulary, same brand, no second source — to an Artifact page, instead of or
+alongside the A4 PDF.
+
+- **Scope: internal.** Reports, notes and analyses for Opencellers, read on a screen or a phone. For
+  anything addressed outside Opencell, the PDF stays the default — ask before publishing one.
+- **Print is impossible inside an Artifact** (the viewer blocks the print dialog). When the reader
+  needs paper or an attachment, render the PDF as well — same `.md`.
+- **Tier 2 is not covered.** `render-artifact.sh` renders Tier-1 markdown. A hand-authored page that
+  must become an Artifact is written to the Artifact page contract (fragment, theme-aware, phone
+  width), reuses `brand.css` + `theme/artifact.css`, and is committed as its own source.
+
+### Reproducible from git — enforced, not advised
+
+An Artifact is a **render, never the source.** Anyone must be able to rebuild the published page from
+git alone, so `render-artifact.sh` refuses to render when:
+
+- the source is **not in git**, has **uncommitted changes**, or its last commit is **not on the
+  branch's upstream** (not pushed);
+- the **skill itself** has uncommitted changes, where it lives in a git work tree (a page is
+  source × template × CSS — a render from modified tooling wouldn't reproduce either).
+
+Every page carries its **provenance** in an HTML comment right after `<title>`: `remote · path @
+commit · oc-fn-briefs <version>`. The remote is stripped of any embedded credentials before it is
+written into the page.
+
+`--draft` bypasses the guard **for a local preview only**; the stamp then says DRAFT. **Never publish
+a draft render.**
+
+Two consequences follow. **No Claude Docs** for this — a Doc's content lives in the Docs service,
+not in git. And **no page that stores its content on claude.ai** (a shared tracker, a poll) unless the
+user has agreed that data lives outside git. Comments on a published page are discussion, not
+content, and are fine.
+
+### Front matter it adds
+
+| Field | Purpose |
+|---|---|
+| `pagetitle:` | The Artifact's name in the gallery and the tab — **2–4 words, distinctive** (`oc-fn-tools August changelog`, not `Changelog`). Falls back to `title:`. Keep it stable across republishes. |
+| `artifact:` | The published URL. **Written back after the first publish and committed** — it is what makes a later session republish to the same link instead of minting a new one. |
+
+### What differs from the PDF
+
+- **Screen layer** `theme/artifact.css`, loaded after `brand.css`: reading sizes in `rem`, KPI tiles and
+  cards wrap at phone width, and the literal whites in `brand.css` become tokens.
+- **Light by default — a dark OS setting is ignored.** Most Opencellers dislike dark themes (Stéphane,
+  2026-09-23), so the page does **not** follow `prefers-color-scheme`; don't add that block back. Dark
+  applies only on an explicit choice. The page's own **light/dark switch** in the header band wins; it
+  sets `[data-oc-theme]` and is remembered per viewer in `localStorage`. After that comes claude.ai's
+  theme setting (`[data-theme="dark"]`, stamped by the viewer). The remembered choice is **per
+  artifact and per device** (each artifact has its own origin), so a colleague who picks dark on one
+  page starts light on the next. The same light default holds for a hand-authored page shared with
+  colleagues.
+- **The dark palette is derived from the Charte palette only.** Brand black `#121011` is the dark ground,
+  the `#EDE4E9` tint family is the text, and coral `#FA5757` replaces `--oc-red-ink` as the red that
+  reads on dark. The header band and the pills keep `--oc-red` in both themes. Add no colour outside
+  the Charte.
+- **Real brand type.** Montserrat loads from Google Fonts, the one font host the Artifact CSP admits.
+  The PDF lane stays offline on the system stack.
+- **Tables scroll in their own box**, never the page: `theme/oc-artifact.lua` wraps each table in
+  `div.tscroll`. The PDF lane doesn't load that filter.
+- **A fragment, not a document.** `templates/artifact.pandoc.html` emits no doctype/head/body, because
+  the Artifact tool wraps the page in its own skeleton at publish.
+
+### Publishing — the procedure
+
+1. **Commit and push the `.md`**, and any skill change it depends on.
+2. **Render into the session scratchpad**, never into the repo, since the render is regenerated on
+   every publish:
+   ```bash
+   SKILL=~/.claude/skills/oc-fn-briefs
+   "$SKILL/render-artifact.sh" "<abs>/<slug>.md" -o "<scratchpad>/<slug>.html"
+   ```
+   The script says whether to republish (it found `artifact:`) or first-publish.
+3. **Look once.** Take a screenshot at phone width (wrap the fragment in a bare
+   `<!doctype html><meta name="viewport" …>` page for Chromium), then do one pass of fixes, in the
+   `.md` — never in the render.
+4. **Publish with the Artifact tool:**
+   - **no `artifact:`** → publish `file_path` with an `icon` and a one-sentence `description`, then
+     write the returned URL into the front matter as `artifact:`, commit and push. There's no need
+     to republish afterwards: the page's stamp points at the commit that produced it, and that
+     commit reproduces it.
+   - **`artifact:` present** → `read` that URL first (the tool refuses a publish to an artifact the
+     session has not read), then publish with `url` set to it. Omit `icon`.
+5. **Sharing is the user's act.** A published Artifact is private until they share it. In the Teams
+   or email message that carries the link, **the link plays the attachment's role**: the message
+   carries the outcome and the caveats, the page carries the detail.
+
 ## Committing (Opencell design repos)
 
 The shareable render (`.pdf`) and its **source** must be tracked, never treated as a throwaway.
@@ -237,6 +334,9 @@ then commit normally. What is the *source* depends on the tier:
   kept, is tracked too — but as words, not a layout mirror (see *The `.md` is a source…* above).
 
 Deck renders under `docs/process/` stay ignored — they really are regenerated from a `.md`.
+
+**Artifact lane:** the render is **never committed** — it lives in the scratchpad and is regenerated
+on every publish. The `.md`, carrying its `artifact:` URL, is the whole record.
 
 ## Where this skill is used
 
