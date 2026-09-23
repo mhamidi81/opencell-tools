@@ -1,7 +1,7 @@
 ---
 name: oc-fn-portal
-version: 1.6.0
-updated: 2026-09-16T19:00:00+02:00
+version: 1.7.0
+updated: 2026-09-23T19:00:00+02:00
 author: Stéphane Chambrin
 description: >
   Drive the Opencell Portal (React SPA) through the Playwright MCP server to navigate
@@ -53,7 +53,7 @@ users are in, and it fails in ways the real Portal does not.
 ## Prerequisites
 
 One-time setup (system deps, MCP registration, credentials, runtime dirs) lives in **`setup.md`** — load it only when setting up a machine or troubleshooting a launch failure. In a ready machine you can assume:
-- MCP server `oc-fn-playwright` is registered (user scope). When that server is the one in use, it is headless with `--image-responses=omit` (see Token discipline for how to detect this at runtime).
+- MCP server `oc-fn-playwright` is available — shipped by the `oc-fn-tools` plugin, or registered at user scope for a skill-directory install; either way it runs `launch-mcp.mjs`, the one place its flags live. When that server is the one in use, it is headless with `--image-responses=omit` (see Token discipline for how to detect this at runtime).
 - Credentials file: `~/.config/oc-fn-portal/credentials` (dotenv: `OC_PORTAL_URL`, `OC_PORTAL_USER`, `OC_PORTAL_PASS`).
 - Persistent profile: `~/.local/state/oc-fn-portal/profile` (keeps you logged in across sessions, best-effort — re-login when the session has lapsed).
 - Screenshots / output dir: `~/.local/state/oc-fn-portal/output`.

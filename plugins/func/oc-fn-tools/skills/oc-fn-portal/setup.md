@@ -4,9 +4,9 @@ Load this when preparing a machine for portal navigation, or when a `browser_*` 
 fails because the server isn't registered or the browser/deps are missing. Day-to-day
 navigation does not need this file.
 
-All flag names below were verified against the installed `@playwright/mcp`. If the
-package has since updated, re-check with `npx @playwright/mcp@latest --help` before
-trusting a flag.
+All flag names below were verified against `@playwright/mcp` **0.0.81**, the version
+`launch-mcp.mjs` pins. The launcher (§ 3) is the only place the server's flags and that version
+live — change them there, never in a registration.
 
 ## 1. Browser (per machine, once)
 
@@ -19,25 +19,28 @@ on `sabretooth` 2026-09-16 against `18x.oc-nsb.eu`: switching from Chrome-channe
 bundled Chromium turned a dead click-probe (no reaction, confirmed via `browser_network_requests`
 showing nothing fired) into a working one (`tab "Refund" [selected]` right after the click).
 
-Install the browser **already matched** to the registered `@playwright/mcp` version — do not use
-the generic `playwright` CLI for this, see the gotcha below:
+Install the browser **already matched** to the `@playwright/mcp` version the launcher pins — run
+it from this skill's directory (`~/.claude/skills/oc-fn-portal/` for a skill-directory install; for
+the plugin, the skill's base directory as Claude Code reports it):
 
 ```bash
-npx @playwright/mcp install-browser chrome-for-testing
+node launch-mcp.mjs --install-browser
 ```
 
-This downloads to your own cache (`~/.cache/ms-playwright/chromium-<rev>`), never root's, and
-needs no `sudo`. Then register with `--browser chromium` (§3) instead of leaving the channel at
-its Chrome-channel default.
+It runs `npx @playwright/mcp@<pinned> install-browser chrome-for-testing`. **Never run
+`npx @playwright/mcp install-browser` without the version:** that resolves `@latest`, whose bundled
+revision can differ from the pinned one — 0.0.82 expects revision 1246, 0.0.81 expects 1244. The
+download goes to your own cache (`~/.cache/ms-playwright/chromium-<rev>`), never root's, and needs no
+`sudo`. The launcher passes `--browser chromium` by default (§ 3).
 
 > **Gotcha — `npx playwright install chromium` is NOT the same install.** It resolves through
 > whatever `playwright` core version `npx` happens to fetch, which can pin a *different* bundled
 > Chromium revision than the one your already-registered `@playwright/mcp` version expects.
 > Observed: `npx playwright install chromium` fetched revision `1243`; the registered
 > `@playwright/mcp@0.0.81` demanded `1244` and refused to launch ("Browser 'chrome-for-testing' is
-> not installed; expected executable at .../chromium-1244/..."). Always install *through*
-> `@playwright/mcp` itself (the command above), which guarantees the matching revision. Re-run it
-> after every `@playwright/mcp` version bump — the pin can move.
+> not installed; expected executable at .../chromium-1244/..."). Always install *through* the
+> launcher (the command above), which guarantees the matching revision. Re-run it whenever the
+> launcher's `PIN` is bumped — that is the only way the expected revision moves now.
 
 **Alternative — system Chrome channel.** Still supported if you deliberately want branded Chrome
 (e.g. to match a proprietary codec or DRM dependency the bundled Chromium lacks — irrelevant for
@@ -47,8 +50,9 @@ Portal navigation). The `.deb` pulls its own OS dependencies via apt:
 sudo npx playwright install chrome
 ```
 
-Verify: `google-chrome --version`. Leave `--browser` unset in the registration (§3) to use this
-channel (the `@playwright/mcp` default).
+Verify: `google-chrome --version`. To use this channel, set `OC_PORTAL_BROWSER` to empty in the
+environment Claude Code is started from; the launcher then omits `--browser` (the `@playwright/mcp`
+default is the Chrome channel).
 
 > Do **not** run `sudo npx playwright install chromium` while intending to use the Chrome
 > channel — it downloads Chromium (not Chrome) into **root's** cache
@@ -80,34 +84,31 @@ These paths live **outside** any tracked repository — secrets and browser stat
 
 ## 3. Register the Playwright MCP server (per machine, once)
 
-Run this command — it is the canonical registration procedure and the single source of truth
-for the flags:
+**The server's flags live in one file: `launch-mcp.mjs`**, in this skill's directory. It pins
+`@playwright/mcp`, resolves the per-user paths from § 2 (portably — native Windows included), and
+passes `--secrets` only when the credentials file exists, because `@playwright/mcp` **exits at
+startup** when that file is missing. Until 2026-09-23 there were three hand-kept copies of the flag
+list — this section, `install.sh` and the plugin's config — and they drifted: the plugin shipped
+without `--secrets` or the pinned Chromium, so login failed and some clicks did nothing.
 
-```bash
-claude mcp add -s user oc-fn-playwright -- \
-  npx -y @playwright/mcp@latest \
-  --headless \
-  --browser chromium \
-  --image-responses=omit \
-  --console-level=error \
-  --viewport-size=1280x720 \
-  --timeout-action=30000 \
-  --secrets="$HOME/.config/oc-fn-portal/credentials" \
-  --user-data-dir="$HOME/.local/state/oc-fn-portal/profile" \
-  --output-dir="$HOME/.local/state/oc-fn-portal/output"
-```
+- **Installed as the `oc-fn-tools` plugin: nothing to register.** The plugin's `oc-fn-playwright`
+  server already runs the launcher. **Remove any older manual registration** —
+  `claude mcp remove -s user oc-fn-playwright` — because a user-scope entry takes precedence over
+  plugin-provided servers, so an old one (typically without `--secrets`) would shadow the plugin's,
+  or at best duplicate it.
+- **Skill-directory install** (the skills symlinked in, no plugin) — register the launcher:
 
-**`--browser chromium`** pairs with the bundled-Chromium install in §1 (the now-default choice —
-drop this flag only if you deliberately installed the system Chrome channel instead).
+  ```bash
+  claude mcp add -s user oc-fn-playwright -- node ~/.claude/skills/oc-fn-portal/launch-mcp.mjs
+  ```
 
-**`--secrets` is required, not optional** — it is what makes login possible at all without the
-password entering the conversation. See § 6 for the mechanism and for why the alternatives are
-blocked.
+**Check what is in effect:** `node launch-mcp.mjs --dry-run` prints the exact command the server
+runs, and says so when `--secrets` is omitted for lack of a credentials file.
 
-This skill deliberately registers under its **own** server key (`oc-fn-playwright`) rather than
-the bare `playwright`, so it coexists cleanly with the marketplace `oc-playwright-mcp` plugin —
-which registers a separate server named `playwright` with different (bare) args. Using a distinct
-key means neither registration overwrites the other's config.
+This skill deliberately uses its **own** server key (`oc-fn-playwright`) rather than the bare
+`playwright`, so it coexists cleanly with the marketplace `oc-playwright-mcp` plugin — which
+registers a separate server named `playwright` with different (bare) args. Using a distinct key
+means neither registration overwrites the other's config.
 
 - **User scope** (`-s user`) → available in every Claude Code session on the machine, not
   just inside one repo. `settings.json` is **not** a valid place for `mcpServers`; only
@@ -115,8 +116,14 @@ key means neither registration overwrites the other's config.
 - Restart Claude Code after registering so the new server loads.
 - Verify: `claude mcp get oc-fn-playwright`.
 
-Why these flags:
+What the launcher passes, and why:
+- `@playwright/mcp@<pinned>`, **not `@latest`** — the bundled Chromium is pinned per release, so
+  `@latest` broke every install at each upstream release until the browser was reinstalled. A bump
+  is deliberate: change `PIN`, run `--install-browser` (§ 1), re-check a click (§ 8).
 - `--headless` — no display on the server.
+- `--browser chromium` — the bundled Chromium from § 1. Override with `OC_PORTAL_BROWSER`.
+- `--secrets` — required for login, not optional hardening (§ 6). Omitted, with a warning on
+  stderr, while `~/.config/oc-fn-portal/credentials` is missing.
 - `--image-responses=omit` — screenshots are written to `--output-dir` but **not** returned
   inline, so capturing costs ~0 context tokens. View one with the `Read` tool on demand.
 - `--user-data-dir` — persistent profile; log in once and the session survives across runs.
@@ -126,6 +133,9 @@ Why these flags:
   a heavy SPA page can exceed the 5 s default on modest hardware. Raise it further if you still see
   action timeouts.
 - `--output-dir` — where screenshots (and, if enabled, traces/sessions) land.
+
+Environment overrides: `OC_PORTAL_CREDENTIALS` (credentials file), `OC_PORTAL_STATE_DIR` (parent of
+`profile/` and `output/`), `OC_PORTAL_BROWSER` (empty = system Chrome channel).
 
 ## 4. First login smoke test
 
@@ -149,7 +159,7 @@ Add to the `claude mcp add` args (then re-register) when a workload is snapshot-
 
 ## 6. `--secrets` — the login mechanism, not optional hardening
 
-**`--secrets` belongs in the registration in § 3.** Without it there is no way to log in: reading
+**`--secrets` is passed by the launcher (§ 3)** whenever the credentials file exists. Without it there is no way to log in: reading
 `OC_PORTAL_PASS` with Bash so it can be typed into the form is **refused by the permission
 classifier**, and it refuses every reformulation of the same idea — a heredoc piping the file into
 Python, a generator script that writes the value into a `login.js`, a `browser_run_code_unsafe`
@@ -268,14 +278,17 @@ is nothing here for a pure-PowerShell install to hook into.
   product*.
 
   **Confirmed fix (2026-09-16, `sabretooth` against `18x.oc-nsb.eu`):** switch from the system
-  Chrome channel to `@playwright/mcp`'s own bundled Chromium — §1's `npx @playwright/mcp
-  install-browser chrome-for-testing` + `--browser chromium` in the registration (§3), then
-  reconnect (`/mcp` or restart). Re-ran the same click-probe (a tab switch) immediately after and
+  Chrome channel to `@playwright/mcp`'s own bundled Chromium — § 1's `node launch-mcp.mjs
+  --install-browser`, with the launcher's default `--browser chromium` (§ 3), then reconnect
+  (`/mcp` or restart). Re-ran the same click-probe (a tab switch) immediately after and
   it worked (`tab "Refund" [selected]`), where it had previously done nothing at all. Root cause
   read as system-Chrome-channel drift: `@playwright/mcp` pins a specific bundled Chromium
   revision, while the Chrome channel auto-updates independently — the two fall out of sync with no
   warning, and that skew is what breaks synthetic event dispatch. If you still hit this after
   switching, the bundled Chromium itself may now be behind the registered `@playwright/mcp` — rerun
   the install-browser command in §1 to re-pin it.
-- **Server flag rejected after a package update:** re-check `npx @playwright/mcp@latest --help`
-  and update the args in the `claude mcp add` command in §3 above.
+- **Server flag rejected after bumping the pin:** check `npx @playwright/mcp@<new> --help` and
+  fix the flag list in `launch-mcp.mjs` — the one place it lives. With the version pinned, an
+  upstream release can no longer change the flags under you.
+- **Browser "not installed; expected executable at …/chromium-<rev>/…":** the installed Chromium
+  does not match the pinned `@playwright/mcp`. Run `node launch-mcp.mjs --install-browser` (§ 1).
