@@ -1,7 +1,7 @@
 ---
 name: oc-fn-project-management
-version: 1.10.0
-updated: 2026-08-07T23:40:00+02:00
+version: 1.11.3
+updated: 2026-09-21T11:15:00+02:00
 author: Stéphane Chambrin
 description: >
   How to run an Opencell project from kickoff to release: the design-first phased
@@ -9,12 +9,16 @@ description: >
   engagement, and repo/branch/CI/doc conventions. Load this skill when starting a
   NEW Opencell project or product, or a BIG feature / Epic that warrants design-first
   delivery — and whenever the user mentions project kickoff, phased delivery, phase
-  gates, "ways of working", the Decision Register, ADR setup, DECISIONS.md, SteerCo
-  approval, scaffolding a project, or "how we run this project". Opencell projects are
+  gates, "ways of working", the Decision Register, ADR setup, DECISIONS.md,
+  scaffolding a project, or "how we run this project". Opencell projects are
   Bitbucket/Jira/Jenkins/Confluence-hosted. This skill orchestrates the *process*; it
   defers issue authoring to `oc-fn-func-design` and Confluence to
   `oc-fn-documentation`. Do NOT load it for a single routine Story, Enabler, or
-  Bug — that is `oc-fn-func-design`'s job.
+  Bug — that is `oc-fn-func-design`'s job. Do NOT load it to decide what goes into a
+  version, to score, rank or arbitrate candidates, to run a roadmap pre-gate or gate,
+  or to prepare a SteerCo roadmap item — that is `oc-roadmap` (personal, unpublished).
+  This skill starts once an item has been *selected* and needs running as a phased
+  project.
 ---
 
 # Running an Opencell project — phased delivery, decisions, engagement
@@ -54,6 +58,8 @@ and *defers* to them at the relevant gate:
 | **`oc-ar-tech-design`** (marketplace `oc-ar-tools`, where available) | the *how* of a Story's **Technical design** section (`customfield_10137`), authored from the Phase-5 technical artifacts | at the technical-design gate (Phase 5) |
 | **`oc-fn-documentation`** | the *how* of Confluence pages | at the docs/release gate (Phase 7) |
 | **`oc-fn-decks`** | the *how* of a branded slide deck — Marp theme, authoring, rendering, overflow, locale rule | at the Phase-2 framing/approval deck (and any standalone deck) |
+| **`oc-fn-gui-design`** | the *how* of a screen design against the Figma design system — UX capacity is ≈half a day/week of a contractor, so most Stories never reach it | whenever a Phase 3/4 item has a GUI |
+| **`oc-roadmap`** *(personal, unpublished)* | **which** items get a mandate at all — candidate scoring, version scope, the roadmap gate | *before* this skill: it selects, this one runs what was selected |
 
 **Process layer vs execution layer.** This skill is the **process** layer — the phased model and
 its gates. On an `oc-fn-tools` + common-plugins setup, the per-ticket implementation in **Phase 6**
@@ -95,6 +101,10 @@ These never scale away, even for a single big Epic:
    ticket" before the gate, flag it and record the item in `.md`. Stories open with their
    **functional** sections (Requirement, Functional Design, Acceptance); the **Technical design**
    section and **Enablers** follow in Phase 5, from the technical design.
+   *(Carve-out — the roadmap candidate pool. This rule governs **this project building its own
+   backlog**. It does not govern the standing portfolio queue: a candidate awaiting a roadmap
+   decision is an Epic in `To Study` from the moment it is raised, which is how the instance
+   already works and what `oc-roadmap` scores. A project's own Stories still open only at Phase 4.)*
 5. **`.md` in the repo is the single source of truth; Confluence and any slide deck are
    one-way mirrors** — never hand-edit the mirror, regenerate it from the `.md`.
 6. **Stable seams.** Keep architectural boundaries (connectors, engines, dispatchers) as
@@ -197,6 +207,5 @@ When starting fresh, scaffold from `templates/` (do not invent structure ad hoc)
    (`engagement.md`).
 
 Full templates and the per-file fill-in guidance live in `templates/` — see that directory's
-index. Use the `templates/` scaffolding in this skill as the reference structure. The `.md`/ADR
-artifacts these moves produce are the design **deliverable** — generating them here is explicit and
-user-invoked, not the proactive documentation a backend code skill would suppress.
+index. Use the `templates/` scaffolding in this skill as the reference structure. (These `.md`/ADR
+artifacts are the design **deliverable** — non-negotiable #1.)

@@ -1,7 +1,7 @@
 ---
 name: oc-fn-portal
-version: 1.5.0
-updated: 2026-08-10T17:05:00+02:00
+version: 1.6.0
+updated: 2026-09-16T19:00:00+02:00
 author: Stéphane Chambrin
 description: >
   Drive the Opencell Portal (React SPA) through the Playwright MCP server to navigate

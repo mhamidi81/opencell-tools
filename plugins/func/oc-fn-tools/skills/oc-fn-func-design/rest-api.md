@@ -285,6 +285,94 @@ reproduce the dark-red `#bf2600` headings, `rule` nodes and note/warning panels 
 and `jira raw` with an `@file` payload is the preferred path once the body is large or repetitive. The
 trade is the validation risk above — on `raw`, ADF correctness is yours.
 
+## The `twg` CLI — a third transport, for two things only
+
+Atlassian ships its own CLI, **`twg`** (Teamwork Graph CLI, GA, Apache-2.0, `atlassian/twg-cli`): one
+self-contained binary, ~920 commands across Jira, Confluence, JSM and Bitbucket, installed with
+`bash <(curl -fsSL https://teamwork-graph.atlassian.com/cli/install)`. Auth is OAuth 2.1 device flow
+(`twg login`) with per-product read/write/delete scopes — it works over SSH, since the device flow
+just prints a URL to open anywhere, **but it has to be run by a human at an interactive terminal**
+(see *Installing and authenticating from a session* below). `TWG_TOKEN` / `TWG_USER` / `TWG_SITE`
+are the alternative for a headless box that should reuse the existing `~/.netrc` API token and skip
+OAuth refresh entirely. Note `read:account` is a **required base scope**: grant it or `twg login` fails to resolve
+your identity after issuing the tokens.
+
+### Installing and authenticating from a session
+
+Two things bite an agent-run install. Both were found on a headless box (2026-09-17) and one of them
+silently undoes the whole install.
+
+- **Pass `-y`, or the install rolls itself back.** The installer shells out to `twg consent` (the
+  Atlassian Customer Agreement / Privacy Policy acknowledgement), which refuses to prompt without a
+  controlling terminal — the install then **fails and reverts**, leaving no binary and no
+  explanation beyond `Command failed: … twg consent`. `-y` records consent non-interactively, and
+  only takes effect alongside `--skip-login --skip-skills`:
+  `bash <(curl -fsSL https://teamwork-graph.atlassian.com/cli/install) --skip-skills --skip-login -y`.
+- **`twg login` cannot be driven by a session — and relaying its URL does not work either.** It
+  times out after **2 minutes** and detects the environment, failing with *"This looks like a
+  non-interactive/agent environment — run `twg login` yourself in an interactive terminal"*. The
+  reason relaying fails is worth knowing: the browser approval only marks the code approved
+  **server-side**, and it is the *local* process that exchanges it for tokens — so a code approved
+  after that process was killed or restarted yields nothing, however promptly the user acted.
+  Hand the step over whole (in Claude Code, `! twg login`), and on a headless box tell them to
+  answer **`n`** to the `Open in browser?` prompt.
+
+Then confirm before relying on it: an unauthenticated call fails fast and unambiguously with
+`AUTH_REQUIRED` and **exit 77**, so `twg jira workitem field update-metadata --id <any Story>`
+doubles as the auth check and the capability check.
+
+**It does not replace the `jira` helper.** Measured against this project, same issue and same query
+(2026-09-17, `twg` 1.3.0):
+
+| Operation | `jira` | `twg` | ratio |
+|---|---|---|---|
+| Read one issue, defaults | 5,510 B | 68,742 B | **12.5×** |
+| Read one issue, same 8-field allowlist | 5,510 B | 41,015 B | **7.4×** |
+| JQL, 10 issues, `summary,status` | 1,402 B | 10,961 B | **7.8×** |
+
+`twg jira workitem get` and `workitem query` **ignore the global `-o text`** and always emit raw JSON
+— full `self` and avatar URLs, nested `statusCategory` objects, and **unflattened ADF**. The `jira`
+helper's jq projection has no equivalent, so reads, JQL, counts, transitions and bulk ADF writes all
+stay here. Atlassian's "48% fewer tokens" is measured against the **MCP**, which injects whole
+responses; against a projecting wrapper the comparison inverts.
+
+### The two things it is for
+
+| Use `twg` for | Why |
+|---|---|
+| `twg jira workitem field update-metadata --id KEY` | Lists the **edit-only** fields with IDs, types and allowed operations — including `Requirement` (10134), `Functional design` (10135), `Acceptance` (10136), `Technical design` (10137). `jira meta` reads the *create* screen and structurally cannot show these. |
+| `twg jira workitem comment create --issue-id KEY --body '<markdown>' --body-format markdown` | Converts Markdown → ADF client-side. Verified: heading, `strong`, inline code, link, bullet list and a fenced Java block all rendered correctly. `jira comment` builds trivial plain-text ADF only. |
+
+`twg jira workitem field create-metadata --space INTRD --type Story` returns the same field set as
+`jira meta 10001` at the same cost, with types and a ready-made `--field` example — use either.
+
+Confluence is a separate question, deliberately left open: `twg confluence content *` uses the
+compact text renderer (a 3-page listing cost 235 B) and carries Markdown bodies and snapshot-token
+concurrency. Worth evaluating against the Rovo MCP for `oc-fn-documentation`; out of scope here.
+
+### The trap — a `twg` write can report success and land nothing
+
+**`twg jira workitem create` filters fields against the create screen and drops the rest silently,
+while returning `{"success": true}`.** Verified 2026-09-17: a Story created with
+`--description '<markdown>' --description-format markdown` came back showing the project's default
+"DO NOT USE" panel — the description never landed, and nothing in the output said so. The *same*
+description sent as ADF through `jira raw POST /issue` **does** land (both probe issues deleted
+after the check). That is the `createmeta`-omits-`description` row already in
+[Troubleshooting](#troubleshooting) below, and it is precisely the case `twg` gets wrong.
+
+So: **never use `twg` for a create carrying a field `createmeta` does not list.** `jira raw` surfaces
+Jira's own error; `twg` manufactures a success.
+
+Two smaller edges:
+
+- **`--field NAME=VALUE` does not convert.** It passes the string straight through, so an ADF field
+  answers `400 … must be an Atlassian Document`. Raw ADF via
+  `--fields-json '{"customfield_10134": {…}}'` works and renders correctly (`#bf2600` heading +
+  `rule` verified intact) — but that is what `jira raw` already does, from a payload file rather
+  than an argv string.
+- **`twg jira workitem delete --id KEY` has no confirmation flag at all** (`--yes` is rejected as an
+  unknown option) and deletes immediately.
+
 ## Troubleshooting
 
 | Symptom | Cause / fix |
@@ -298,4 +386,6 @@ trade is the validation risk above — on `raw`, ADF correctness is yours.
 | `jira get KEY <fields>` prints the key and nothing else, or omits a field you asked for | The default projection drops `null`-valued fields (`bin/jira:150`). The value is `null`, not an error — re-read with `--json` + `jq` (or `jira raw GET '/issue/KEY?fields=<field>'`) whenever the value must be relied on. |
 | `createmeta` lists no `description` for `Bug` / `Sub-bug` | Expected — `description` is not on their create screen. `POST /issue` accepts an ADF `description` at creation anyway; send it. |
 | `400` on a write with `"…must be an Atlassian Document…"` | The field needs ADF, not a string — build a `{"type":"doc",…}` object (or route the write to the MCP). |
+| A `twg` create returned `{"success": true}` but a field came back empty | `twg` drops fields absent from `createmeta` without saying so — see [The trap](#the-trap--a-twg-write-can-report-success-and-land-nothing). Re-send through `jira raw POST /issue`, which reports Jira's own error. |
+| `400 … must be an Atlassian Document` from `twg … --field "Name=<markdown>"` | `--field` does not convert. Pass raw ADF via `--fields-json`, or use `jira raw` with an `@file` payload. |
 | Empty body on a successful edit/transition | Expected — `204 No Content`. |

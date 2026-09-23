@@ -1,12 +1,13 @@
 ---
 name: oc-fn-gui-design
-version: 1.2.1
-updated: 2026-07-16T14:33:14+02:00
+version: 1.3.1
+updated: 2026-09-21T11:15:00+02:00
 author: Stéphane Chambrin
 description: >
   Design GUI-impacting Opencell User Stories against the real Opencell Design System in Figma —
   so a Story ships with an actual, design-system-grounded screen design instead of vague prose
-  (the team has no UX designer; developers should not be inventing UX). Load this skill whenever
+  (UX design capacity is ≈half a day/week of a contractor, so most Stories never reach it and developers
+  should not be inventing UX to fill the gap). Load this skill whenever
   the user mentions Figma, a mockup, a wireframe, a screen/page/UI/GUI design, "design the screen",
   the design system or design tokens, MUI components for the Portal, or shares a `figma.com` URL —
   and before any Figma MCP tool call (`get_design_context`, `get_screenshot`, `search_design_system`,
@@ -18,8 +19,15 @@ description: >
 
 When an Opencell User Story has GUI impact, this skill produces the **actual screen design** —
 real MUI-v6 components, real Opencell tokens, concrete layout, states, and bilingual labels — so a
-developer can build it without inventing UX. It exists because the team has **no UX designer**, and
-a Story that only *describes* a screen in prose leaves the design to whoever picks up the ticket.
+developer can build it without inventing UX.
+
+It exists because **UX design capacity is ≈half a day/week** — Solène Leprêtre, a senior UX designer
+working on call as a contractor, engaged through Yassine Chetoui (Senior PO), who works on the
+frontend design. That is real capacity and this skill does not replace it: it covers the volume that
+≈0.1 FTE cannot reach, so a Story that only *describes* a screen in prose does not leave the design
+to whoever picks up the ticket. **Where a Story is design-critical — a new screen, a new interaction
+pattern, anything an Innovation item hangs on — route it to her via Yassine rather than generating
+past her.**
 
 The design is grounded in the **Opencell Design System** (a published Figma team library, built on
 **MUI v6 + ApexCharts**) and in the existing page designs. Reading the design system is fully
