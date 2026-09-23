@@ -578,7 +578,7 @@ In addition to Javadoc, add Swagger annotations to REST interface definition and
 #### REST Interface Swagger Annotations
 
 - **Class level**: Add `@Tag` annotation with name and description
-- **Method level**: Add `@Operation` with summary, tags, description, and all possible response codes
+- **Method level**: Add `@Operation` with summary, tags, description, examples, and all possible response codes
 - **Parameters**: Use `@Parameter` annotation with description and required status
 
 #### Tag Naming
@@ -602,3 +602,164 @@ Group related endpoints under a consistent, hierarchical tag name, using ` - ` a
 - Always use `@Schema` annotations on DTO fields
 - Include description, example values, and required status
 - Do not mark field as required in swagger if field is not marked as required in DTO
+
+#### Examples
+
+Every operation shows two examples, and they answer different questions. **Captured** is a call
+that really happened, recorded against a running instance. **Generated** is assembled in the
+documentation page from the field examples each time it loads, and shows every field the endpoint
+accepts in that direction. Neither replaces the other: a recorded call is short and true, a
+generated one is complete and hypothetical.
+
+**Where a recorded example belongs**
+
+- A **find or a list** is documented by the record it returns, so the payload goes on the DTO as
+  a class-level `@Schema(example = ...)`. One record, one example, however many endpoints return
+  it.
+- **The wrapper a list returns carries no example.** A find answers with the record itself, a
+  list answers with it inside a search response or a plural holder - `GenericSearchResponseXxx`,
+  `XxxsDto` - and those exist only to carry the record and its paging. Put the example on the
+  record; the documentation page assembles the envelope around it.
+- A **create, update or action** keeps its payload on the operation, in `@RequestBody` or the 2xx
+  `@ApiResponse`, because there the response is the result of doing something.
+- Name it `@ExampleObject(name = "Captured", summary = "<collection> / <folder>", ...)` so a
+  reader can find the call that produced it.
+- Never store a payload that shows no record — a list captured while the table was empty documents
+  nothing, and a reader reads it as "this endpoint returns nothing".
+- Never let a response envelope (`actionStatus`, `paging`) into a record's own example.
+- **Never put a real person's name, address or mailbox in an example.** Recordings come from test
+  collections that people fill in with their own details; scrub them before they ship.
+
+**When a field needs a seed**
+
+A seed is a refinement, not an obligation: every field appears in the generated example anyway,
+valued by its seed, else its type's default, else a placeholder shaped like the type. Add one
+where the placeholder would mislead, or where the value teaches something:
+
+- an expression or a format a reader could not guess — `"#{ op.quantity }"`, an EL filter, a
+  code that must match another record
+- **amounts that have to agree** — with-tax, without-tax and the tax itself
+- **dates that bound a range or share a timeline** — `validFrom`/`validTo`, an invoice date and
+  the due date that follows it
+- **a configured default** that documents behaviour — `dueDateDelay`, `periodLength`
+- **a reference field**, to show the reference rather than the whole related record:
+  `@Schema(example = "[{\"id\": 1, \"code\": \"DP_GLOBAL_10PERC\"}]")`
+
+Do **not** seed a plain boolean, number, enum or date. `"false"` on a flag and one constant of an
+enumeration say nothing the type does not, and the generated example supplies them - an enum shows
+its first constant. Names that describe a switch or an instruction (`disabled`, `displayXxx`,
+`returnXxx`, `generateXxx`, `everyXxx`, `failOnXxx`) never need one.
+
+**Inherited fields**
+
+`code`, `description` and `id` are declared on a base class, so Java cannot seed them per subtype.
+They come from the type's identity instead:
+
+```java
+@Schema(description = "...", extensions = @Extension(name = "identity", properties = {
+        @ExtensionProperty(name = "code", value = "CPI_2024"),
+        @ExtensionProperty(name = "description", value = "Consumer Price Index") }))
+```
+
+**Direction**
+
+`readOnly` keeps a field out of requests, `writeOnly` out of responses, and both are how a
+generated example stays honest about what a caller may send. A record's own `id` is shown in
+responses only. Mutually exclusive fields cannot be expressed this way at all — say so in the
+field description, because no assembled example can know it.
+
+**When no recording exists**
+
+Every stored example is normally a payload recorded against a running instance, and the
+documentation page says so beneath it: *"Captured - recorded from a real find or list against a
+running instance"*. Occasionally there is nothing to record - the entity has no rows in any
+environment, so no call can return one. Write the example from the schema then, and mark it as
+written, or the page will present your sentence as a recording.
+
+The marker is an extension on the **class-level** `@Schema`, beside `description` and `example`.
+Where the type already declares an `identity`, both go in one `extensions` array:
+
+```java
+@Schema(description = "A contact person, with their address and contact details",
+        extensions = {
+            @Extension(name = "identity", properties = {
+                @ExtensionProperty(name = "code", value = "CONTACT_0001") }),
+            @Extension(name = "example-source", properties = {
+                @ExtensionProperty(name = "kind", value = "authored") }) },
+        example = "{\"code\": \"CONTACT_0001\", \"company\": \"Example SA\"}")
+public class ContactDto extends BusinessEntityDto {
+```
+
+The page then prints *"Written from the schema - no recorded call exists for this record"* in
+place of the recording note. Remove the marker as soon as a real payload can be captured.
+
+#### Documenting the Response
+
+- **Always declare the success response.** An `@Operation` that lists `responses` replaces the
+  response Swagger would infer from the return type, so an operation naming only its `400` and
+  `409` documents no success at all — no schema, no example, nowhere for a payload to go.
+  ```java
+  @Operation(operationId = "createPaymentTerm", summary = "Create a payment term", responses = {
+      @ApiResponse(responseCode = "200", description = "The payment term was created",
+              content = @Content(schema = @Schema(implementation = ActionStatus.class))),
+      @ApiResponse(responseCode = "400", description = "Invalid input or a required parameter is missing",
+              content = @Content(schema = @Schema(implementation = ApiException.class))) })
+  ```
+- **Never declare the same status code twice on one operation.** A responses object is keyed by
+  status: Swagger keeps one entry and discards the rest without warning, and the one it keeps may
+  be the one carrying no schema. In review, treat a repeated `responseCode` as a defect.
+- **Describe the outcome, not the type.** `description = "The SMS template successfully updated"`
+  — not `"A list of SMS templates"`. The type is named by the schema beside it; the description is
+  the only place the operation's own result is stated.
+- **Do not return a bare `Response`.** A JAX-RS `Response` carries no type, so the payload exists
+  only in the implementation and cannot be documented. Return the DTO. Where `Response` is
+  unavoidable, declare the schema on the `@ApiResponse`.
+- **Do not assemble a payload by hand.** `Response.ok(map)`, `Collections.singletonMap("id", id)`
+  and string concatenation leave the endpoint with no type to document and no name to reference.
+  Return a DTO, even a two-field one.
+
+#### Making a DTO Visible to the Generator
+
+- **Give every documented field an accessor.** Swagger resolves properties from getters. A field
+  serialised by Jackson through field access but lacking a getter is returned by the API and
+  missing from the schema — the reader is told the response has four fields when it has five.
+- **Do not give two DTOs the same simple name within one document.** Each document - V0, V1/V2,
+  V3 - keys its schemas by simple name, so two classes of that name reaching the same document
+  leave one describing the other's fields, and every example built from it is wrong. Sharing a
+  name *across* documents is harmless and already happens: `LanguageDto` and `CounterInstanceDto`
+  each exist twice, one per document, with different fields. Before adding a DTO, check whether
+  the name is already taken **in the document your endpoint publishes to**; if it is, name yours
+  for what distinguishes it rather than for the entity alone.
+- **The declared property name must be the name on the wire.** Where JAXB or Jackson renames an
+  element — a plural property serialised in the singular, `paymentMethod` emitted as
+  `methodOfPayment` — the schema and the payload disagree and every example built from either is
+  wrong. Annotate the property so the two match.
+- **An inline `@Schema(type = "object")` with no properties is discarded.** A schema needs a type
+  to point at; if there is nothing to point at, that is a signal the endpoint needs a DTO.
+
+#### Stating What the Schema Cannot
+
+- **Document required combinations in the operation or DTO description.** Where a call needs
+  several fields together — a counter instance needs its counter template, product, subscription
+  and charge instance, plus the one account code matching the template's level — no `required`
+  list expresses it, and the caller learns it from a 400.
+- **Document mutually exclusive fields in the field description.** No generated example can know
+  that two fields are alternatives; it will show both.
+- **Treat `@Produces` and `@Consumes` as documentation.** They decide the media types the document
+  advertises. Declaring `APPLICATION_XML` is a promise to accept and return XML.
+
+#### Review Checklist
+
+Before approving an API change, confirm:
+
+1. every operation declares a `2xx` with a schema, and no status is declared twice;
+2. each response description says what that operation returns;
+3. no new endpoint returns a bare `Response` or a hand-built map;
+4. every new DTO field has an accessor, and its name matches the wire format;
+5. no new DTO repeats the simple name of another in the same document (V0, V1/V2 or V3);
+6. field seeds follow the rules above — references seeded, primitives not;
+7. any required combination or mutual exclusion is written in a description;
+8. no example contains a real person, and none shows an empty envelope;
+9. every DTO an operation sends or returns has a class-level example;
+10. every create, update and action operation has both a request and a response example;
+11. no find or list operation has an example of its own.
