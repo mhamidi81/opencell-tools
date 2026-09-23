@@ -21,17 +21,19 @@ Requires **`JIRA_API_TOKEN`** (+ **`JIRA_EMAIL`**, default `andrius.karpavicius@
 
 ## Arguments
 
-Parse `$ARGUMENTS` — **all optional**. A bare `/oc-ai-report` reports the **last 30 days** for **INTRD, MACRD and PRT730**.
+Parse `$ARGUMENTS` — **all optional**. A bare `/oc-ai-report` reports from **2026-07-01 to tomorrow** for **INTRD and MACRD**, and — because **PRT730 is a Protected project** — **asks the user whether to include PRT730** before running (see the `--project` note below).
 
-- `--since YYYY-MM-DD` — start of the period (inclusive), matched against each record's `at`. **Default: 30 days before `--until`.**
+- `--since YYYY-MM-DD` — start of the period (inclusive), matched against each record's `at`. **Default: `2026-07-01`.**
 - `--until YYYY-MM-DD` — end of the period (exclusive). **Default: tomorrow** (so today's records are included).
-- `--project KEY[,KEY…]` — Jira project(s), comma-separated. **Default: `INTRD,MACRD,PRT730`.** Backend work
-  is raised in `INTRD` (core *and* overlay) and in `MACRD` (MACO R&D / overlay), so both are in scope
-  by default. Areas are by discipline, not repository — overlay Java/xhtml records arrive as `backend`.
+- `--project KEY[,KEY…]` — Jira project(s), comma-separated. Backend work
+  is raised in `INTRD` (core *and* overlay) and in `MACRD` (MACO R&D / overlay), so both are always in scope.
+  Areas are by discipline, not repository — overlay Java/xhtml records arrive as `backend`.
+  **When the user passes `--project` explicitly, honour it verbatim and do NOT ask anything.**
+  **When `--project` is NOT passed, the base default is `INTRD,MACRD`, and — because `PRT730` (Protected - 730) is a Protected project — you MUST ask the user before report generation whether PRT730 should be included** (e.g. "PRT730 is a Protected project — include it in this report? (yes/no)"). On **yes**, run with `--project INTRD,MACRD,PRT730`; on **no**, run with `--project INTRD,MACRD`. Echo the resolved project list back with the window.
 - `--out PATH` — where to write the HTML report. **Default: `./docs/ai-usage-report-<TODAY>-<SINCE>-<UNTIL>.html`** where `<TODAY>` is the run date (`date -u +%Y-%m-%d`) and `<SINCE>`/`<UNTIL>` the window bounds, e.g. `./docs/ai-usage-report-2026-09-17-2026-01-01-2026-09-18.html` (relative to the current directory; the `docs/` folder is created if missing).
 - `--csv PATH` — also write the **ticket-detail rows** as CSV (spreadsheet-friendly). **Default: `./docs/ai-usage-report-<TODAY>-<SINCE>-<UNTIL>.csv`** (same folder/name-stamp as the HTML).
 
-Compute any missing date with the shell — `date -u +%Y-%m-%d` (today), `date -u -d 'tomorrow' +%Y-%m-%d`, `date -u -d '30 days ago' +%Y-%m-%d`; if `date -d` is unavailable, use Python `datetime`. Echo the resolved window back to the user (e.g. "Reporting INTRD, 2026-07-04 → 2026-08-03") so the defaults are visible.
+Compute any missing date with the shell — `date -u +%Y-%m-%d` (today), `date -u -d 'tomorrow' +%Y-%m-%d`; if `--since` is omitted, default it to **`2026-07-01`** (not a rolling 30-day window). If `date -d` is unavailable, use Python `datetime`. Echo the resolved window back to the user (e.g. "Reporting INTRD, MACRD, 2026-07-01 → 2026-09-24") so the defaults are visible.
 
 ## Task 1 — Fetch the tickets (two passes: parents, then sub-issues)
 
@@ -103,7 +105,7 @@ def fetch_jql(jql, fields):
 
 def main():
     ap=argparse.ArgumentParser()
-    ap.add_argument("--since", required=True); ap.add_argument("--project", default="INTRD,MACRD,PRT730")
+    ap.add_argument("--since", required=True); ap.add_argument("--project", default="INTRD,MACRD")
     ap.add_argument("--out-tickets", required=True); ap.add_argument("--out-children", required=True)
     a=ap.parse_args()
     # Pass A — parent tickets that carry an AI-metrics record (customfield_10745 not empty)
@@ -760,7 +762,7 @@ def main():
     ap.add_argument("--input", required=True); ap.add_argument("--children"); ap.add_argument("--tempo")
     ap.add_argument("--since"); ap.add_argument("--until"); ap.add_argument("--out", required=True)
     ap.add_argument("--csv")   # optional: also write the ticket-detail rows as CSV
-    ap.add_argument("--project", default="INTRD,MACRD,PRT730")
+    ap.add_argument("--project", default="INTRD,MACRD")
     a = ap.parse_args()
     parents = nodes(json.load(open(a.input, encoding="utf-8")))
     children = nodes(json.load(open(a.children, encoding="utf-8"))) if a.children else []

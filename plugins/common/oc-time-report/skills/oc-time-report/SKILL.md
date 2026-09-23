@@ -34,11 +34,11 @@ Both tokens are **mandatory** and read from the environment (never passed on the
 
 ## Arguments
 
-Parse `$ARGUMENTS` — all optional. Bare `/oc-time-report` = **last 30 days**, projects **INTRD, MACRD and PRT730**.
+Parse `$ARGUMENTS` — all optional. Bare `/oc-time-report` = **last 30 days**, projects **INTRD and MACRD** — and, because **PRT730 is a Protected project**, **ask the user whether to include PRT730** before running (see the `--project` note below).
 
 - `--since YYYY-MM-DD` — start (inclusive). Default: 30 days before `--until`.
 - `--until YYYY-MM-DD` — end (exclusive). Default: tomorrow.
-- `--project KEY[,KEY...]` — Jira project(s), comma-separated. Default `INTRD,MACRD,PRT730` — backend work is raised in `INTRD` (core *and* overlay), `MACRD` (MACO R&D / overlay) and `PRT730` (Protected - 730).
+- `--project KEY[,KEY...]` — Jira project(s), comma-separated. Backend work is raised in `INTRD` (core *and* overlay) and `MACRD` (MACO R&D / overlay), so both are always in scope. **When the user passes `--project` explicitly, honour it verbatim and do NOT ask anything.** **When `--project` is NOT passed, the base default is `INTRD,MACRD`, and — because `PRT730` (Protected - 730) is a Protected project — you MUST ask the user before report generation whether PRT730 should be included** (e.g. "PRT730 is a Protected project — include it in this report? (yes/no)"). On **yes**, run with `--project INTRD,MACRD,PRT730`; on **no**, run with `--project INTRD,MACRD`. Echo the resolved project list back with the window.
 - `--out PATH` — HTML output. Default `./docs/time-report-<TODAY>-<SINCE>-<UNTIL>.html` (run date, then window start and end).
 - `--csv PATH` — CSV output. Default `./docs/time-report-<TODAY>-<SINCE>-<UNTIL>.csv`.
 
@@ -233,7 +233,7 @@ def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--ids", required=True)      # file: comma-separated worklogged issue ids
     ap.add_argument("--out", required=True)       # issues.json
-    ap.add_argument("--project", default="INTRD,MACRD,PRT730")
+    ap.add_argument("--project", default="INTRD,MACRD")
     a=ap.parse_args()
     PROJS=[x.strip() for x in a.project.split(",") if x.strip()]; PSTR=",".join(PROJS)
     def in_scope(k): return any(str(k).startswith(q+"-") for q in PROJS)
@@ -831,7 +831,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tempo", required=True); ap.add_argument("--issues", required=True)
     ap.add_argument("--devmap", required=True); ap.add_argument("--dates")   # {issueId: latest worklog date}
-    ap.add_argument("--since"); ap.add_argument("--until"); ap.add_argument("--project", default="INTRD,MACRD,PRT730")
+    ap.add_argument("--since"); ap.add_argument("--until"); ap.add_argument("--project", default="INTRD,MACRD")
     ap.add_argument("--md"); ap.add_argument("--out", required=True); ap.add_argument("--csv")
     a = ap.parse_args()
     tempo = json.load(open(a.tempo, encoding="utf-8"))
