@@ -1,7 +1,7 @@
 ---
 name: oc-time-report
 description: Produce an estimation-vs-logged-hours report over a period, independent of the AI-usage JSON. Tempo-worklog driven, TICKET-based with PER-AREA columns — one row per ticket, a column group for each area (Backend/Frontend/QA) giving that area's main developer, Architect & Dev-lead estimates, logged & sub-bug hours, AI flag, two time gains (with/without sub-bugs) and sub-bug count, plus an Architect/PR/mgmt logged column and a total; each area's main dev is its top contributor by dev+sub-bug hours, and a multi-role reviewer's hours go to the Arch/PR column. Tickets carry a Date (latest worklog date) and are grouped by month; the HTML has five tabs (All, User Stories All/Final, Bugs Final, Bugs and Others). Also writes a second finished-User-Story per-developer summary (per area, split by AI, by month). Prints Markdown and writes date-stamped HTML + CSV to ./docs/. Fetches Jira via direct REST (mandatory JIRA_API_TOKEN) and Tempo per-user (mandatory TEMPO_API_TOKEN) — no Atlassian MCP.
-argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD,MACRD] [--out PATH] [--csv PATH]"
+argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD,MACRD,PRT730] [--out PATH] [--csv PATH]"
 ---
 
 ## Purpose
@@ -34,11 +34,11 @@ Both tokens are **mandatory** and read from the environment (never passed on the
 
 ## Arguments
 
-Parse `$ARGUMENTS` — all optional. Bare `/oc-time-report` = **last 30 days**, projects **INTRD and MACRD**.
+Parse `$ARGUMENTS` — all optional. Bare `/oc-time-report` = **last 30 days**, projects **INTRD, MACRD and PRT730**.
 
 - `--since YYYY-MM-DD` — start (inclusive). Default: 30 days before `--until`.
 - `--until YYYY-MM-DD` — end (exclusive). Default: tomorrow.
-- `--project KEY[,KEY...]` — Jira project(s), comma-separated. Default `INTRD,MACRD` — backend work is raised in `INTRD` (core *and* overlay) and in `MACRD` (MACO R&D / overlay).
+- `--project KEY[,KEY...]` — Jira project(s), comma-separated. Default `INTRD,MACRD,PRT730` — backend work is raised in `INTRD` (core *and* overlay), `MACRD` (MACO R&D / overlay) and `PRT730` (Protected - 730).
 - `--out PATH` — HTML output. Default `./docs/time-report-<TODAY>-<SINCE>-<UNTIL>.html` (run date, then window start and end).
 - `--csv PATH` — CSV output. Default `./docs/time-report-<TODAY>-<SINCE>-<UNTIL>.csv`.
 
@@ -233,7 +233,7 @@ def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--ids", required=True)      # file: comma-separated worklogged issue ids
     ap.add_argument("--out", required=True)       # issues.json
-    ap.add_argument("--project", default="INTRD,MACRD")
+    ap.add_argument("--project", default="INTRD,MACRD,PRT730")
     a=ap.parse_args()
     PROJS=[x.strip() for x in a.project.split(",") if x.strip()]; PSTR=",".join(PROJS)
     def in_scope(k): return any(str(k).startswith(q+"-") for q in PROJS)
@@ -831,7 +831,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tempo", required=True); ap.add_argument("--issues", required=True)
     ap.add_argument("--devmap", required=True); ap.add_argument("--dates")   # {issueId: latest worklog date}
-    ap.add_argument("--since"); ap.add_argument("--until"); ap.add_argument("--project", default="INTRD,MACRD")
+    ap.add_argument("--since"); ap.add_argument("--until"); ap.add_argument("--project", default="INTRD,MACRD,PRT730")
     ap.add_argument("--md"); ap.add_argument("--out", required=True); ap.add_argument("--csv")
     a = ap.parse_args()
     tempo = json.load(open(a.tempo, encoding="utf-8"))
