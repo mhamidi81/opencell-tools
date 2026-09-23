@@ -1,7 +1,7 @@
 ---
 name: oc-ai-report
 description: Produce a cross-ticket AI-usage report over a period. AI metrics grouped by developer domain (backend/frontend/QA); per-area Architect estimate (custom fields) and Dev-lead estimate (ticket field / sum of child sub-task estimates); ticket type; bug counts and hours-logged-on-bugs per area; logged hours per user & ticket via the Tempo API (fallback Jira worklogs); time gain without/with bug hours; sections ordered Totals → Summary → Detail. Fetches Jira via direct Cloud REST (enhanced /search/jql, fields-limited, no descriptions, paginated) using a mandatory JIRA_API_TOKEN — no Atlassian MCP; Tempo optional. Prints Markdown and writes a styled HTML file to ./docs/ai-usage-report-<date>-<start>-<end>.html. Totals-by-area shown in days (1 d = 8 h).
-argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD,MACRD] [--out PATH]"
+argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD,MACRD,PRT730] [--out PATH]"
 ---
 
 ## Purpose
@@ -21,11 +21,11 @@ Requires **`JIRA_API_TOKEN`** (+ **`JIRA_EMAIL`**, default `andrius.karpavicius@
 
 ## Arguments
 
-Parse `$ARGUMENTS` — **all optional**. A bare `/oc-ai-report` reports the **last 30 days** for **INTRD and MACRD**.
+Parse `$ARGUMENTS` — **all optional**. A bare `/oc-ai-report` reports the **last 30 days** for **INTRD, MACRD and PRT730**.
 
 - `--since YYYY-MM-DD` — start of the period (inclusive), matched against each record's `at`. **Default: 30 days before `--until`.**
 - `--until YYYY-MM-DD` — end of the period (exclusive). **Default: tomorrow** (so today's records are included).
-- `--project KEY[,KEY…]` — Jira project(s), comma-separated. **Default: `INTRD,MACRD`.** Backend work
+- `--project KEY[,KEY…]` — Jira project(s), comma-separated. **Default: `INTRD,MACRD,PRT730`.** Backend work
   is raised in `INTRD` (core *and* overlay) and in `MACRD` (MACO R&D / overlay), so both are in scope
   by default. Areas are by discipline, not repository — overlay Java/xhtml records arrive as `backend`.
 - `--out PATH` — where to write the HTML report. **Default: `./docs/ai-usage-report-<TODAY>-<SINCE>-<UNTIL>.html`** where `<TODAY>` is the run date (`date -u +%Y-%m-%d`) and `<SINCE>`/`<UNTIL>` the window bounds, e.g. `./docs/ai-usage-report-2026-09-17-2026-01-01-2026-09-18.html` (relative to the current directory; the `docs/` folder is created if missing).
@@ -103,7 +103,7 @@ def fetch_jql(jql, fields):
 
 def main():
     ap=argparse.ArgumentParser()
-    ap.add_argument("--since", required=True); ap.add_argument("--project", default="INTRD,MACRD")
+    ap.add_argument("--since", required=True); ap.add_argument("--project", default="INTRD,MACRD,PRT730")
     ap.add_argument("--out-tickets", required=True); ap.add_argument("--out-children", required=True)
     a=ap.parse_args()
     # Pass A — parent tickets that carry an AI-metrics record (customfield_10745 not empty)
@@ -760,7 +760,7 @@ def main():
     ap.add_argument("--input", required=True); ap.add_argument("--children"); ap.add_argument("--tempo")
     ap.add_argument("--since"); ap.add_argument("--until"); ap.add_argument("--out", required=True)
     ap.add_argument("--csv")   # optional: also write the ticket-detail rows as CSV
-    ap.add_argument("--project", default="INTRD")
+    ap.add_argument("--project", default="INTRD,MACRD,PRT730")
     a = ap.parse_args()
     parents = nodes(json.load(open(a.input, encoding="utf-8")))
     children = nodes(json.load(open(a.children, encoding="utf-8"))) if a.children else []
