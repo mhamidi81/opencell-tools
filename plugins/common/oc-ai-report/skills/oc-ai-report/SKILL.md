@@ -1,7 +1,7 @@
 ---
 name: oc-ai-report
 description: Produce a cross-ticket AI-usage report over a period. AI metrics grouped by developer domain (backend/frontend/QA); per-area Architect estimate (custom fields) and Dev-lead estimate (ticket field / sum of child sub-task estimates); ticket type; bug counts and hours-logged-on-bugs per area; logged hours per user & ticket via the Tempo API (fallback Jira worklogs); time gain without/with bug hours; sections ordered Totals → Summary → Detail. Fetches Jira via direct Cloud REST (enhanced /search/jql, fields-limited, no descriptions, paginated) using a mandatory JIRA_API_TOKEN — no Atlassian MCP; Tempo optional. Prints Markdown and writes a styled HTML file to ./docs/ai-usage-report-<date>-<start>-<end>.html. Totals-by-area shown in days (1 d = 8 h).
-argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD,MACRD,PRT730] [--out PATH]"
+argument-hint: "[--since 2026-07-01] [--until <tomorrow>] [--project INTRD,MACRD] [--out PATH]"
 ---
 
 ## Purpose
