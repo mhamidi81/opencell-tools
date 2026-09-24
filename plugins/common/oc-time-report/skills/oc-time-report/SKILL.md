@@ -10,9 +10,12 @@ A team **estimation-vs-actual** report. Unlike `/oc-ai-report`, this one is **no
 
 **Ticket selection is by DATE, not by worklog.** A ticket is in scope when its **ticket date** — `resolutiondate`, or `updated` when it has no resolution date — falls in `[--since, --until)`. Once a ticket is selected, **every worklog booked on it and its sub-issues counts** (all-time, never clipped to the window), so a ticket's total logged time matches Jira's `aggregatetimespent`.
 
-Fixed columns per row: **Ticket · Date · Type · Title · Status · Final**, then a single **Arch gain B/F/Q** column, then **for each area** a group of: **Main dev · A. Est h · DL. Est h · Total dev h · Logged h · Sub-bug h · AI · Arch gain (with · without bugs) · DL gain (with · without bugs) · #Sub-bugs**. Then three closing columns: **Overhead h · Overhead people · Total log h**.
+Fixed columns per row: **Ticket · Date · Type · Title · Status · Final**, then a single **Arch gain B/F/Q** column and a **Logged+bug B/F/Q/OH** column, then **for each area** a group of: **Main dev · A. Est h · DL. Est h · Total dev h · Logged h · Sub-bug h · AI · Arch gain (with · without bugs) · DL gain (with · without bugs) · #Sub-bugs**. Then three closing columns: **Overhead h · Overhead people · Total log h**.
+
+**Interactive HTML — project filter.** The page has a **Project filter** picklist (the distinct Jira ticket prefixes, e.g. INTRD / MACRD, plus *All*). Choosing a project **live-filters** the Totals-by-area tables and the per-ticket rows and **recomputes % Logged, the per-area figures, the Total row and the grand total** in the browser (no reload). The Totals-by-area tables carry a **Project** column (right after Area) showing the active filter. (The CSV is left unfiltered — filter it in a spreadsheet.)
 
 - **Arch gain B/F/Q** (right after Final) — one column with **three percentages**: each area's **Architect gain considering sub-bugs** = `(A.Est − (Logged + Sub-bug h)) / A.Est`, labelled **B** (backend), **F** (frontend), **Q** (QA); green positive / red negative, `-` when meaningless.
+- **Logged+bug B/F/Q/OH** (right after the Arch-gain column) — the ticket's **total logged hours including sub-bug hours** for each area (B/F/Q) and the **overhead** total (OH).
 - **Main dev** (per area) — the area's roster developer with the **most total work on the ticket** = non-bug logged + their own **sub-bug-fixing** hours. So a genuine bug-fixer outranks someone who only did a token review/touch on the parent. (A US worked by all three areas therefore credits three developers.)
 - **Date** — the ticket's **resolutiondate** (else **updated**); tickets are **grouped by that month**.
 - **Logged h** (per area) — non-bug Tempo hours booked by that area's developers. Hours booked by **overhead** people (Architect / PO / DevOps / Consultant / management — roster area `overhead`) are moved out of the areas into the **Overhead h** bucket instead (so per-area numbers reflect real area development).
@@ -404,15 +407,17 @@ It requests fields `["summary","issuetype","status","components","timeoriginales
 - `customfield_10745` is the **"AI metrics"** field: its presence marks an area as **developed with AI assistance** (per-ticket **AI** badge; aggregated as **AI-assisted**); an area is flagged when the ticket carries a record for that domain, or a same-area sub-task carries the field.
 - Estimate custom fields are `customfield_10157` = *Architect estimate back*, `customfield_10158` = *front*, `customfield_10189` = *QA estimate* (days).
 
-## Task 3 — Fetch Tempo worklogs (per-user, all-time)
+## Task 3 — Fetch Tempo worklogs (per-user, all-time, **cached**)
 
-Fetch **per-user** (not the bulk `/worklogs` endpoint — that only surfaces some authors). Write `fetch_tempo_users.py` (below) to scratchpad and run it against `devmap.json`. Because a selected ticket's worklogs may pre-date the window, fetch **all-time** worklogs (use a very early `--from`, e.g. `2010-01-01`, through `--to` = the last in-window day) so per-ticket totals match Jira's `aggregatetimespent`; the aggregator does the ticket-date windowing:
+Fetch **per-user** (not the bulk `/worklogs` endpoint — that only surfaces some authors). Write `fetch_tempo_users.py` (below) to scratchpad and run it against `devmap.json`. Because a selected ticket's worklogs may pre-date the window, the report needs **all-time** worklogs (so per-ticket totals match Jira's `aggregatetimespent`); the aggregator does the ticket-date windowing.
+
+**Use the persistent cache** (`--cache`) so this step is fast. Worklogs can't be entered more than ~a month back, so historical Tempo data is **immutable**: the cache stores month-bucketed worklogs, and each run only re-fetches the recent ~45 days (`--refresh-days`, the mutable window) and reuses cached older months. The **first** run (cold cache) does the full all-time pull from `--from 2010-01-01` (minutes); **subsequent** runs finish in seconds.
 
 ```bash
-python "<SCRATCHPAD>/fetch_tempo_users.py" --devmap "<SCRATCHPAD>/devmap.json"   --from 2010-01-01 --to [UNTIL-1day] --out "<SCRATCHPAD>/tempo.json" --ids-out "<SCRATCHPAD>/worklog_ids.txt"   --dates-out "<SCRATCHPAD>/wdates.json"
+python "<SCRATCHPAD>/fetch_tempo_users.py" --devmap "<SCRATCHPAD>/devmap.json"   --from 2010-01-01 --to [UNTIL-1day] --cache "$HOME/.claude/oc-time-report/tempo_cache.json"   --out "<SCRATCHPAD>/tempo.json" --ids-out "<SCRATCHPAD>/worklog_ids.txt" --dates-out "<SCRATCHPAD>/wdates.json"
 ```
 
-It writes `tempo.json` = `{ "<issueId>": { "<accountId>": seconds } }` and `wdates.json` = `{ "<issueId>": "<latest worklog date>" }` (and a `worklog_ids.txt` that the date-driven flow does not need). It prints a per-developer worklog/issue count to stderr; report which developers had worklogs. If Tempo returns nothing, tell the user and stop. (Most logged time is cross-project; the aggregator keeps only tickets in the requested projects.)
+It writes `tempo.json` = `{ "<issueId>": { "<accountId>": seconds } }` and `wdates.json` = `{ "<issueId>": "<latest worklog date>" }` (and a `worklog_ids.txt` that the date-driven flow does not need), and maintains the month-bucketed cache at `--cache` (kept **outside** the session scratchpad — `$HOME/.claude/oc-time-report/tempo_cache.json` — so it persists across runs). It prints a per-developer worklog count to stderr; report which developers had worklogs. If Tempo returns nothing, tell the user and stop. (Most logged time is cross-project; the aggregator keeps only tickets in the requested projects.)
 
 ## Task 4 — Aggregate & render
 
@@ -518,54 +523,84 @@ if __name__=="__main__": main()
 ### `fetch_tempo_users.py`
 
 ```python
-import json, os, sys, time, urllib.request, urllib.error, urllib.parse
-BASE="https://api.tempo.io/4"
+import json, os, sys, urllib.request, urllib.error, urllib.parse, datetime
+BASE = "https://api.tempo.io/4"
+
 def fetch_user(acc, tok, frm, to):
-    per_issue={}      # issueId -> seconds
-    last_date={}      # issueId -> latest worklog startDate (YYYY-MM-DD)
-    url=f"{BASE}/worklogs/user/{urllib.parse.quote(acc,safe='')}?from={frm}&to={to}&limit=1000"
-    n=0
+    """Return ([(issueId, startDate, seconds), ...], http_status) for one user's worklogs in [frm, to]."""
+    out = []
+    url = f"{BASE}/worklogs/user/{urllib.parse.quote(acc, safe='')}?from={frm}&to={to}&limit=1000"
     while url:
-        req=urllib.request.Request(url, headers={"Authorization":f"Bearer {tok}"})
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {tok}"})
         try:
-            with urllib.request.urlopen(req,timeout=60) as r: data=json.load(r)
+            with urllib.request.urlopen(req, timeout=60) as r: data = json.load(r)
         except urllib.error.HTTPError as ex:
-            sys.stderr.write(f"  {acc}: HTTP {ex.code}\n"); return per_issue, last_date, n, ex.code
+            sys.stderr.write(f"  {acc}: HTTP {ex.code}\n"); return out, ex.code
         for w in data.get("results") or []:
-            iid=str(((w.get("issue") or {}).get("id")))
-            sec=w.get("timeSpentSeconds") or 0
-            d=w.get("startDate") or ""
-            if iid and iid!="None":
-                per_issue[iid]=per_issue.get(iid,0)+sec; n+=1
-                if d and d>last_date.get(iid,""): last_date[iid]=d
-        url=(data.get("metadata") or {}).get("next")
-    return per_issue, last_date, n, 200
+            iid = str((w.get("issue") or {}).get("id"))
+            if iid and iid != "None":
+                out.append((iid, w.get("startDate") or "", w.get("timeSpentSeconds") or 0))
+        url = (data.get("metadata") or {}).get("next")
+    return out, 200
 
 def main():
     import argparse
-    ap=argparse.ArgumentParser()
-    ap.add_argument("--devmap",required=True); ap.add_argument("--from",dest="frm",required=True)
-    ap.add_argument("--to",required=True); ap.add_argument("--out",required=True); ap.add_argument("--ids-out",required=True)
-    ap.add_argument("--dates-out")   # optional: {issueId: latest worklog date}
-    a=ap.parse_args()
-    tok=os.environ.get("TEMPO_API_TOKEN")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--devmap", required=True); ap.add_argument("--from", dest="frm", required=True)
+    ap.add_argument("--to", required=True); ap.add_argument("--out", required=True); ap.add_argument("--ids-out", required=True)
+    ap.add_argument("--dates-out")               # optional: {issueId: latest worklog date}
+    ap.add_argument("--cache")                    # persistent month-bucketed cache for incremental refresh
+    ap.add_argument("--refresh-days", type=int, default=45)  # re-fetch this many days back (must exceed the ~1-month log window)
+    a = ap.parse_args()
+    tok = os.environ.get("TEMPO_API_TOKEN")
     if not tok: sys.stderr.write("no token\n"); sys.exit(1)
-    dev=json.load(open(a.devmap,encoding="utf-8"))
-    tempo={}   # issueId -> {acc: secs}
-    dates={}   # issueId -> latest worklog date
-    for acc,info in dev.items():
-        per,ld,cnt,code=fetch_user(acc,tok,a.frm,a.to)
-        for iid,sec in per.items():
-            tempo.setdefault(iid,{})[acc]=tempo.get(iid,{}).get(acc,0)+sec
-        for iid,d in ld.items():
-            if d>dates.get(iid,""): dates[iid]=d
-        sys.stderr.write(f"{info['area']:8} {info['name']:26} {cnt:5} worklogs, {len(per):4} issues\n")
-    json.dump(tempo, open(a.out,"w"))
-    open(a.ids_out,"w").write(",".join(tempo.keys()))
-    if a.dates_out: json.dump(dates, open(a.dates_out,"w"))
+    dev = json.load(open(a.devmap, encoding="utf-8"))
+
+    # Cache: {"buckets": {issueId: {accId: {"YYYY-MM": secs}}}, "lastDate": {issueId: "YYYY-MM-DD"}}.
+    # Worklogs older than ~1 month are immutable (they can't be logged/edited that far back), so only the
+    # recent months need re-fetching; older months are served straight from the cache.
+    cache = {"buckets": {}, "lastDate": {}}
+    if a.cache and os.path.exists(a.cache):
+        try: cache = json.load(open(a.cache, encoding="utf-8"))
+        except Exception: cache = {"buckets": {}, "lastDate": {}}
+    buckets = cache.setdefault("buckets", {}); lastDate = cache.setdefault("lastDate", {})
+
+    if a.cache and buckets:   # incremental: refresh only the recent (mutable) months
+        cutoff = datetime.date.today() - datetime.timedelta(days=a.refresh_days)
+        cutoff_month = cutoff.strftime("%Y-%m")
+        eff_from = cutoff.replace(day=1).strftime("%Y-%m-%d")
+        for accs in buckets.values():                      # drop recent months so the fresh pull fully replaces them
+            for months in accs.values():
+                for mk in [m for m in months if m >= cutoff_month]: del months[mk]
+        sys.stderr.write(f"cache hit ({len(buckets)} issues): refreshing months >= {cutoff_month} (from {eff_from})\n")
+    else:                     # cold cache: full fetch from --from
+        eff_from = a.frm
+        sys.stderr.write(f"no cache: full fetch from {eff_from}\n")
+
+    for acc, info in dev.items():
+        wls, code = fetch_user(acc, tok, eff_from, a.to)
+        for iid, sd, sec in wls:
+            mk = sd[:7] if sd else "0000-00"
+            buckets.setdefault(iid, {}).setdefault(acc, {})
+            buckets[iid][acc][mk] = buckets[iid][acc].get(mk, 0) + sec
+            if sd and sd > lastDate.get(iid, ""): lastDate[iid] = sd
+        sys.stderr.write(f"{info['area']:8} {info['name']:26} {len(wls):5} worklogs\n")
+
+    if a.cache:
+        os.makedirs(os.path.dirname(os.path.abspath(a.cache)) or ".", exist_ok=True)
+        json.dump(cache, open(a.cache, "w"))
+    # flatten month buckets -> tempo {issueId: {accId: secs}} (dropping issues/accounts that netted to 0)
+    tempo = {}
+    for iid, accs in buckets.items():
+        for acc, months in accs.items():
+            s = sum(months.values())
+            if s: tempo.setdefault(iid, {})[acc] = s
+    json.dump(tempo, open(a.out, "w"))
+    open(a.ids_out, "w").write(",".join(tempo.keys()))
+    if a.dates_out: json.dump(lastDate, open(a.dates_out, "w"))
     sys.stderr.write(f"TOTAL distinct worklogged issues: {len(tempo)}\n")
 
-if __name__=="__main__": main()
+if __name__ == "__main__": main()
 ```
 
 ### `time_report.py`
@@ -790,7 +825,7 @@ def build_ticket_rows(all_nodes, tempo, devmap, project, wdates=None, since=None
         total_logged = round(sum(areas_out[ar]["logged"] for ar in AREAS) + archpr_h, 1)
         total_dev = round(sum(areas_out[ar]["totalDev"] for ar in AREAS) + archpr_h, 1)
         date = tdate; month = (date or "")[:7] or "no-date"
-        rows.append({"key": tkey, "ttype": ttype, "title": (tf.get("summary") or "")[:60],
+        rows.append({"key": tkey, "project": str(tkey).split("-")[0], "ttype": ttype, "title": (tf.get("summary") or "")[:60],
                      "status": status, "final": final, "date": date, "month": month, "areas": areas_out,
                      "archprH": archpr_h,
                      "archprDevs": [(n, hours(archpr_devs[n])) for n in sorted(archpr_devs, key=lambda n: -archpr_devs[n])],
@@ -836,29 +871,30 @@ def md_totals_lines(rows):
     out.append(f"| **Total** | | {t_aest} | {t_dlest} | **{grand_dev}** | **{days(grand_log)}** | {t_sub} | | 100% | | | {t_bugs} |")
     return out
 
-def html_totals_table(rows):
+def html_totals_table(rows, tab="all", month="all"):
     tot, archpr_tot, grand_log = area_totals(rows)   # all values in hours; shown as days below
     def pl(v): return f"{round(v / grand_log * 100)}%" if grand_log else "&ndash;"   # % of total logged h
-    h = ["<div class=\"tw\"><table><thead><tr>"
-         "<th>Area</th><th class='r'>Tickets</th><th class='r'>A. Est d</th><th class='r'>DL. Est d</th>"
+    # data-totals lets the client-side project filter locate and rebuild this table (JS mirrors this markup)
+    h = [f"<div class=\"tw\" data-totals data-tab=\"{e(tab)}\" data-month=\"{e(month)}\"><table><thead><tr>"
+         "<th>Area</th><th>Project</th><th class='r'>Tickets</th><th class='r'>A. Est d</th><th class='r'>DL. Est d</th>"
          "<th class='r'>Total dev d</th><th class='r'>Logged d</th><th class='r'>Sub-bug d</th><th class='r'>AI-assisted</th><th class='r'>% Logged</th>"
          "<th class='r'>Arch gain</th><th class='r'>DL gain</th><th class='r'>Sub-bugs</th></tr></thead><tbody>"]
     for ar in AREAS:
         g = tot[ar]
-        h.append(f"<tr><td class='name'>{AREA_LABEL[ar]}</td><td class='r'>{g['tickets']}</td>"
+        h.append(f"<tr><td class='name'>{AREA_LABEL[ar]}</td><td class='proj'>All</td><td class='r'>{g['tickets']}</td>"
                  f"<td class='r'>{days(g['aEst'])}</td><td class='r'>{days(g['dlEst'])}</td>"
                  f"<td class='r'>{days(g['logged']+g['subBug'])}</td><td class='r'>{days(g['logged'])}</td>"
                  f"<td class='r'>{days(g['subBug'])}</td><td class='r'>{g['ai']}/{g['tickets']}</td><td class='r'>{pl(g['logged'])}</td>"
                  f"<td class='r'>{gain_two_html(g['aEst'],g['logged'],g['subBug'])}</td>"
                  f"<td class='r'>{gain_two_html(g['dlEst'],g['logged'],g['subBug'])}</td><td class='r'>{g['bugs']}</td></tr>")
-    h.append(f"<tr><td class='name'>Overhead</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td>"
+    h.append(f"<tr><td class='name'>Overhead</td><td class='proj'>All</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td>"
              f"<td class='r'>{days(archpr_tot)}</td><td class='r'>{days(archpr_tot)}</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>{pl(archpr_tot)}</td>"
              f"<td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td></tr>")
     t_sub_h = sum(tot[ar]["subBug"] for ar in AREAS)
     t_aest = days(sum(tot[ar]["aEst"] for ar in AREAS)); t_dlest = days(sum(tot[ar]["dlEst"] for ar in AREAS))
     t_sub = days(t_sub_h); t_bugs = sum(tot[ar]["bugs"] for ar in AREAS)
     grand_dev = days(grand_log + t_sub_h)   # Total dev = all logged (areas + Overhead) + all sub-bug
-    h.append(f"<tr class='tot'><td class='name'>Total</td><td></td>"
+    h.append(f"<tr class='tot'><td class='name'>Total</td><td class='proj'>All</td><td></td>"
              f"<td class='r'>{t_aest}</td><td class='r'>{t_dlest}</td>"
              f"<td class='r'>{grand_dev}</td><td class='r'>{days(grand_log)}</td><td class='r'>{t_sub}</td>"
              f"<td></td><td class='r'>100%</td><td></td><td></td><td class='r'>{t_bugs}</td></tr>")
@@ -869,7 +905,8 @@ MATRIX_SUB = ["Main dev", "A.Est", "DL.Est", "Tot dev", "Logged", "Sub-bug h", "
 def html_matrix_head():
     head1 = ['<th rowspan="2">Ticket</th><th rowspan="2">Date</th><th rowspan="2">Type</th><th rowspan="2">Title</th>'
              '<th rowspan="2">Status</th><th rowspan="2" class="c">F</th>'
-             '<th rowspan="2" class="c gaincol">Arch gain B/F/Q<br><span class="sm">w/ bugs</span></th>']
+             '<th rowspan="2" class="c gaincol">Arch gain B/F/Q<br><span class="sm">w/ bugs</span></th>'
+             '<th rowspan="2" class="c gaincol">Logged+bug B/F/Q/OH<br><span class="sm">hours</span></th>']
     for ar in AREAS:
         head1.append(f'<th colspan="{len(MATRIX_SUB)}" class="grp {ar}">{AREA_LABEL[ar]}</th>')
     head1.append('<th rowspan="2" class="r">Overhead h</th><th rowspan="2">Overhead people</th><th rowspan="2" class="r">Total log h</th>')
@@ -894,6 +931,10 @@ def html_matrix_body(rows):
             x = r["areas"][ar]
             ag_parts.append(f'{AG_LBL[ar]}&nbsp;{gain_span(gain_pct(x["aEst"], x["logged"] + x["subBug"]))}')
         tds.append(f'<td class="c gaincol sm">{" ".join(ag_parts)}</td>')
+        # total logged incl. sub-bug hours, per area + overhead
+        lb_parts = [f'{AG_LBL[ar]}&nbsp;{round(r["areas"][ar]["logged"] + r["areas"][ar]["subBug"], 1)}' for ar in AREAS]
+        lb_parts.append(f'OH&nbsp;{r["archprH"]}')
+        tds.append(f'<td class="c gaincol sm">{" ".join(lb_parts)}</td>')
         for ar in AREAS:
             x = r["areas"][ar]; blank = not (x["logged"] or x["subBug"] or x["aEst"] or x["dlEst"] or x["main"])
             if blank:
@@ -908,10 +949,10 @@ def html_matrix_body(rows):
         tds.append(f'<td class="r">{r["archprH"] if r["archprH"] else "&ndash;"}</td>'
                    f'<td class="sm">{people if people else "&ndash;"}</td>'
                    f'<td class="r tot">{r["totalLogged"]}</td>')
-        out.append("<tr>" + "".join(tds) + "</tr>")
+        out.append(f'<tr data-project="{e(r["project"])}">' + "".join(tds) + "</tr>")
     return "".join(out)
 
-def html_report_body(rs):
+def html_report_body(rs, tab="all"):
     """Full report body (Totals by area overall + by month, then the per-ticket matrix grouped
     by month) for a subset of rows — used inside each tab panel."""
     if not rs:
@@ -921,12 +962,12 @@ def html_report_body(rs):
     ms = months_of(rs)
     h = []; w = h.append
     w("<h2>Totals by area</h2>")
-    w(html_totals_table(rs))
-    w(f'<p class="meta"><b>Total across all groups:</b> {days(grand)} d logged + {days(_tsub)} d sub-bug = <b>{days(grand + _tsub)} d</b> total dev <span class="sm">(1 d = {DAY_HOURS} h)</span></p>')
+    w(html_totals_table(rs, tab, "all"))
+    w(f'<p class="meta" data-grand data-tab="{e(tab)}"><b>Total across all groups:</b> {days(grand)} d logged + {days(_tsub)} d sub-bug = <b>{days(grand + _tsub)} d</b> total dev <span class="sm">(1 d = {DAY_HOURS} h)</span></p>')
     w('<p class="bm">By month</p>')
     for i, m in enumerate(ms):
         mr = [r for r in rs if r["month"] == m]; op = " open" if i == 0 else ""
-        w(f'<details{op}><summary>{e(m)} <span class="cnt">({len(mr)} tickets)</span></summary>{html_totals_table(mr)}</details>')
+        w(f'<details{op}><summary>{e(m)} <span class="cnt">({len(mr)} tickets)</span></summary>{html_totals_table(mr, tab, m)}</details>')
     w("<h2>Per ticket &mdash; per-area columns</h2>")
     for i, m in enumerate(ms):
         mr = [r for r in rs if r["month"] == m]; op = " open" if i == 0 else ""
@@ -1146,6 +1187,84 @@ summary .cnt {{ color:var(--muted); font-weight:400; font-size:.9em; }}
                         w.writerow(row)
     return len(recs), mons
 
+PROJECT_FILTER_JS = r"""<script>
+(function(){
+  var ROWS = JSON.parse(document.getElementById('rowdata').textContent || '[]');
+  var DAY = 8, EST_MIN = 0.5, CAP = 1000;
+  var AK = {backend:'be', frontend:'fe', qa:'qa'}, LABEL = {backend:'Backend', frontend:'Frontend', qa:'QA'};
+  function d(h){ return Math.round((h||0)/DAY*10)/10; }
+  function gp(est, log){ if(!est || est<EST_MIN || !log || log<=0) return null; return Math.round((est-log)/est*100); }
+  function gs(g){ return (g===null || Math.abs(g)>CAP) ? '-' : (g>=0 ? '+'+g+'%' : g+'%'); }
+  function gspan(g){ var c=(g===null||Math.abs(g)>CAP)?'':(g>=0?'pos':'neg'); return c?('<span class="'+c+'">'+gs(g)+'</span>'):gs(g); }
+  function g2(est,log,bug){ return gspan(gp(est,log+bug))+' / '+gspan(gp(est,log)); }
+  function tabMatch(r,tab){ if(tab==='all')return true; if(tab==='us')return r.t==='US'; if(tab==='usfinal')return r.t==='US'&&r.f;
+    if(tab==='bugfinal')return r.t==='Bug'&&r.f; if(tab==='other')return r.t!=='US'; return true; }
+  function z(){ return {tickets:0,aEst:0,dlEst:0,logged:0,subBug:0,bugs:0,ai:0}; }
+
+  function agg(rows){
+    var A={backend:z(),frontend:z(),qa:z()}, oh=0, grand=0;
+    for(var i=0;i<rows.length;i++){ var r=rows[i];
+      for(var ar in AK){ var a=r[AK[ar]]; // [aEst,dlEst,logged,subBug,bugs,ai]
+        if(a[2]||a[3]||a[0]||a[1]){ var g=A[ar]; g.tickets++; g.aEst+=a[0]; g.dlEst+=a[1]; g.logged+=a[2]; g.subBug+=a[3]; g.bugs+=a[4]; g.ai+=a[5]?1:0; }
+      }
+      oh+=r.oh; grand+=r.be[2]+r.fe[2]+r.qa[2]+r.oh;
+    }
+    return {A:A, oh:oh, grand:grand};
+  }
+  function pl(v,grand){ return grand ? Math.round(v/grand*100)+'%' : '&ndash;'; }
+
+  function totalsBody(rows, projLabel){
+    var t=agg(rows), A=t.A, grand=t.grand, oh=t.oh, out='';
+    ['backend','frontend','qa'].forEach(function(ar){ var g=A[ar];
+      out+='<tr><td class="name">'+LABEL[ar]+'</td><td class="proj">'+projLabel+'</td><td class="r">'+g.tickets+'</td>'
+        +'<td class="r">'+d(g.aEst)+'</td><td class="r">'+d(g.dlEst)+'</td><td class="r">'+d(g.logged+g.subBug)+'</td>'
+        +'<td class="r">'+d(g.logged)+'</td><td class="r">'+d(g.subBug)+'</td><td class="r">'+g.ai+'/'+g.tickets+'</td>'
+        +'<td class="r">'+pl(g.logged,grand)+'</td><td class="r">'+g2(g.aEst,g.logged,g.subBug)+'</td>'
+        +'<td class="r">'+g2(g.dlEst,g.logged,g.subBug)+'</td><td class="r">'+g.bugs+'</td></tr>';
+    });
+    out+='<tr><td class="name">Overhead</td><td class="proj">'+projLabel+'</td><td class="r">&ndash;</td><td class="r">&ndash;</td><td class="r">&ndash;</td>'
+      +'<td class="r">'+d(oh)+'</td><td class="r">'+d(oh)+'</td><td class="r">&ndash;</td><td class="r">&ndash;</td><td class="r">'+pl(oh,grand)+'</td>'
+      +'<td class="r">&ndash;</td><td class="r">&ndash;</td><td class="r">&ndash;</td></tr>';
+    var tA=d(A.backend.aEst+A.frontend.aEst+A.qa.aEst), tD=d(A.backend.dlEst+A.frontend.dlEst+A.qa.dlEst);
+    var tsub=A.backend.subBug+A.frontend.subBug+A.qa.subBug, tbugs=A.backend.bugs+A.frontend.bugs+A.qa.bugs;
+    out+='<tr class="tot"><td class="name">Total</td><td class="proj">'+projLabel+'</td><td></td><td class="r">'+tA+'</td><td class="r">'+tD+'</td>'
+      +'<td class="r">'+d(t.grand+tsub)+'</td><td class="r">'+d(t.grand)+'</td><td class="r">'+d(tsub)+'</td>'
+      +'<td></td><td class="r">'+(grand?'100%':'&ndash;')+'</td><td></td><td></td><td class="r">'+tbugs+'</td></tr>';
+    return out;
+  }
+
+  function apply(proj){
+    var projLabel = proj==='all' ? 'All' : proj;
+    // rebuild every Totals-by-area table for its (tab, month) scope
+    document.querySelectorAll('[data-totals]').forEach(function(div){
+      var tab=div.getAttribute('data-tab'), month=div.getAttribute('data-month');
+      var rows=ROWS.filter(function(r){ return tabMatch(r,tab) && (month==='all'||r.m===month) && (proj==='all'||r.p===proj); });
+      var tb=div.querySelector('tbody'); if(tb) tb.innerHTML=totalsBody(rows, projLabel);
+    });
+    // update the "Total across all groups" lines
+    document.querySelectorAll('[data-grand]').forEach(function(p){
+      var tab=p.getAttribute('data-tab');
+      var rows=ROWS.filter(function(r){ return tabMatch(r,tab) && (proj==='all'||r.p===proj); });
+      var t=agg(rows), tsub=t.A.backend.subBug+t.A.frontend.subBug+t.A.qa.subBug;
+      p.innerHTML='<b>Total across all groups:</b> '+d(t.grand)+' d logged + '+d(tsub)+' d sub-bug = <b>'+d(t.grand+tsub)+' d</b> total dev <span class="sm">(1 d = '+DAY+' h)</span>';
+    });
+    // show/hide per-ticket matrix rows
+    document.querySelectorAll('tr[data-project]').forEach(function(tr){
+      tr.style.display = (proj==='all'||tr.getAttribute('data-project')===proj) ? '' : 'none';
+    });
+    // update tab-count badges
+    var TABS={'tab-all':'all','tab-us':'us','tab-usfinal':'usfinal','tab-bugfinal':'bugfinal','tab-other':'other'};
+    for(var id in TABS){ var lab=document.querySelector('label[for="'+id+'"] .cnt'); if(!lab) continue;
+      var n=ROWS.filter(function(r){ return tabMatch(r,TABS[id]) && (proj==='all'||r.p===proj); }).length;
+      lab.textContent='('+n+')';
+    }
+  }
+  var sel=document.getElementById('projfilter');
+  if(sel){ sel.addEventListener('change', function(){ apply(this.value); });
+    if(sel.value && sel.value!=='all') apply(sel.value); }
+})();
+</script>"""
+
 # ======================= main =======================
 def main():
     ap = argparse.ArgumentParser()
@@ -1238,6 +1357,11 @@ def main():
         us_final = [r for r in us_rows if r["final"]]
         bug_final = [r for r in rows if r["ttype"] == "Bug" and r["final"]]
         other_rows = [r for r in rows if r["ttype"] != "US"]
+        projects = sorted({r["project"] for r in rows})
+        W('<div class="filterbar"><label><b>Project filter:</b> <select id="projfilter">'
+          '<option value="all">All projects</option>'
+          + "".join(f'<option value="{e(p)}">{e(p)}</option>' for p in projects)
+          + '</select></label> <span class="sm">filters Totals-by-area and the per-ticket rows; % Logged and Totals recompute live.</span></div>')
         W('<div class="tabs">')
         W('<input type="radio" name="trtab" id="tab-all" checked>')
         W('<input type="radio" name="trtab" id="tab-us">')
@@ -1250,12 +1374,22 @@ def main():
           f'<label for="tab-usfinal">User Stories (Final) <span class="cnt">({len(us_final)})</span></label>'
           f'<label for="tab-bugfinal">Bugs (Final) <span class="cnt">({len(bug_final)})</span></label>'
           f'<label for="tab-other">Bugs and Others <span class="cnt">({len(other_rows)})</span></label></div>')
-        W(f'<section class="panel panel-all">{html_report_body(rows)}</section>')
-        W(f'<section class="panel panel-us">{html_report_body(us_rows)}</section>')
-        W(f'<section class="panel panel-usfinal">{html_report_body(us_final)}</section>')
-        W(f'<section class="panel panel-bugfinal">{html_report_body(bug_final)}</section>')
-        W(f'<section class="panel panel-other">{html_report_body(other_rows)}</section>')
+        W(f'<section class="panel panel-all">{html_report_body(rows, "all")}</section>')
+        W(f'<section class="panel panel-us">{html_report_body(us_rows, "us")}</section>')
+        W(f'<section class="panel panel-usfinal">{html_report_body(us_final, "usfinal")}</section>')
+        W(f'<section class="panel panel-bugfinal">{html_report_body(bug_final, "bugfinal")}</section>')
+        W(f'<section class="panel panel-other">{html_report_body(other_rows, "other")}</section>')
         W('</div>')
+        # ---- data + client-side project filter (recomputes Totals-by-area, % Logged, grand total) ----
+        import json as _json
+        rowdata = [{"k": r["key"], "p": r["project"], "m": r["month"], "t": r["ttype"], "f": 1 if r["final"] else 0,
+                    "oh": r["archprH"],
+                    "be": [r["areas"]["backend"]["aEst"], r["areas"]["backend"]["dlEst"], r["areas"]["backend"]["logged"], r["areas"]["backend"]["subBug"], r["areas"]["backend"]["bugs"], 1 if r["areas"]["backend"]["ai"] else 0],
+                    "fe": [r["areas"]["frontend"]["aEst"], r["areas"]["frontend"]["dlEst"], r["areas"]["frontend"]["logged"], r["areas"]["frontend"]["subBug"], r["areas"]["frontend"]["bugs"], 1 if r["areas"]["frontend"]["ai"] else 0],
+                    "qa": [r["areas"]["qa"]["aEst"], r["areas"]["qa"]["dlEst"], r["areas"]["qa"]["logged"], r["areas"]["qa"]["subBug"], r["areas"]["qa"]["bugs"], 1 if r["areas"]["qa"]["ai"] else 0]}
+                   for r in rows]
+        W('<script id="rowdata" type="application/json">' + _json.dumps(rowdata, separators=(",", ":")) + '</script>')
+        W(PROJECT_FILTER_JS)
     W('<p class="foot">One row per ticket, with a column group per area (Backend / Frontend / QA). '
       '<b>Date</b> = the ticket\'s date (resolutiondate, else updated); tickets are selected and grouped into that month. '
       '<b>Arch gain B/F/Q</b> (right after Final) is a single column giving each area\'s Architect gain <i>considering sub-bugs</i> '
@@ -1314,6 +1448,9 @@ tbody tr:nth-child(even) {{ background:var(--zebra); }}
 .matrix td.area-frontend {{ background:color-mix(in srgb, var(--front) 30%, transparent); }}
 .matrix td.area-qa {{ background:color-mix(in srgb, var(--qa) 30%, transparent); }}
 .matrix th.gaincol, .matrix td.gaincol {{ border-left:2px solid var(--line); border-right:2px solid var(--line); white-space:nowrap; }}
+.filterbar {{ margin:1rem 0 .25rem; }}
+.filterbar select {{ padding:.3rem .55rem; border-radius:6px; border:1px solid var(--line); background:var(--card); color:var(--fg); font:inherit; }}
+td.proj {{ color:var(--muted); }}
 tr.tot td {{ font-weight:700; background:var(--head); }}
 td.tot {{ font-weight:700; }}
 details {{ border:1px solid var(--line); border-radius:10px; margin:.4rem 0; padding:0 .6rem; }}
@@ -1362,6 +1499,8 @@ if __name__ == "__main__":
 ## Notes & limitations
 
 - **Ticket selection = date, worklogs = all-time.** The window filters **tickets** by `resolutiondate` (else `updated`); for a selected ticket, **all** worklogs (any date) count, so a ticket's logged total matches Jira `aggregatetimespent`. Tempo is therefore fetched all-time per user, and the aggregator applies the date window to the ticket, not to the worklogs.
+- **Tempo cache.** `fetch_tempo_users.py --cache` keeps a month-bucketed cache outside the scratchpad; only the recent ~45 days are re-fetched each run (older months are immutable — time can't be logged that far back), so after the first cold build the Tempo step is near-instant. Delete the cache file to force a full rebuild.
+- **HTML project filter.** The picklist and per-tab recompute are done in the browser from a JSON blob of the per-ticket rows embedded in the page; it changes only what's displayed, never the underlying data or the CSV.
 - **Overhead bucket.** Roster area `overhead` (roles ARCHI / PO / DEVOPS / CONSULTANT / NONE) is never an area developer; all their logged hours go to the **Overhead** column (itemised per person in **Overhead people**) and they are excluded from the finished-US per-developer summary.
 - **Tempo token visibility.** On this instance `TEMPO_API_TOKEN` has **organisation-wide** worklog visibility — the per-user endpoint returns worklogs for **every** roster area. A missing area means those developers had no worklogs on in-window tickets, not a permission gap.
 - **Unknown authors.** With a complete roster, `tempo.json` only carries known accountIds. If someone logs time who is not in `devmap.json`, add them (resolve via the full directory) so their hours are attributed rather than dropped.
