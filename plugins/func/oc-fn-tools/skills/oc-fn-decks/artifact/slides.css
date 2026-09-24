@@ -1,0 +1,33 @@
+/* oc-fn-decks artifact lane — dark variant of the opencell theme, for the SLIDES.
+ *
+ * Appended to the deck as a global <style> at render time, so Marp compiles it with the theme
+ * and gives it the same scoping. Applies only where tail.js has put `oc-dark` on a section,
+ * i.e. only when the viewer explicitly chose dark (see page.css for the precedence).
+ *
+ * The palette is the Charte's only, the same one oc-fn-briefs' artifact.css derives: brand
+ * black #121011 as the ground, the #EDE4E9 tint family for text, coral #FA5757 as the red
+ * that reads on dark. Lead slides stay brand red in both themes, as the header band does in a
+ * brief. A deck's own <style> classes need their own `section.oc-dark` variant (artifact.md).
+ */
+
+section.oc-dark{background:#121011;color:#efe7eb}
+section.oc-dark h1,
+section.oc-dark h2,
+section.oc-dark h3,
+section.oc-dark strong{color:#efe7eb}
+section.oc-dark a{color:#FA5757}
+section.oc-dark code{background:#2a2326;color:#efe7eb}
+section.oc-dark table tr{background:transparent}
+section.oc-dark table th{background:#2a2326;color:#efe7eb}
+section.oc-dark table td{background:transparent;border-bottom-color:#322a2d}
+section.oc-dark table tr:nth-child(even) td{background:#171314}
+section.oc-dark blockquote{background:#2a1a1e;color:#efe7eb}
+section.oc-dark footer,
+section.oc-dark::after{color:#a89ca2}
+/* The red logo turned white on the dark ground; the lead slides already carry the white one. */
+section.oc-dark:not(.lead)::before{filter:brightness(0) invert(.93)}
+
+section.oc-dark.lead{background:var(--oc-red);color:#ffffff}
+section.oc-dark.lead h1,
+section.oc-dark.lead h2,
+section.oc-dark.lead strong{color:#ffffff}
