@@ -18,7 +18,7 @@ Fixed columns per row: **Ticket · Date · Type · Title · Status · Final**, t
 - **Logged h** (per area) — non-bug Tempo hours booked by that area's developers. Hours booked by **overhead** people (Architect / PO / DevOps / Consultant / management — roster area `overhead`) are moved out of the areas into the **Overhead h** bucket instead (so per-area numbers reflect real area development).
 - **Sub-bug h / #Sub-bugs** — hours that area's developers logged fixing the ticket's child Bug/Sub-bug sub-issues, and the count of such sub-bugs they worked on (attributed by the **fixer's area**, so nothing is lost when a sub-bug has no component).
 - **Total dev h** (per area) = Logged h + Sub-bug h.
-- **A. Est h** (Architect) — the area's per-area estimate custom field (days ×8), else the ticket's own estimate. **DL. Est h** (Dev-lead) — a US sums that area's child sub-task estimates (sub-bugs excluded), else the ticket's estimate.
+- **A. Est h** (Architect) — **strictly** the area's per-area Architect estimate custom field (days ×8): `customfield_10157` (back), `customfield_10158` (front), `customfield_10189` (QA). There is **no** fallback to the ticket's Original Estimate (that field is the DL estimate); a ticket with no per-area Architect estimate contributes 0. A tiny placeholder (below 0.5 h, e.g. a 0.01-day value) is treated as 0. **DL. Est h** (Dev-lead) — the ticket's **Original Estimate** (`timeoriginalestimate`): a US sums that area's child sub-task estimates (sub-bugs excluded), a Bug/Enabler uses the ticket's own estimate.
 - **Arch gain / DL gain** (per area group) — `(Est − (Logged+Sub-bug h))/Est` **with** bugs, then `(Est − Logged)/Est` **without** bugs. A gain shows as **`-`** when meaningless (placeholder estimate ≤0.5h, no logged time, magnitude beyond ±1000%); green positive / red negative in the HTML.
 - **AI** (per area) — a badge when that area has an AI-metrics record on the ticket (or a same-area sub-task carries the field). Totals show **AI-assisted** = AI-assisted tickets / total tickets per area.
 - **Status / Final** — the ticket's Jira status and a **T** flag when terminal for its type (Bug: Done/Invalid; US: Ready for Sprint review / Need documentation / Ready for release / Released; others: Done).
@@ -753,15 +753,14 @@ def build_ticket_rows(all_nodes, tempo, devmap, project, wdates=None, since=None
                 area_logged[ar] += sec
 
         # estimates per area
+        # A. Est (Architect) = STRICTLY the per-area architect estimate custom fields (days x8).
+        # No fallback to the ticket's Original Estimate — that field is the DL (Dev-lead) estimate.
+        # A tiny placeholder (e.g. 0.01 d -> 0.08 h, below EST_MIN) counts as 0 / no estimate.
         vals = {ar: tf.get(AREA_EST_FIELD[ar]) for ar in AREAS}
-        any_area_est = any(isinstance(v, (int, float)) for v in vals.values())
         area_aest = {ar: 0.0 for ar in AREAS}; area_dlest = {ar: 0.0 for ar in AREAS}
         for ar in AREAS:
-            if any_area_est:
-                v = vals[ar]; est = round(v * DAY_HOURS, 1) if isinstance(v, (int, float)) else 0.0
-                area_aest[ar] = 0.0 if 0 < est < EST_MIN else est
-            elif ar == pa:
-                area_aest[ar] = hours(tf.get("timeoriginalestimate"))
+            v = vals[ar]; est = round(v * DAY_HOURS, 1) if isinstance(v, (int, float)) else 0.0
+            area_aest[ar] = 0.0 if 0 < est < EST_MIN else est
         if ttype == "US":
             for c in children.get(tkey, []):
                 cf = c.get("fields") or {}
