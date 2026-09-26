@@ -28,7 +28,8 @@ Parse `$ARGUMENTS` — **all optional**. A bare `/oc-ai-report` reports from **2
 - `--project KEY[,KEY…]` — Jira project(s), comma-separated. Backend work
   is raised in `INTRD` (core *and* overlay) and in `MACRD` (MACO R&D / overlay), so both are always in scope.
   Areas are by discipline, not repository — overlay Java/xhtml records arrive as `backend`.
-  **When the user passes `--project` explicitly, honour it verbatim and do NOT ask anything.**
+  Pass **`all`** (or `*`) to report **every** Jira project that carries AI records (the fetch drops the `project in (…)` clause); this is an explicit choice, so it includes Protected projects without a prompt.
+  **When the user passes `--project` explicitly (including `all`), honour it verbatim and do NOT ask anything.**
   **When `--project` is NOT passed, the base default is `INTRD,MACRD`, and — because `PRT730` (Protected - 730) is a Protected project — you MUST ask the user before report generation whether PRT730 should be included** (e.g. "PRT730 is a Protected project — include it in this report? (yes/no)"). On **yes**, run with `--project INTRD,MACRD,PRT730`; on **no**, run with `--project INTRD,MACRD`. Echo the resolved project list back with the window.
 - `--out PATH` — where to write the HTML report. **Default: `./docs/ai-usage-report-<TODAY>-<SINCE>-<UNTIL>.html`** where `<TODAY>` is the run date (`date -u +%Y-%m-%d`) and `<SINCE>`/`<UNTIL>` the window bounds, e.g. `./docs/ai-usage-report-2026-09-17-2026-01-01-2026-09-18.html` (relative to the current directory; the `docs/` folder is created if missing).
 - `--csv PATH` — also write the **ticket-detail rows** as CSV (spreadsheet-friendly). **Default: `./docs/ai-usage-report-<TODAY>-<SINCE>-<UNTIL>.csv`** (same folder/name-stamp as the HTML).
@@ -75,7 +76,6 @@ BASE="https://opencellsoft.atlassian.net"
 EMAIL=os.environ.get("JIRA_EMAIL") or "andrius.karpavicius@opencellsoft.com"
 TOK=os.environ["JIRA_API_TOKEN"]
 AUTH=base64.b64encode(f"{EMAIL}:{TOK}".encode()).decode()
-# Pass A carries the AI record + estimates + worklog (Jira fallback) + AI tag
 FIELDS_A=["summary","assignee","issuetype","status","resolutiondate","updated","timeoriginalestimate",
           "timespent","worklog","components","customfield_10157","customfield_10158","customfield_10189",
           "customfield_10745","customfield_10613"]
@@ -108,13 +108,12 @@ def main():
     ap.add_argument("--since", required=True); ap.add_argument("--project", default="INTRD,MACRD")
     ap.add_argument("--out-tickets", required=True); ap.add_argument("--out-children", required=True)
     a=ap.parse_args()
-    # Pass A — parent tickets that carry an AI-metrics record (customfield_10745 not empty)
     projs=[x.strip() for x in a.project.split(",") if x.strip()]
-    jqlA=f'project in ({", ".join(projs)}) AND cf[10745] IS NOT EMPTY AND updated >= "{a.since}" ORDER BY updated DESC'
+    scope = "" if a.project.strip().lower() in ("all","*","") else f'project in ({", ".join(projs)}) AND '
+    jqlA=f'{scope}cf[10745] IS NOT EMPTY AND updated >= "{a.since}" ORDER BY updated DESC'
     parents=fetch_jql(jqlA, FIELDS_A)
     json.dump({"issues":{"nodes":parents}}, open(a.out_tickets,"w",encoding="utf-8"))
     sys.stderr.write(f"Pass A: {len(parents)} tickets with AI records\n")
-    # Pass B — every child sub-issue of those parents (for Dev-lead estimate, bug counts, Sub-bug h)
     keys=[n["key"] for n in parents]
     children=[]
     for i in range(0,len(keys),100):
@@ -502,7 +501,7 @@ python "<SCRATCHPAD>/ai_report_html.py" --input "<SCRATCHPAD>/tickets.json" \
   --out "./docs/ai-usage-report-[TODAY]-[SINCE]-[UNTIL].html" --csv "./docs/ai-usage-report-[TODAY]-[SINCE]-[UNTIL].csv"
 ```
 
-The page is theme-aware (light/dark) and embeds all CSS — no external assets — so it opens straight from disk. **Five tabs (HTML only):** an **All** tab (every ticket, the default), a **User Stories (All)** tab (US only), a **User Stories (Final)** tab (US whose status is terminal, Final = T), a **Bugs (final)** tab (Bug/Sub-bug tickets in a terminal status) and a **Bugs and others** tab (every non-US ticket); each tab holds the full report (KPI cards + the three sections) filtered to that ticket set. Tabs are pure CSS (`<input type="radio">` + `:checked` sibling selectors) — no JavaScript. Within each tab, KPI cards lead, then the three sections mirroring the Markdown. **Grouping (HTML only):** *Totals by area* shows the overall table, then an expandable `<details>` block per month (the date is the record's `at`, newest open). *Summary by user* shows the overall one-row-per-user table (each developer's name **links down to their Detail-per-user section** in the same tab), then an expandable `<details>` block **per user**, each holding that developer's month-by-month breakdown (user → month). *Detail per user* groups each developer's tickets into expandable months, and every ticket key is a link to its Jira issue. (Anchor ids are prefixed per tab, so the same developer is uniquely addressable in each tab.) Tell the user the absolute path and that they can open it in a browser (Windows: `start "" "<path>"`).
+The page is theme-aware (light/dark) and embeds all CSS — no external assets — so it opens straight from disk. **Five tabs (HTML only):** an **All** tab (every ticket, the default), a **User Stories (All)** tab (US only), a **User Stories (Final)** tab (US whose status is terminal, Final = T), a **Bugs (final)** tab (Bug/Sub-bug tickets in a terminal status) and a **Bugs and others** tab (every non-US ticket); each tab holds the full report (KPI cards + the three sections) filtered to that ticket set. There is also a **Project-filter picklist** (the distinct Jira project prefixes present, plus *All*): each project scope has its own fully server-rendered set of the 5 tab panels, and a small vanilla-JS controller shows the one matching the selected project × tab (tabs are JS-driven `<button>`s, not pure CSS). Within each tab, KPI cards lead, then the three sections mirroring the Markdown. **Grouping (HTML only):** *Totals by area* shows the overall table, then an expandable `<details>` block per month (the date is the record's `at`, newest open). *Summary by user* shows the overall one-row-per-user table (each developer's name **links down to their Detail-per-user section** in the same tab), then an expandable `<details>` block **per user**, each holding that developer's month-by-month breakdown (user → month). *Detail per user* groups each developer's tickets into expandable months, and every ticket key is a link to its Jira issue. (Anchor ids are prefixed per tab, so the same developer is uniquely addressable in each tab.) Tell the user the absolute path and that they can open it in a browser (Windows: `start "" "<path>"`).
 
 `--csv` additionally writes the **ticket-detail rows** (one row per ticket × developer, all detail columns, both time-gain values and a trailing **URL** column with the ticket's Jira link) to a spreadsheet-friendly CSV (UTF-8 with BOM so Excel renders accented names). Default `./docs/ai-usage-report-<TODAY>-<SINCE>-<UNTIL>.csv`. Report both file paths to the user.
 
@@ -715,6 +714,7 @@ def build_rows(parents, children, tempo, since, until):
             elif acc in wl: logged = hours(wl.get(acc))
             else: logged = parent_logged
             rows.append({"area": domain, "at": at, "acc": acc, "name": name, "key": key,
+                         "project": str(key).split("-")[0],
                          "ttype": ttype, "summary": summary, "status": status, "final": final,
                          "contrib": num(rec.get("contrib")), "retain": num(rec.get("retain")), "rework": num(rec.get("rework")),
                          "utAdd": num(rec.get("utAdd")), "utMod": num(rec.get("utMod")), "pmTests": num(rec.get("pmTests")),
@@ -756,6 +756,29 @@ def write_csv(rows, path):
             r["gainDlBug"] = gain_cell(r["dlEst"], r["logged"] + r["bugLogged"])
             w.writerow(["" if r.get(k) is None else r.get(k) for k, _ in CSV_COLS])
     print(f"Wrote {path} ({len(rows)} rows)")
+
+AI_FILTER_JS = r"""<script>
+(function(){
+  var sel=document.getElementById('projfilter'), bar=document.getElementById('aitabbar');
+  var cur={scope:'all', tab:'all'};
+  function apply(){
+    var ps=document.querySelectorAll('section.panel');
+    for(var i=0;i<ps.length;i++){ var p=ps[i];
+      p.style.display=(p.getAttribute('data-scope')===cur.scope && p.getAttribute('data-tab')===cur.tab)?'block':'none';
+    }
+    if(bar){ var bs=bar.querySelectorAll('button');
+      for(var j=0;j<bs.length;j++){ var b=bs[j], t=b.getAttribute('data-tab');
+        if(t===cur.tab) b.classList.add('active'); else b.classList.remove('active');
+        var pnl=document.querySelector('section.panel[data-scope="'+cur.scope+'"][data-tab="'+t+'"]');
+        var c=b.querySelector('.cnt'); if(c) c.textContent='('+(pnl?pnl.getAttribute('data-count'):'0')+')';
+      }
+    }
+  }
+  if(bar) bar.addEventListener('click', function(ev){ var b=ev.target.closest('button'); if(!b) return; cur.tab=b.getAttribute('data-tab'); apply(); });
+  if(sel) sel.addEventListener('change', function(){ cur.scope=this.value; apply(); });
+  apply();
+})();
+</script>"""
 
 def main():
     ap = argparse.ArgumentParser()
@@ -943,29 +966,28 @@ def main():
                 w(f'<h3 id="{pfx}-user-{e(acc)}">{e(u["name"])}</h3>'); w(month_details(by_user_x[acc], detail_table_html))
             return "".join(h)
 
-        # Tabs: All (default), User Stories, US (final), Bugs (final), and every other ticket type
-        us_rows = [r for r in rows if r["ttype"] == "US"]
-        us_final_rows = [r for r in us_rows if r["final"]]
-        bug_final_rows = [r for r in rows if r["ttype"] == "Bug" and r["final"]]
-        other_rows = [r for r in rows if r["ttype"] != "US"]
-        W('<div class="tabs">')
-        W('<input type="radio" name="aitab" id="tab-all" checked>')
-        W('<input type="radio" name="aitab" id="tab-us">')
-        W('<input type="radio" name="aitab" id="tab-usfinal">')
-        W('<input type="radio" name="aitab" id="tab-bugfinal">')
-        W('<input type="radio" name="aitab" id="tab-other">')
-        W('<div class="tabbar">'
-          f'<label for="tab-all">All <span class="cnt">({len(rows)})</span></label>'
-          f'<label for="tab-us">User Stories (All) <span class="cnt">({len(us_rows)})</span></label>'
-          f'<label for="tab-usfinal">User Stories (Final) <span class="cnt">({len(us_final_rows)})</span></label>'
-          f'<label for="tab-bugfinal">Bugs (final) <span class="cnt">({len(bug_final_rows)})</span></label>'
-          f'<label for="tab-other">Bugs and others <span class="cnt">({len(other_rows)})</span></label></div>')
-        W(f'<section class="panel panel-all">{render_body(rows, "all")}</section>')
-        W(f'<section class="panel panel-us">{render_body(us_rows, "us")}</section>')
-        W(f'<section class="panel panel-usfinal">{render_body(us_final_rows, "usf")}</section>')
-        W(f'<section class="panel panel-bugfinal">{render_body(bug_final_rows, "bugf")}</section>')
-        W(f'<section class="panel panel-other">{render_body(other_rows, "other")}</section>')
-        W('</div>')
+        # Ticket-type tabs (JS) + project-scope filter (JS). Each project scope gets its own set of
+        # 5 fully server-rendered tab panels (correct aggregates per project); JS shows one at a time.
+        def subsets(rs):
+            return [("all", "All", rs),
+                    ("us", "User Stories (All)", [r for r in rs if r["ttype"] == "US"]),
+                    ("usfinal", "User Stories (Final)", [r for r in rs if r["ttype"] == "US" and r["final"]]),
+                    ("bugfinal", "Bugs (final)", [r for r in rs if r["ttype"] == "Bug" and r["final"]]),
+                    ("other", "Bugs and others", [r for r in rs if r["ttype"] != "US"])]
+        projects = sorted({r["project"] for r in rows})
+        W('<div class="filterbar"><label><b>Project filter:</b> <select id="projfilter">'
+          '<option value="all">All projects</option>'
+          + "".join(f'<option value="{e(p)}">{e(p)}</option>' for p in projects)
+          + '</select></label> <span class="sub">filters the whole report by Jira project.</span></div>')
+        W('<div class="tabbar" id="aitabbar">'
+          + "".join(f'<button type="button" data-tab="{tk}"{" class=\"active\"" if tk == "all" else ""}>{e(lbl)} <span class="cnt"></span></button>'
+                    for tk, lbl, _ in subsets(rows))
+          + '</div>')
+        for scope, srows in [("all", rows)] + [(p, [r for r in rows if r["project"] == p]) for p in projects]:
+            for tk, lbl, sub in subsets(srows):
+                W(f'<section class="panel" data-scope="{e(scope)}" data-tab="{tk}" data-count="{len(sub)}">'
+                  f'{render_body(sub, scope + "-" + tk)}</section>')
+        W(AI_FILTER_JS)
     W('<p class="foot">AI metrics are recorded per developer per ticket by <code>/oc-be-calculate-ai-use</code> and grouped here by record domain (backend / frontend / QA). '
       '<b>AI Contrib</b> = share of the delivered work that came from AI (Claude Code); '
       '<b>Retain</b> = share of the AI\'s output that survived to the final code (higher is better); '
@@ -1031,23 +1053,15 @@ summary {{ cursor:pointer; font-weight:600; padding:.5rem .2rem; }}
 summary .cnt {{ color:var(--muted); font-weight:400; font-size:.85em; }}
 details .tw {{ margin:.35rem 0 .4rem; }}
 .bm {{ color:var(--muted); font-size:.72rem; margin:.6rem 0 .2rem; text-transform:uppercase; letter-spacing:.05em; }}
-.tabs > input {{ position:absolute; opacity:0; width:0; height:0; }}
-.tabbar {{ display:flex; gap:.25rem; border-bottom:2px solid var(--line); margin:1.25rem 0 0; }}
-.tabbar label {{ padding:.5rem 1rem; cursor:pointer; color:var(--muted); font-weight:600;
-  border:1px solid transparent; border-bottom:none; border-radius:8px 8px 0 0; margin-bottom:-2px; }}
-.tabbar label .cnt {{ font-weight:400; }}
-#tab-all:checked ~ .tabbar label[for="tab-all"],
-#tab-us:checked ~ .tabbar label[for="tab-us"],
-#tab-usfinal:checked ~ .tabbar label[for="tab-usfinal"],
-#tab-bugfinal:checked ~ .tabbar label[for="tab-bugfinal"],
-#tab-other:checked ~ .tabbar label[for="tab-other"] {{ color:var(--fg); background:var(--card);
-  border-color:var(--line); border-bottom:2px solid var(--card); }}
+.filterbar {{ margin:1.25rem 0 .25rem; }}
+.filterbar select {{ padding:.3rem .55rem; border-radius:6px; border:1px solid var(--line); background:var(--card); color:var(--fg); font:inherit; }}
+.filterbar .sub {{ color:var(--muted); font-size:.8rem; }}
+.tabbar {{ display:flex; flex-wrap:wrap; gap:.25rem; border-bottom:2px solid var(--line); margin:.5rem 0 0; }}
+.tabbar button {{ padding:.5rem 1rem; cursor:pointer; color:var(--muted); font-weight:600; font:inherit;
+  background:none; border:1px solid transparent; border-bottom:none; border-radius:8px 8px 0 0; margin-bottom:-2px; }}
+.tabbar button .cnt {{ font-weight:400; }}
+.tabbar button.active {{ color:var(--fg); background:var(--card); border-color:var(--line); border-bottom:2px solid var(--card); }}
 .panel {{ display:none; padding-top:.5rem; }}
-#tab-all:checked ~ .panel-all {{ display:block; }}
-#tab-us:checked ~ .panel-us {{ display:block; }}
-#tab-usfinal:checked ~ .panel-usfinal {{ display:block; }}
-#tab-bugfinal:checked ~ .panel-bugfinal {{ display:block; }}
-#tab-other:checked ~ .panel-other {{ display:block; }}
 h4 {{ margin:.55rem 0 .3rem; font-size:.88rem; color:var(--muted); }}
 .name {{ font-weight:600; }}
 td.name a {{ color:var(--accent); text-decoration:none; }}
