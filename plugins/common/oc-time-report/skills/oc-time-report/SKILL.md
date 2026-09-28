@@ -29,7 +29,7 @@ Fixed columns per row: **Ticket · Date · Type · Title · Status · Final**, t
 
 **Totals by area** (Backend / Frontend / QA, then an **Overhead** row and a **Total** row) are shown in **days** (1 d = 8 h) and carry a **% Logged** column — each area's (and Overhead's) share of the total logged hours. In the **HTML**, each area row is **split by an `AI` column** — the area's AI-assisted tickets vs the rest — so an area appears once per AI value it actually has; the AI-assisted row is marked with the **same AI badge as the per-ticket matrix** and the non-AI row is left blank. A split with **no tickets** (e.g. a month with no AI work) is **omitted entirely**. Overhead and Total stay single rows (AI = –). (The Markdown Totals keep the single row per area with an AI-assisted ratio.)
 
-**Arch gain by month (HTML).** Immediately after the Totals-by-area table, each tab shows an **Arch gain by month** summary: rows are months, columns are **Backend · Backend AI · Frontend · Frontend AI · QA · QA AI · Overhead**, and each cell is that group's **Architect gain (with sub-bugs)** with the **ticket count in ( )** (an empty group shows –; Overhead has no estimate so it shows only its ticket count). It recomputes live under the project filter.
+**Arch gain by month (HTML).** Immediately after the Totals-by-area table, each tab shows an **Arch gain by month** summary: rows are months, columns are **Backend · Backend AI · Frontend · Frontend AI · QA · QA AI · Overhead**, and each cell is that group's **Architect gain (with sub-bugs)** with the **ticket count in ( )** (an empty group shows –; **Overhead** has no estimate, so it shows its **share of that month's total logged hours** — overhead logged ÷ all logged that month — with its ticket count). It recomputes live under the project filter.
 
 Output: a compact **Markdown** printout (Totals by area overall + by month, then a condensed per-ticket table grouped by month), plus a styled **HTML** file (the full wide per-area matrix, split into **five tabs** — All · User Stories (All) · User Stories (Final) · Bugs (Final) · Bugs and Others — each with Totals-by-area overall + expandable per-month, and the per-ticket matrix grouped by month) and a **CSV** (the full matrix flattened), all date-stamped in `./docs/`. Users/developers are ordered **by area, then name**.
 
@@ -934,7 +934,9 @@ def html_month_gain_table(rows, tab="all"):
         for ar, aiflag, _ in MG_COLS:
             if ar == "overhead":
                 cnt = sum(1 for r in mr if r["archprH"])
-                h.append(f'<td class="r">{("&ndash; (" + str(cnt) + ")") if cnt else "&ndash;"}</td>'); continue
+                oh = sum(r["archprH"] for r in mr); mtot = sum(r["totalLogged"] for r in mr)
+                val = f'{round(oh / mtot * 100)}% <span class="sm">({cnt})</span>' if mtot else "&ndash;"
+                h.append(f'<td class="r">{val}</td>'); continue
             est = log = bug = 0.0; cnt = 0
             for r in mr:
                 a = r["areas"][ar]
@@ -1300,8 +1302,9 @@ PROJECT_FILTER_JS = r"""<script>
     var out='';
     for(var k=0;k<order.length;k++){ var m=order[k], mr=bym[m]; out+='<tr><td class="name">'+m+'</td>';
       for(var ci=0;ci<MGCOLS.length;ci++){ var ar=MGCOLS[ci][0], af=MGCOLS[ci][1];
-        if(ar==='overhead'){ var oc=0; for(var j=0;j<mr.length;j++) if(mr[j].oh) oc++;
-          out+='<td class="r">'+(oc?('&ndash; ('+oc+')'):'&ndash;')+'</td>'; continue; }
+        if(ar==='overhead'){ var oc=0, oh=0, mtot=0;
+          for(var j=0;j<mr.length;j++){ if(mr[j].oh) oc++; oh+=mr[j].oh; mtot+=mr[j].be[2]+mr[j].fe[2]+mr[j].qa[2]+mr[j].oh; }
+          out+='<td class="r">'+(mtot?(Math.round(oh/mtot*100)+'% <span class="sm">('+oc+')</span>'):'&ndash;')+'</td>'; continue; }
         var est=0,log=0,bug=0,c=0;
         for(var j=0;j<mr.length;j++){ var a=mr[j][AK[ar]];
           if((a[2]||a[3]||a[0]||a[1]) && (a[5]?1:0)===af){ c++; est+=a[0]; log+=a[2]; bug+=a[3]; } }
