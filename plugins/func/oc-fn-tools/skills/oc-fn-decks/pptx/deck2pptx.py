@@ -15,12 +15,20 @@ Bridge transformations (everything else passes through untouched):
   3. Marp's `---` separators and directive comments need no translation —
      pandoc absorbs both silently (verified: no empty slides).
 
+Before rendering, the bridged deck is refused if pandoc would silently lose
+content: inside a `::: column` div the PPTX writer keeps the blocks up to and
+including the FIRST table and drops everything after it — a second table,
+prose, bullets — with no warning (verified on pandoc 3.1.11). On an ordinary
+slide the same content goes to a continuation slide instead, so only columns
+need the guard.
+
 Usage: deck2pptx.py <deck.md> [-o out.pptx] [--ref reference.pptx]
        --ref defaults to ./assets/pptx/opencell-slides-ref.pptx (repo working
        copy, run from the repo root), falling back to the copy next to this
        script. Requires pandoc >= 2.15 (embedded-font copy).
 """
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -56,6 +64,55 @@ def bridge(text):
     return fm + body
 
 
+def plain(node):
+    """Flatten a pandoc AST fragment to text (for naming a slide in an error)."""
+    if isinstance(node, list):
+        return "".join(plain(x) for x in node)
+    if not isinstance(node, dict):
+        return ""                         # attributes, URLs: not title text
+    if node["t"] == "Str":
+        return node["c"]
+    if node["t"] in ("Space", "SoftBreak", "LineBreak"):
+        return " "
+    if node["t"] in ("Code", "Math"):
+        return node["c"][-1]
+    return plain(node.get("c", []))
+
+
+def check_columns(md_path):
+    """Exit if any column holds a block after its first table (pandoc drops it)."""
+    ast = json.loads(subprocess.run(["pandoc", md_path, "-t", "json"],
+                                    capture_output=True, text=True, check=True).stdout)
+    problems, title = [], ["(before the first slide title)"]
+
+    def classes(div):
+        return div["c"][0][1]
+
+    def walk(blocks):
+        for b in blocks:
+            if b["t"] == "Header":
+                title[0] = plain(b["c"][2])
+            elif b["t"] == "Div":
+                inner = b["c"][1]
+                if "columns" in classes(b):
+                    cols = [x for x in inner if x["t"] == "Div" and "column" in classes(x)]
+                    for n, col in enumerate(cols, 1):
+                        kinds = [x["t"] for x in col["c"][1]]
+                        if "Table" in kinds and kinds.index("Table") < len(kinds) - 1:
+                            lost = kinds[kinds.index("Table") + 1:]
+                            problems.append(f'  slide "{title[0]}", column {n}: '
+                                            f'{", ".join(lost)} after the first table')
+                walk(inner)
+
+    walk(ast["blocks"])
+    if problems:
+        sys.exit("FATAL: pandoc would silently drop content in these columns — it "
+                 "keeps a column's blocks up to its first table and loses the rest:\n"
+                 + "\n".join(problems)
+                 + "\nKeep at most one table per column, as its last block, or move "
+                   "the rest out of the columns (see pptx.md).")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("deck")
@@ -79,6 +136,7 @@ def main():
         f.write(bridged)  # same dir so relative image paths keep resolving
         tmp = f.name
     try:
+        check_columns(tmp)
         subprocess.run(["pandoc", tmp, "-o", out,
                         f"--reference-doc={ref}", "--slide-level=2"], check=True)
     finally:

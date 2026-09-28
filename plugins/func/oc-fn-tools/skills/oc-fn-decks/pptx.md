@@ -24,8 +24,8 @@ see SKILL.md § *Where the theme lives*).
 | File | Role |
 |------|------|
 | `opencell-slides-ref.pptx` | Curated pandoc reference: the official template + 7 layouts renamed to pandoc's English names, cover placeholders rewired, brand fonts embedded |
-| `deck2pptx.py` | One-command render: Marp-dialect bridge → pandoc → red closing bookend |
-| `close_deck.py` | Finishing pass: red closing bookend ("Thank you" / "Merci" slides → cover layout, backups may follow) + dynamic caption/table spacing on text-then-table slides (standalone-usable) |
+| `deck2pptx.py` | One-command render: Marp-dialect bridge → column guard → pandoc → `close_deck.py`. The guard **refuses a deck** in which pandoc would silently drop content from a column (see *Columns* below) |
+| `close_deck.py` | Finishing pass: restores the embedded-font content type pandoc drops (else the `.pptx` is an invalid package that python-pptx refuses and PowerPoint may offer to repair; any *other* undeclared part is a hard failure) + red closing bookend ("Thank you" / "Merci" slides → cover layout, backups may follow) + dynamic caption/table spacing on text-then-table slides (standalone-usable) |
 | `curate_ref.py` | Regenerates the reference from marketing's template (see *Re-curation*) |
 
 Provenance: curated from **`Opencell_2024 V3 - EN.pptx`** (SharePoint → *2 - Marketing / 01_Brand /
@@ -68,6 +68,11 @@ The SKILL.md conventions apply unchanged. On top of them, a dual-lane deck needs
 - **No pandoc-only syntax in shared decks**: fenced divs (`::::` columns, `::: notes`) show as
   junk text in Marp. A two-column official slide (`:::: columns`) is possible in a
   **PPTX-only** deck; prefer restructuring to stay dual-lane.
+- **Columns: nothing after a table.** Inside a `::: column`, pandoc keeps the blocks up to and
+  including the **first table** and silently drops everything after it — a second table, prose,
+  bullets — where an ordinary slide would push them to a continuation slide. `deck2pptx.py`
+  refuses such a deck with a `FATAL` naming the slide and column. Prose *above* one table is
+  fine; two tables side by side means one per column, or two slides.
 
 What lands where:
 
