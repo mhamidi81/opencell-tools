@@ -29,6 +29,8 @@ Fixed columns per row: **Ticket · Date · Type · Title · Status · Final**, t
 
 **Totals by area** (Backend / Frontend / QA, then an **Overhead** row and a **Total** row) are shown in **days** (1 d = 8 h) and carry a **% Logged** column — each area's (and Overhead's) share of the total logged hours. In the **HTML**, each area row is **split by an `AI` column** — the area's AI-assisted tickets vs the rest — so an area appears once per AI value it actually has; the AI-assisted row is marked with the **same AI badge as the per-ticket matrix** and the non-AI row is left blank. A split with **no tickets** (e.g. a month with no AI work) is **omitted entirely**. Overhead and Total stay single rows (AI = –). (The Markdown Totals keep the single row per area with an AI-assisted ratio.)
 
+**Arch gain by month (HTML).** Immediately after the Totals-by-area table, each tab shows an **Arch gain by month** summary: rows are months, columns are **Backend · Backend AI · Frontend · Frontend AI · QA · QA AI · Overhead**, and each cell is that group's **Architect gain (with sub-bugs)** with the **ticket count in ( )** (an empty group shows –; Overhead has no estimate so it shows only its ticket count). It recomputes live under the project filter.
+
 Output: a compact **Markdown** printout (Totals by area overall + by month, then a condensed per-ticket table grouped by month), plus a styled **HTML** file (the full wide per-area matrix, split into **five tabs** — All · User Stories (All) · User Stories (Final) · Bugs (Final) · Bugs and Others — each with Totals-by-area overall + expandable per-month, and the per-ticket matrix grouped by month) and a **CSV** (the full matrix flattened), all date-stamped in `./docs/`. Users/developers are ordered **by area, then name**.
 
 **Second report — finished-US per-developer summary.** The same run also writes `time-report-<TODAY>-<SINCE>-<UNTIL>-us-summary.html` and `…-us-summary.csv` (derived from `--out`/`--csv` by inserting `-us-summary`). It considers **only User Stories in a final status**, credited to **each area's main developer** (up to three per US). The HTML has **two tabs**: **By month** (date → user: overall AI-true / AI-false tables plus an expandable per-month block) and **By developer** (user → date: each developer, ordered by area then name, expands to two month-by-month tables — AI-assisted true / false — of their finished US). Dev-table columns: **Developer · Area · US (final) · Avg sub-bugs / US · Sum A. Est d · Sum logged d · Sum sub-bug d · Sum total d · Gain (with sub-bugs) · Gain (no sub-bugs)** (hour sums in days), each ending with a **Total** row. The CSV carries a leading **Month** and **AI assisted** column.
@@ -917,6 +919,35 @@ def html_totals_table(rows, tab="all", month="all"):
     h.append("</tbody></table></div>")
     return "".join(h)
 
+MG_COLS = [("backend", False, "Backend"), ("backend", True, "Backend AI"),
+           ("frontend", False, "Frontend"), ("frontend", True, "Frontend AI"),
+           ("qa", False, "QA"), ("qa", True, "QA AI"), ("overhead", None, "Overhead")]
+def html_month_gain_table(rows, tab="all"):
+    """Month-by-month Arch gain (with sub-bugs) per area split by AI, plus Overhead; each cell is the
+    gain with the group's ticket count in ( ). data-monthgain lets the project filter rebuild it."""
+    months = sorted({r["month"] for r in rows}, reverse=True)
+    h = [f'<div class="tw" data-monthgain data-tab="{e(tab)}"><table><thead><tr><th>Month</th>'
+         + "".join(f'<th class="r">{e(lbl)}</th>' for _, _, lbl in MG_COLS) + "</tr></thead><tbody>"]
+    for m in months:
+        mr = [r for r in rows if r["month"] == m]
+        h.append(f'<tr><td class="name">{e(m)}</td>')
+        for ar, aiflag, _ in MG_COLS:
+            if ar == "overhead":
+                cnt = sum(1 for r in mr if r["archprH"])
+                h.append(f'<td class="r">{("&ndash; (" + str(cnt) + ")") if cnt else "&ndash;"}</td>'); continue
+            est = log = bug = 0.0; cnt = 0
+            for r in mr:
+                a = r["areas"][ar]
+                if (a["logged"] or a["subBug"] or a["aEst"] or a["dlEst"]) and bool(a["ai"]) == aiflag:
+                    cnt += 1; est += a["aEst"]; log += a["logged"]; bug += a["subBug"]
+            if not cnt:
+                h.append('<td class="r">&ndash;</td>'); continue
+            g = gain_pct(est, log + bug)
+            h.append(f'<td class="r {gain_cls(g)}">{gain_str(g)} <span class="sm">({cnt})</span></td>')
+        h.append("</tr>")
+    h.append("</tbody></table></div>")
+    return "".join(h)
+
 MATRIX_SUB = ["Main dev", "A.Est", "DL.Est", "Tot dev", "Logged", "Sub-bug h", "AI", "Arch gain", "DL gain", "#SB"]
 def html_matrix_head():
     head1 = ['<th rowspan="2">Ticket</th><th rowspan="2">Date</th><th rowspan="2">Type</th><th rowspan="2">Title</th>'
@@ -980,6 +1011,8 @@ def html_report_body(rs, tab="all"):
     w("<h2>Totals by area</h2>")
     w(html_totals_table(rs, tab, "all"))
     w(f'<p class="meta" data-grand data-tab="{e(tab)}"><b>Total across all groups:</b> {days(grand)} d logged + {days(_tsub)} d sub-bug = <b>{days(grand + _tsub)} d</b> total dev <span class="sm">(1 d = {DAY_HOURS} h)</span></p>')
+    w('<p class="bm">Arch gain (with sub-bugs) by month &mdash; ticket count in ( )</p>')
+    w(html_month_gain_table(rs, tab))
     w('<p class="bm">By month</p>')
     for i, m in enumerate(ms):
         mr = [r for r in rs if r["month"] == m]; op = " open" if i == 0 else ""
@@ -1259,6 +1292,27 @@ PROJECT_FILTER_JS = r"""<script>
     return out;
   }
 
+  var MGCOLS=[['backend',0],['backend',1],['frontend',0],['frontend',1],['qa',0],['qa',1],['overhead',null]];
+  function monthGainBody(rows){
+    var bym={}, order=[];
+    for(var i=0;i<rows.length;i++){ var m=rows[i].m; if(!(m in bym)){ bym[m]=[]; order.push(m); } bym[m].push(rows[i]); }
+    order.sort(function(a,b){ return a<b?1:(a>b?-1:0); });
+    var out='';
+    for(var k=0;k<order.length;k++){ var m=order[k], mr=bym[m]; out+='<tr><td class="name">'+m+'</td>';
+      for(var ci=0;ci<MGCOLS.length;ci++){ var ar=MGCOLS[ci][0], af=MGCOLS[ci][1];
+        if(ar==='overhead'){ var oc=0; for(var j=0;j<mr.length;j++) if(mr[j].oh) oc++;
+          out+='<td class="r">'+(oc?('&ndash; ('+oc+')'):'&ndash;')+'</td>'; continue; }
+        var est=0,log=0,bug=0,c=0;
+        for(var j=0;j<mr.length;j++){ var a=mr[j][AK[ar]];
+          if((a[2]||a[3]||a[0]||a[1]) && (a[5]?1:0)===af){ c++; est+=a[0]; log+=a[2]; bug+=a[3]; } }
+        if(!c){ out+='<td class="r">&ndash;</td>'; continue; }
+        var g=gp(est,log+bug), cls=(g===null||Math.abs(g)>CAP)?'':(g>=0?'pos':'neg');
+        out+='<td class="r '+cls+'">'+gs(g)+' <span class="sm">('+c+')</span></td>';
+      }
+      out+='</tr>';
+    }
+    return out;
+  }
   function apply(proj){
     var projLabel = proj==='all' ? 'All' : proj;
     // rebuild every Totals-by-area table for its (tab, month) scope
@@ -1266,6 +1320,12 @@ PROJECT_FILTER_JS = r"""<script>
       var tab=div.getAttribute('data-tab'), month=div.getAttribute('data-month');
       var rows=ROWS.filter(function(r){ return tabMatch(r,tab) && (month==='all'||r.m===month) && (proj==='all'||r.p===proj); });
       var tb=div.querySelector('tbody'); if(tb) tb.innerHTML=totalsBody(rows, projLabel);
+    });
+    // rebuild the month-by-month Arch-gain summary tables
+    document.querySelectorAll('[data-monthgain]').forEach(function(div){
+      var tab=div.getAttribute('data-tab');
+      var rows=ROWS.filter(function(r){ return tabMatch(r,tab) && (proj==='all'||r.p===proj); });
+      var tb=div.querySelector('tbody'); if(tb) tb.innerHTML=monthGainBody(rows);
     });
     // update the "Total across all groups" lines
     document.querySelectorAll('[data-grand]').forEach(function(p){
