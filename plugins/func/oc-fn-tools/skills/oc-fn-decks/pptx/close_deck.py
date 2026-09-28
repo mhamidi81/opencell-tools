@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """Finishing pass for a pandoc-generated Opencell deck.
 
-Two per-slide corrections pandoc cannot make itself:
+One package fix and two per-slide corrections pandoc cannot make itself:
+
+0. Content types — pandoc (verified on 3.1.11) copies the reference doc's
+   embedded fonts (ppt/fonts/*.fntdata) but drops their Default declaration
+   from [Content_Types].xml, leaving an invalid OPC package: python-pptx
+   refuses to open it and strict readers may offer to repair it. Restore the
+   declarations this lane is known to lose, and refuse any OTHER undeclared
+   part rather than ship an invalid file.
 
 1. Red closing bookend — pandoc maps every H1 to the single "Section Header"
    layout, so the closing "# Thank you" slide comes out as a photo section
@@ -16,7 +23,7 @@ Two per-slide corrections pandoc cannot make itself:
    caption box and the table's frame to slide-level geometry accordingly.
    Slides whose non-text content is an image keep pandoc's own placement.
 
-No-op on decks needing neither, so any deck passes through safely.
+No-op on decks needing none of these, so any deck passes through safely.
 
 Usage: close_deck.py <deck.pptx>
 """
@@ -28,6 +35,9 @@ import sys
 import tempfile
 import zipfile
 
+# content types pandoc drops when it copies parts from --reference-doc
+KNOWN_CONTENT_TYPES = {"fntdata": "application/x-fontdata"}
+
 CLOSING_TITLE = re.compile(r"^(thank\s*you|merci)\s*[!.]?$", re.I)
 
 # caption-spacing geometry (EMU), matched to the curated layout's content zone
@@ -37,6 +47,34 @@ GAP = 150000              # caption -> table
 BOTTOM = 5580363          # content zone floor (footer starts below)
 CHARS_PER_LINE = 70       # ~18pt Montserrat across CAP_W; low on purpose
 LINE_H = 300000           # 18pt line incl. spacing, rounded up
+
+
+def restore_content_types(tmp):
+    """Declare every part pandoc left without a content type; return the fixes."""
+    path = os.path.join(tmp, "[Content_Types].xml")
+    xml = open(path, encoding="utf-8").read()
+    defaults = {e.lower() for e in re.findall(r'<Default\s+Extension="([^"]+)"', xml)}
+    overrides = set(re.findall(r'<Override\s+PartName="([^"]+)"', xml))
+    missing = set()
+    for walk_root, _, files in os.walk(tmp):
+        for f in files:
+            part = "/" + os.path.relpath(os.path.join(walk_root, f), tmp).replace(os.sep, "/")
+            if part == "/[Content_Types].xml" or part in overrides:
+                continue
+            ext = f.rsplit(".", 1)[-1].lower() if "." in f else ""
+            if ext not in defaults:
+                missing.add(ext)
+    unknown = sorted(missing - KNOWN_CONTENT_TYPES.keys())
+    if unknown:
+        sys.exit("FATAL: parts with no declared content type: "
+                 + ", ".join(f".{e}" if e else "(no extension)" for e in unknown)
+                 + " — add the type to KNOWN_CONTENT_TYPES in close_deck.py")
+    if missing:
+        add = "".join(f'<Default Extension="{e}" ContentType="{KNOWN_CONTENT_TYPES[e]}"/>'
+                      for e in sorted(missing))
+        xml = re.sub(r"(<Types\b[^>]*>)", lambda m: m.group(1) + add, xml, count=1)
+        open(path, "w", encoding="utf-8").write(xml)
+    return sorted(missing)
 
 
 def layout_name(root, layout_file):
@@ -110,6 +148,7 @@ def main():
         with zipfile.ZipFile(deck) as z:
             z.extractall(tmp)
 
+        restored = restore_content_types(tmp)
         cover = next(f for f in os.listdir(os.path.join(tmp, "ppt/slideLayouts"))
                      if f.endswith(".xml") and layout_name(tmp, f) == "Title Slide")
 
@@ -133,8 +172,9 @@ def main():
                 retarget(tmp, slide, cover)
                 closed.append(slide)
 
-        if not closed and not spaced:
-            print("nothing to finish (no closing slide, no caption slide) — no-op")
+        if not closed and not spaced and not restored:
+            print("nothing to finish (content types complete, no closing slide, "
+                  "no caption slide) — no-op")
             return
 
         out = deck + ".tmp"
@@ -146,6 +186,9 @@ def main():
                     if rel != "[Content_Types].xml":
                         z.write(os.path.join(walk_root, f), rel)
         os.replace(out, deck)
+        if restored:
+            print(f"[Content_Types].xml: restored {', '.join('.' + e for e in restored)} "
+                  "(dropped by pandoc)")
         if closed:
             print(f"{', '.join(closed)}: Section Header -> Title Slide (red closing bookend)")
         if spaced:
