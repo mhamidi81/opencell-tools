@@ -27,7 +27,7 @@ Fixed columns per row: **Ticket · Date · Type · Title · Status · Final**, t
 - **Status / Final** — the ticket's Jira status and a **T** flag when terminal for its type (Bug: Done/Invalid; US: Ready for Sprint review / Need documentation / Ready for release / Released; others: Done).
 - **Overhead h** — logged hours from overhead people (Architect / PO / DevOps / Consultant / management) on the ticket. **Overhead people** — those contributors named with their individual hours (e.g. `Adil El Jaouhari 12.0h, Stéphane Chambrin 3.0h`). **Total log h** — logged across all groups (areas + Overhead).
 
-**Totals by area** (Backend / Frontend / QA, then an **Overhead** row and a **Total** row) are shown in **days** (1 d = 8 h) and carry a **% Logged** column — each area's (and Overhead's) share of the total logged hours. In the **HTML**, each area row is **split by an `AI` column (Yes / No)** — the area's AI-assisted tickets vs the rest — so an area appears once per AI value it actually has; a split with **no tickets** (e.g. a month with no AI work) is **omitted entirely**. Overhead and Total stay single rows (AI = –). (The Markdown Totals keep the single row per area with an AI-assisted ratio.)
+**Totals by area** (Backend / Frontend / QA, then an **Overhead** row and a **Total** row) are shown in **days** (1 d = 8 h) and carry a **% Logged** column — each area's (and Overhead's) share of the total logged hours. In the **HTML**, each area row is **split by an `AI` column** — the area's AI-assisted tickets vs the rest — so an area appears once per AI value it actually has; the AI-assisted row is marked with the **same AI badge as the per-ticket matrix** and the non-AI row is left blank. A split with **no tickets** (e.g. a month with no AI work) is **omitted entirely**. Overhead and Total stay single rows (AI = –). (The Markdown Totals keep the single row per area with an AI-assisted ratio.)
 
 Output: a compact **Markdown** printout (Totals by area overall + by month, then a condensed per-ticket table grouped by month), plus a styled **HTML** file (the full wide per-area matrix, split into **five tabs** — All · User Stories (All) · User Stories (Final) · Bugs (Final) · Bugs and Others — each with Totals-by-area overall + expandable per-month, and the per-ticket matrix grouped by month) and a **CSV** (the full matrix flattened), all date-stamped in `./docs/`. Users/developers are ordered **by area, then name**.
 
@@ -895,7 +895,7 @@ def html_totals_table(rows, tab="all", month="all"):
         for aiflag in (True, False):
             g = split[ar][aiflag]
             if not g["tickets"]: continue
-            h.append(f"<tr><td class='name'>{AREA_LABEL[ar]}</td><td class='proj'>All</td><td>{'Yes' if aiflag else 'No'}</td>"
+            h.append(f"<tr><td class='name'>{AREA_LABEL[ar]}</td><td class='proj'>All</td><td class='c'>{'<span class=aibadge>AI</span>' if aiflag else ''}</td>"
                      f"<td class='r'>{g['tickets']}</td>"
                      f"<td class='r'>{days(g['aEst'])}</td><td class='r'>{days(g['dlEst'])}</td>"
                      f"<td class='r'>{days(g['logged']+g['subBug'])}</td><td class='r'>{days(g['logged'])}</td>"
@@ -1241,7 +1241,7 @@ PROJECT_FILTER_JS = r"""<script>
     var out='';
     ['backend','frontend','qa'].forEach(function(ar){
       [['y','Yes'],['n','No']].forEach(function(pr){ var g=S[ar][pr[0]]; if(!g.tickets) return;
-        out+='<tr><td class="name">'+LABEL[ar]+'</td><td class="proj">'+projLabel+'</td><td>'+pr[1]+'</td><td class="r">'+g.tickets+'</td>'
+        out+='<tr><td class="name">'+LABEL[ar]+'</td><td class="proj">'+projLabel+'</td><td class="c">'+(pr[0]==='y'?'<span class=aibadge>AI</span>':'')+'</td><td class="r">'+g.tickets+'</td>'
           +'<td class="r">'+d(g.aEst)+'</td><td class="r">'+d(g.dlEst)+'</td><td class="r">'+d(g.logged+g.subBug)+'</td>'
           +'<td class="r">'+d(g.logged)+'</td><td class="r">'+d(g.subBug)+'</td>'
           +'<td class="r">'+pl(g.logged,grand)+'</td><td class="r">'+g2(g.aEst,g.logged,g.subBug)+'</td>'
