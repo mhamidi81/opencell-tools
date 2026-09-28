@@ -27,7 +27,7 @@ Fixed columns per row: **Ticket · Date · Type · Title · Status · Final**, t
 - **Status / Final** — the ticket's Jira status and a **T** flag when terminal for its type (Bug: Done/Invalid; US: Ready for Sprint review / Need documentation / Ready for release / Released; others: Done).
 - **Overhead h** — logged hours from overhead people (Architect / PO / DevOps / Consultant / management) on the ticket. **Overhead people** — those contributors named with their individual hours (e.g. `Adil El Jaouhari 12.0h, Stéphane Chambrin 3.0h`). **Total log h** — logged across all groups (areas + Overhead).
 
-**Totals by area** (Backend / Frontend / QA, then an **Overhead** row and a **Total** row) are shown in **days** (1 d = 8 h) and carry a **% Logged** column — each area's (and Overhead's) share of the total logged hours.
+**Totals by area** (Backend / Frontend / QA, then an **Overhead** row and a **Total** row) are shown in **days** (1 d = 8 h) and carry a **% Logged** column — each area's (and Overhead's) share of the total logged hours. In the **HTML**, each area row is **split by an `AI` column (Yes / No)** — the area's AI-assisted tickets vs the rest — so an area appears once per AI value it actually has; a split with **no tickets** (e.g. a month with no AI work) is **omitted entirely**. Overhead and Total stay single rows (AI = –). (The Markdown Totals keep the single row per area with an AI-assisted ratio.)
 
 Output: a compact **Markdown** printout (Totals by area overall + by month, then a condensed per-ticket table grouped by month), plus a styled **HTML** file (the full wide per-area matrix, split into **five tabs** — All · User Stories (All) · User Stories (Final) · Bugs (Final) · Bugs and Others — each with Totals-by-area overall + expandable per-month, and the per-ticket matrix grouped by month) and a **CSV** (the full matrix flattened), all date-stamped in `./docs/`. Users/developers are ordered **by area, then name**.
 
@@ -872,32 +872,48 @@ def md_totals_lines(rows):
     return out
 
 def html_totals_table(rows, tab="all", month="all"):
-    tot, archpr_tot, grand_log = area_totals(rows)   # all values in hours; shown as days below
+    # Each area row is split by the ticket's per-area AI flag (an "AI" Yes/No column), so an area
+    # appears once per AI value it actually has; a split with zero tickets (e.g. a month with no AI)
+    # is not rendered at all. Overhead & Total stay single. (JS totalsBody mirrors this markup.)
+    def z(): return {"tickets": 0, "aEst": 0.0, "dlEst": 0.0, "logged": 0.0, "subBug": 0.0, "bugs": 0}
+    split = {ar: {True: z(), False: z()} for ar in AREAS}
+    archpr_tot = 0.0; grand_log = 0.0
+    for r in rows:
+        for ar in AREAS:
+            a = r["areas"][ar]
+            if a["logged"] or a["subBug"] or a["aEst"] or a["dlEst"]:
+                g = split[ar][bool(a["ai"])]; g["tickets"] += 1
+                for k in ("aEst", "dlEst", "logged", "subBug", "bugs"): g[k] += a[k]
+        archpr_tot += r["archprH"]; grand_log += r["totalLogged"]
+    archpr_tot = round(archpr_tot, 1); grand_log = round(grand_log, 1)
     def pl(v): return f"{round(v / grand_log * 100)}%" if grand_log else "&ndash;"   # % of total logged h
-    # data-totals lets the client-side project filter locate and rebuild this table (JS mirrors this markup)
     h = [f"<div class=\"tw\" data-totals data-tab=\"{e(tab)}\" data-month=\"{e(month)}\"><table><thead><tr>"
-         "<th>Area</th><th>Project</th><th class='r'>Tickets</th><th class='r'>A. Est d</th><th class='r'>DL. Est d</th>"
-         "<th class='r'>Total dev d</th><th class='r'>Logged d</th><th class='r'>Sub-bug d</th><th class='r'>AI-assisted</th><th class='r'>% Logged</th>"
+         "<th>Area</th><th>Project</th><th>AI</th><th class='r'>Tickets</th><th class='r'>A. Est d</th><th class='r'>DL. Est d</th>"
+         "<th class='r'>Total dev d</th><th class='r'>Logged d</th><th class='r'>Sub-bug d</th><th class='r'>% Logged</th>"
          "<th class='r'>Arch gain</th><th class='r'>DL gain</th><th class='r'>Sub-bugs</th></tr></thead><tbody>"]
     for ar in AREAS:
-        g = tot[ar]
-        h.append(f"<tr><td class='name'>{AREA_LABEL[ar]}</td><td class='proj'>All</td><td class='r'>{g['tickets']}</td>"
-                 f"<td class='r'>{days(g['aEst'])}</td><td class='r'>{days(g['dlEst'])}</td>"
-                 f"<td class='r'>{days(g['logged']+g['subBug'])}</td><td class='r'>{days(g['logged'])}</td>"
-                 f"<td class='r'>{days(g['subBug'])}</td><td class='r'>{g['ai']}/{g['tickets']}</td><td class='r'>{pl(g['logged'])}</td>"
-                 f"<td class='r'>{gain_two_html(g['aEst'],g['logged'],g['subBug'])}</td>"
-                 f"<td class='r'>{gain_two_html(g['dlEst'],g['logged'],g['subBug'])}</td><td class='r'>{g['bugs']}</td></tr>")
-    h.append(f"<tr><td class='name'>Overhead</td><td class='proj'>All</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td>"
-             f"<td class='r'>{days(archpr_tot)}</td><td class='r'>{days(archpr_tot)}</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>{pl(archpr_tot)}</td>"
+        for aiflag in (True, False):
+            g = split[ar][aiflag]
+            if not g["tickets"]: continue
+            h.append(f"<tr><td class='name'>{AREA_LABEL[ar]}</td><td class='proj'>All</td><td>{'Yes' if aiflag else 'No'}</td>"
+                     f"<td class='r'>{g['tickets']}</td>"
+                     f"<td class='r'>{days(g['aEst'])}</td><td class='r'>{days(g['dlEst'])}</td>"
+                     f"<td class='r'>{days(g['logged']+g['subBug'])}</td><td class='r'>{days(g['logged'])}</td>"
+                     f"<td class='r'>{days(g['subBug'])}</td><td class='r'>{pl(g['logged'])}</td>"
+                     f"<td class='r'>{gain_two_html(g['aEst'],g['logged'],g['subBug'])}</td>"
+                     f"<td class='r'>{gain_two_html(g['dlEst'],g['logged'],g['subBug'])}</td><td class='r'>{g['bugs']}</td></tr>")
+    h.append(f"<tr><td class='name'>Overhead</td><td class='proj'>All</td><td>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td>"
+             f"<td class='r'>{days(archpr_tot)}</td><td class='r'>{days(archpr_tot)}</td><td class='r'>&ndash;</td><td class='r'>{pl(archpr_tot)}</td>"
              f"<td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td></tr>")
-    t_sub_h = sum(tot[ar]["subBug"] for ar in AREAS)
-    t_aest = days(sum(tot[ar]["aEst"] for ar in AREAS)); t_dlest = days(sum(tot[ar]["dlEst"] for ar in AREAS))
-    t_sub = days(t_sub_h); t_bugs = sum(tot[ar]["bugs"] for ar in AREAS)
+    t_aest = sum(split[ar][x]["aEst"] for ar in AREAS for x in (True, False))
+    t_dlest = sum(split[ar][x]["dlEst"] for ar in AREAS for x in (True, False))
+    t_sub_h = sum(split[ar][x]["subBug"] for ar in AREAS for x in (True, False))
+    t_bugs = sum(split[ar][x]["bugs"] for ar in AREAS for x in (True, False))
     grand_dev = days(grand_log + t_sub_h)   # Total dev = all logged (areas + Overhead) + all sub-bug
-    h.append(f"<tr class='tot'><td class='name'>Total</td><td class='proj'>All</td><td></td>"
-             f"<td class='r'>{t_aest}</td><td class='r'>{t_dlest}</td>"
-             f"<td class='r'>{grand_dev}</td><td class='r'>{days(grand_log)}</td><td class='r'>{t_sub}</td>"
-             f"<td></td><td class='r'>100%</td><td></td><td></td><td class='r'>{t_bugs}</td></tr>")
+    h.append(f"<tr class='tot'><td class='name'>Total</td><td class='proj'>All</td><td>&ndash;</td><td></td>"
+             f"<td class='r'>{days(t_aest)}</td><td class='r'>{days(t_dlest)}</td>"
+             f"<td class='r'>{grand_dev}</td><td class='r'>{days(grand_log)}</td><td class='r'>{days(t_sub_h)}</td>"
+             f"<td class='r'>100%</td><td></td><td></td><td class='r'>{t_bugs}</td></tr>")
     h.append("</tbody></table></div>")
     return "".join(h)
 
@@ -1214,22 +1230,32 @@ PROJECT_FILTER_JS = r"""<script>
   function pl(v,grand){ return grand ? Math.round(v/grand*100)+'%' : '&ndash;'; }
 
   function totalsBody(rows, projLabel){
-    var t=agg(rows), A=t.A, grand=t.grand, oh=t.oh, out='';
-    ['backend','frontend','qa'].forEach(function(ar){ var g=A[ar];
-      out+='<tr><td class="name">'+LABEL[ar]+'</td><td class="proj">'+projLabel+'</td><td class="r">'+g.tickets+'</td>'
-        +'<td class="r">'+d(g.aEst)+'</td><td class="r">'+d(g.dlEst)+'</td><td class="r">'+d(g.logged+g.subBug)+'</td>'
-        +'<td class="r">'+d(g.logged)+'</td><td class="r">'+d(g.subBug)+'</td><td class="r">'+g.ai+'/'+g.tickets+'</td>'
-        +'<td class="r">'+pl(g.logged,grand)+'</td><td class="r">'+g2(g.aEst,g.logged,g.subBug)+'</td>'
-        +'<td class="r">'+g2(g.dlEst,g.logged,g.subBug)+'</td><td class="r">'+g.bugs+'</td></tr>';
+    // split each area by AI (index 5 of the per-area arrays); skip empty splits
+    var S={backend:{y:z(),n:z()},frontend:{y:z(),n:z()},qa:{y:z(),n:z()}}, oh=0, grand=0;
+    for(var i=0;i<rows.length;i++){ var r=rows[i];
+      for(var ar in AK){ var a=r[AK[ar]];
+        if(a[2]||a[3]||a[0]||a[1]){ var g=S[ar][a[5]?'y':'n']; g.tickets++; g.aEst+=a[0]; g.dlEst+=a[1]; g.logged+=a[2]; g.subBug+=a[3]; g.bugs+=a[4]; }
+      }
+      oh+=r.oh; grand+=r.be[2]+r.fe[2]+r.qa[2]+r.oh;
+    }
+    var out='';
+    ['backend','frontend','qa'].forEach(function(ar){
+      [['y','Yes'],['n','No']].forEach(function(pr){ var g=S[ar][pr[0]]; if(!g.tickets) return;
+        out+='<tr><td class="name">'+LABEL[ar]+'</td><td class="proj">'+projLabel+'</td><td>'+pr[1]+'</td><td class="r">'+g.tickets+'</td>'
+          +'<td class="r">'+d(g.aEst)+'</td><td class="r">'+d(g.dlEst)+'</td><td class="r">'+d(g.logged+g.subBug)+'</td>'
+          +'<td class="r">'+d(g.logged)+'</td><td class="r">'+d(g.subBug)+'</td>'
+          +'<td class="r">'+pl(g.logged,grand)+'</td><td class="r">'+g2(g.aEst,g.logged,g.subBug)+'</td>'
+          +'<td class="r">'+g2(g.dlEst,g.logged,g.subBug)+'</td><td class="r">'+g.bugs+'</td></tr>';
+      });
     });
-    out+='<tr><td class="name">Overhead</td><td class="proj">'+projLabel+'</td><td class="r">&ndash;</td><td class="r">&ndash;</td><td class="r">&ndash;</td>'
-      +'<td class="r">'+d(oh)+'</td><td class="r">'+d(oh)+'</td><td class="r">&ndash;</td><td class="r">&ndash;</td><td class="r">'+pl(oh,grand)+'</td>'
+    out+='<tr><td class="name">Overhead</td><td class="proj">'+projLabel+'</td><td>&ndash;</td><td class="r">&ndash;</td><td class="r">&ndash;</td><td class="r">&ndash;</td>'
+      +'<td class="r">'+d(oh)+'</td><td class="r">'+d(oh)+'</td><td class="r">&ndash;</td><td class="r">'+pl(oh,grand)+'</td>'
       +'<td class="r">&ndash;</td><td class="r">&ndash;</td><td class="r">&ndash;</td></tr>';
-    var tA=d(A.backend.aEst+A.frontend.aEst+A.qa.aEst), tD=d(A.backend.dlEst+A.frontend.dlEst+A.qa.dlEst);
-    var tsub=A.backend.subBug+A.frontend.subBug+A.qa.subBug, tbugs=A.backend.bugs+A.frontend.bugs+A.qa.bugs;
-    out+='<tr class="tot"><td class="name">Total</td><td class="proj">'+projLabel+'</td><td></td><td class="r">'+tA+'</td><td class="r">'+tD+'</td>'
-      +'<td class="r">'+d(t.grand+tsub)+'</td><td class="r">'+d(t.grand)+'</td><td class="r">'+d(tsub)+'</td>'
-      +'<td></td><td class="r">'+(grand?'100%':'&ndash;')+'</td><td></td><td></td><td class="r">'+tbugs+'</td></tr>';
+    var tA=0,tD=0,tsub=0,tbugs=0;
+    ['backend','frontend','qa'].forEach(function(ar){ ['y','n'].forEach(function(k){ var g=S[ar][k]; tA+=g.aEst; tD+=g.dlEst; tsub+=g.subBug; tbugs+=g.bugs; }); });
+    out+='<tr class="tot"><td class="name">Total</td><td class="proj">'+projLabel+'</td><td>&ndash;</td><td></td><td class="r">'+d(tA)+'</td><td class="r">'+d(tD)+'</td>'
+      +'<td class="r">'+d(grand+tsub)+'</td><td class="r">'+d(grand)+'</td><td class="r">'+d(tsub)+'</td>'
+      +'<td class="r">'+(grand?'100%':'&ndash;')+'</td><td></td><td></td><td class="r">'+tbugs+'</td></tr>';
     return out;
   }
 
