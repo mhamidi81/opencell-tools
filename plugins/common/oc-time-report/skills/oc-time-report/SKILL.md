@@ -1,6 +1,6 @@
 ---
 name: oc-time-report
-description: Produce an estimation-vs-logged-hours report over a period, independent of the AI-usage JSON. Tempo-worklog driven and TICKET-based with PER-AREA columns: tickets are selected by their date (resolutiondate, else updated) in the window, and every worklog on a selected ticket counts (all-time, so per-ticket totals match Jira's aggregatetimespent). One row per ticket, a column group per area (Backend/Frontend/QA) giving that area's main developer, Architect & Dev-lead estimates, logged & sub-bug hours, AI flag, two time gains (with/without sub-bugs) and sub-bug count; a single Arch-gain B/F/Q column (considering bugs) right after the Final flag; and closing Overhead h / Overhead people / Total log h columns. Overhead people (Architect/PO/DevOps/Consultant/management) never count as an area developer — their hours go to the Overhead bucket, itemised per person with hours. Totals-by-area (shown in days) add a % Logged share column. Also writes a second finished-User-Story per-developer summary. Prints Markdown and writes date-stamped HTML + CSV to ./docs/. Jira via direct REST (mandatory JIRA_API_TOKEN), Tempo per-user (mandatory TEMPO_API_TOKEN) — no Atlassian MCP.
+description: Produce an estimation-vs-logged-hours report over a period, independent of the AI-usage JSON. Tempo-worklog driven and TICKET-based with PER-AREA columns: tickets are selected by their date (resolutiondate, else updated) in the window, and every worklog on a selected ticket counts (all-time, so per-ticket totals match Jira's aggregatetimespent). One row per ticket, a column group per area (Backend/Frontend/QA) giving that area's main developer, Architect & Dev-lead estimates, logged & sub-bug hours, AI flag, two time gains (with/without sub-bugs) and sub-bug count; a single Arch-gain B/F/Q column (considering bugs) right after the Final flag; and closing Overhead d / Overhead % (its share of the ticket's total logged) / Overhead people / Total log d columns. Overhead people (Architect/PO/DevOps/Consultant/management) never count as an area developer — their hours go to the Overhead bucket, itemised per person with hours. Totals-by-area (shown in days) add a % Logged share column. Also writes a second finished-User-Story per-developer summary. Prints Markdown and writes date-stamped HTML + CSV to ./docs/. Jira via direct REST (mandatory JIRA_API_TOKEN), Tempo per-user (mandatory TEMPO_API_TOKEN) — no Atlassian MCP.
 argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project INTRD,MACRD] [--out PATH] [--csv PATH]"
 ---
 
@@ -10,7 +10,7 @@ A team **estimation-vs-actual** report. Unlike `/oc-ai-report`, this one is **no
 
 **Ticket selection is by DATE, not by worklog.** A ticket is in scope when its **ticket date** — `resolutiondate`, or `updated` when it has no resolution date — falls in `[--since, --until)`. Once a ticket is selected, **every worklog booked on it and its sub-issues counts** (all-time, never clipped to the window), so a ticket's total logged time matches Jira's `aggregatetimespent`.
 
-Fixed columns per row: **Ticket · Date · Type · Title · Status · Final**, then a single **Arch gain B/F/Q** column and a **Logged+bug B/F/Q/OH** column, then **for each area** a group of: **Main dev · A. Est h · DL. Est h · Total dev h · Logged h · Sub-bug h · AI · Arch gain (with · without bugs) · DL gain (with · without bugs) · #Sub-bugs**. Then three closing columns: **Overhead h · Overhead people · Total log h**.
+Fixed columns per row: **Ticket · Date · Type · Title · Status · Final**, then a single **Arch gain B/F/Q** column and a **Logged+bug B/F/Q/OH** column, then **for each area** a group of: **Main dev · A. Est h · DL. Est h · Total dev h · Logged h · Sub-bug h · AI · Arch gain (with · without bugs) · DL gain (with · without bugs) · #Sub-bugs**. Then closing columns: **Overhead d · Overhead % · Overhead people · Total log d** (all times in days; Overhead % is overhead's share of the ticket's total logged).
 
 **Interactive HTML — project filter.** The page has a **Project filter** picklist (the distinct Jira ticket prefixes, e.g. INTRD / MACRD, plus *All*). Choosing a project **live-filters** the Totals-by-area tables and the per-ticket rows and **recomputes % Logged, the per-area figures, the Total row and the grand total** in the browser (no reload). The Totals-by-area tables carry a **Project** column (right after Area) showing the active filter. (The CSV is left unfiltered — filter it in a spreadsheet.)
 
@@ -971,7 +971,7 @@ def html_matrix_head():
              '<th rowspan="2" class="c gaincol">Logged+bug B/F/Q/OH<br><span class="sm">days</span></th>']
     for ar in AREAS:
         head1.append(f'<th colspan="{len(MATRIX_SUB)}" class="grp {ar}">{AREA_LABEL[ar]}</th>')
-    head1.append('<th rowspan="2" class="r">Overhead d</th><th rowspan="2">Overhead people</th><th rowspan="2" class="r">Total log d</th>')
+    head1.append('<th rowspan="2" class="r">Overhead d</th><th rowspan="2" class="r">Overhead %</th><th rowspan="2">Overhead people</th><th rowspan="2" class="r">Total log d</th>')
     head2 = []
     for ar in AREAS:
         for i, s in enumerate(MATRIX_SUB):
@@ -1010,7 +1010,9 @@ def html_matrix_body(rows):
                        f'<td class="r area-{ar}">{gain_two_html(x["aEst"], x["logged"], x["subBug"])}</td>'
                        f'<td class="r area-{ar}">{gain_two_html(x["dlEst"], x["logged"], x["subBug"])}</td><td class="r area-{ar}">{x["bugs"]}</td>')
         people = ", ".join(f'{e(n)} {days(h)}d' for n, h in r["archprDevs"])
+        oh_pct = round(r["archprH"] / r["totalLogged"] * 100) if r["totalLogged"] else None   # overhead share of ticket's total logged
         tds.append(f'<td class="r">{days(r["archprH"]) if r["archprH"] else "&ndash;"}</td>'
+                   f'<td class="r">{str(oh_pct) + "%" if oh_pct is not None else "&ndash;"}</td>'
                    f'<td class="sm">{people if people else "&ndash;"}</td>'
                    f'<td class="r tot">{days(r["totalLogged"])}</td>')
         out.append(f'<tr data-project="{e(r["project"])}">' + "".join(tds) + "</tr>")
@@ -1442,7 +1444,7 @@ def main():
                   "Arch gain (w bug)", "Arch gain (no bug)", "DL gain (w bug)", "DL gain (no bug)", "Sub-bugs"]
         header = ["Ticket", "Date", "Month", "Type", "Title", "Status", "Final"]
         for ar in AREAS: header += [f"{AREA_LABEL[ar]} {c}" for c in percol]
-        header += ["Overhead logged d", "Overhead devs", "Total logged d", "Total dev d"]
+        header += ["Overhead logged d", "Overhead %", "Overhead devs", "Total logged d", "Total dev d"]
         with open(a.csv, "w", encoding="utf-8-sig", newline="") as fh:
             w = csv.writer(fh); w.writerow(header)
             for r in rows:
@@ -1454,7 +1456,8 @@ def main():
                             gain_cell(x["aEst"], x["logged"] + x["subBug"]), gain_cell(x["aEst"], x["logged"]),
                             gain_cell(x["dlEst"], x["logged"] + x["subBug"]), gain_cell(x["dlEst"], x["logged"]),
                             x["bugs"]]
-                row += [days(r["archprH"]), "; ".join(f"{n} {days(h)}d" for n, h in r["archprDevs"]), days(r["totalLogged"]), days(r["totalDev"])]
+                row += [days(r["archprH"]), (round(r["archprH"] / r["totalLogged"] * 100) if r["totalLogged"] else ""),
+                        "; ".join(f"{n} {days(h)}d" for n, h in r["archprDevs"]), days(r["totalLogged"]), days(r["totalDev"])]
                 w.writerow(row)
 
     # ---------- HTML (wide per-area matrix) ----------
