@@ -10,24 +10,24 @@ A team **estimation-vs-actual** report. Unlike `/oc-ai-report`, this one is **no
 
 **Ticket selection is by DATE, not by worklog.** A ticket is in scope when its **ticket date** — `resolutiondate`, or `updated` when it has no resolution date — falls in `[--since, --until)`. Once a ticket is selected, **every worklog booked on it and its sub-issues counts** (all-time, never clipped to the window), so a ticket's total logged time matches Jira's `aggregatetimespent`.
 
-Fixed columns per row: **Ticket · Date · Type · Title · Status · Final**, then a single **Arch gain B/F/Q** column and a **Logged+bug B/F/Q/OH** column, then **for each area** a group of: **Main dev · A. Est h · DL. Est h · Total dev h · Logged h · Sub-bug h · AI · Arch gain (with · without bugs) · DL gain (with · without bugs) · #Sub-bugs**. Then closing columns: **Overhead d · Overhead % · Overhead people · Total log d** (all times in days; Overhead % is overhead's share of the ticket's total logged).
+Fixed columns per row: **Ticket · Date · Type · Fix ver · Title · Status · Final** (**Fix ver** = the ticket's Jira *Fix Version/s*, all shown; a Bug may carry several), then a single **Arch gain B/F/Q** column and a **Logged+bug B/F/Q/OH** column, then **for each area** a group of: **Main dev · A. Est d · DL. Est d · Total dev d · Logged d · Sub-bug d · AI · Arch gain (with · without bugs) · DL gain (with · without bugs) · #Sub-bugs**. Then closing columns: **Overhead d · Overhead % · Overhead people · Total log d** (all times in days; Overhead % is overhead's share of the ticket's total logged).
 
-**Interactive HTML — project filter.** The page has a **Project filter** picklist (the distinct Jira ticket prefixes, e.g. INTRD / MACRD, plus *All*). Choosing a project **live-filters** the Totals-by-area tables and the per-ticket rows and **recomputes % Logged, the per-area figures, the Total row and the grand total** in the browser (no reload). The Totals-by-area tables carry a **Project** column (right after Area) showing the active filter. (The CSV is left unfiltered — filter it in a spreadsheet.)
+**Interactive HTML — Project & Fix-version filters.** The page has two picklists: a **Project filter** (distinct Jira ticket prefixes, e.g. INTRD / MACRD, plus *All*) and a **Fix version** filter (every distinct *Fix Version/s* value present, plus *All*; a Bug with several fix versions matches each of them separately). Either one **live-filters** the Totals-by-area tables and the per-ticket rows and **recomputes % Logged, the per-area figures, the Total row and the grand total** in the browser (no reload); they combine (project AND fix-version). The Totals-by-area tables carry a **Project** column (right after Area) showing the active project filter. (The CSV is left unfiltered — filter it in a spreadsheet.)
 
 - **Arch gain B/F/Q · OH%** (right after Final) — one column with each area's **Architect gain considering sub-bugs** = `(A.Est − (Logged + Sub-bug h)) / A.Est`, labelled **B** (backend), **F** (frontend), **Q** (QA); green positive / red negative, `-` when meaningless — plus **OH%**, overhead's share of the ticket's total logged hours.
 - **Logged+bug B/F/Q/OH** (right after the Arch-gain column) — the ticket's **total logged hours including sub-bug hours** for each area (B/F/Q) and the **overhead** total (OH).
 - **Main dev** (per area) — the area's roster developer with the **most total work on the ticket** = non-bug logged + their own **sub-bug-fixing** hours. So a genuine bug-fixer outranks someone who only did a token review/touch on the parent. (A US worked by all three areas therefore credits three developers.)
 - **Date** — the ticket's **resolutiondate** (else **updated**); tickets are **grouped by that month**.
-- **Logged h** (per area) — non-bug Tempo hours booked by that area's developers. Hours booked by **overhead** people (Architect / PO / DevOps / Consultant / management — roster area `overhead`) are moved out of the areas into the **Overhead h** bucket instead (so per-area numbers reflect real area development).
+- **Logged d** (per area) — non-bug Tempo hours booked by that area's developers. Hours booked by **overhead** people (Architect / PO / DevOps / Consultant / management — roster area `overhead`) are moved out of the areas into the **Overhead d** bucket instead (so per-area numbers reflect real area development).
 - **Sub-bug h / #Sub-bugs** — hours that area's developers logged fixing the ticket's child Bug/Sub-bug sub-issues, and the count of such sub-bugs they worked on (attributed by the **fixer's area**, so nothing is lost when a sub-bug has no component).
-- **Total dev h** (per area) = Logged h + Sub-bug h.
-- **A. Est h** (Architect) — **strictly** the area's per-area Architect estimate custom field (days ×8): `customfield_10157` (back), `customfield_10158` (front), `customfield_10189` (QA). There is **no** fallback to the ticket's Original Estimate (that field is the DL estimate); a ticket with no per-area Architect estimate contributes 0. A tiny placeholder (below 0.5 h, e.g. a 0.01-day value) is treated as 0. **DL. Est h** (Dev-lead) — the ticket's **Original Estimate** (`timeoriginalestimate`): a US sums that area's child sub-task estimates (sub-bugs excluded), a Bug/Enabler uses the ticket's own estimate.
+- **Total dev d** (per area) = Logged d + Sub-bug d.
+- **A. Est d** (Architect) — **strictly** the area's per-area Architect estimate custom field (days ×8): `customfield_10157` (back), `customfield_10158` (front), `customfield_10189` (QA). There is **no** fallback to the ticket's Original Estimate (that field is the DL estimate); a ticket with no per-area Architect estimate contributes 0. A tiny placeholder (below 0.5 h, e.g. a 0.01-day value) is treated as 0. **DL. Est d** (Dev-lead) — the ticket's **Original Estimate** (`timeoriginalestimate`): a US sums that area's child sub-task estimates (sub-bugs excluded), a Bug/Enabler uses the ticket's own estimate.
 - **Arch gain / DL gain** (per area group) — `(Est − (Logged+Sub-bug h))/Est` **with** bugs, then `(Est − Logged)/Est` **without** bugs. A gain shows as **`-`** when meaningless (placeholder estimate ≤0.5h, no logged time, magnitude beyond ±1000%); green positive / red negative in the HTML.
 - **AI** (per area) — a badge when that area has an AI-metrics record on the ticket (or a same-area sub-task carries the field). Totals show **AI-assisted** = AI-assisted tickets / total tickets per area.
 - **Status / Final** — the ticket's Jira status and a **T** flag when terminal for its type (Bug: Done/Invalid; US: Ready for Sprint review / Need documentation / Ready for release / Released; others: Done).
-- **Overhead h** — logged hours from overhead people (Architect / PO / DevOps / Consultant / management) on the ticket. **Overhead people** — those contributors named with their individual hours (e.g. `Adil El Jaouhari 12.0h, Stéphane Chambrin 3.0h`). **Total log h** — logged across all groups (areas + Overhead).
+- **Overhead d** — logged hours from overhead people (Architect / PO / DevOps / Consultant / management) on the ticket. **Overhead people** — those contributors named with their individual hours (e.g. `Adil El Jaouhari 12.0h, Stéphane Chambrin 3.0h`). **Total log d** — logged across all groups (areas + Overhead).
 
-**Totals by area** (Backend / Frontend / QA, then an **Overhead** row and a **Total** row) are shown in **days** (1 d = 8 h) and carry a **% Logged** column — each area's (and Overhead's) share of the total logged hours. In the **HTML**, each area row is **split by an `AI` column** — the area's AI-assisted tickets vs the rest — so an area appears once per AI value it actually has; the AI-assisted row is marked with the **same AI badge as the per-ticket matrix** and the non-AI row is left blank. A split with **no tickets** (e.g. a month with no AI work) is **omitted entirely**. Overhead and Total stay single rows (AI = –). (The Markdown Totals keep the single row per area with an AI-assisted ratio.) In **every aggregate** (Totals-by-area, the per-month Totals, and the Arch-gain-by-month table) the **Arch/DL gain is computed over only the tickets that carry that estimate** — an unestimated ticket's logged hours are excluded from the gain (though the A.Est/Logged/Sub-bug columns still show the full sums). This keeps an aggregate gain in the same range as the per-ticket gains, instead of dividing all logged hours by the estimate of just the few estimated tickets.
+**Totals by area** — one row per area (Backend / Frontend / QA), then an **Overhead** row and a **Total** row, in **days** (1 d = 8 h). Column order: **Area · Project · Tickets · A. Est d · DL. Est d · Total dev d · % Logged · Logged d · Sub-bug d · % Sub-bug · Arch gain (all · noAI · AI) · DL gain · Sub-bugs**. **% Logged** (right after Total dev d) is each area's / Overhead's share of the total logged; **% Sub-bug** (right after Sub-bug d) is the sub-bug share of the area's own logged (sub-bug ÷ (logged + sub-bug)). The **Arch gain** cell shows **three with-bug gains** — for **all** tickets, the **no-AI** ones and the **AI** ones — each with its ticket count in ( ); **DL gain** is a single with-bug gain (both drop the "without bugs" variant here). In **every aggregate** (Totals-by-area, the per-month Totals, and the Arch-gain-by-month table) the gain is computed over **only the tickets that carry that estimate** — an unestimated ticket's logged hours are excluded from the gain (though the A.Est/Logged/Sub-bug columns still show the full sums) — which keeps an aggregate gain in the same range as the per-ticket gains. (The Markdown Totals keep a single row per area with the with/without-bug gains.)
 
 **Arch gain by month (HTML).** Immediately after the Totals-by-area table, each tab shows an **Arch gain by month** summary: rows are months, columns are **Backend · Backend AI · Frontend · Frontend AI · QA · QA AI · Overhead**, and each cell is that group's **Architect gain (with sub-bugs)** with the **ticket count in ( )** (an empty group shows –; **Overhead** has no estimate, so it shows its **share of that month's total logged hours** — overhead logged ÷ all logged that month — with its ticket count). It recomputes live under the project filter.
 
@@ -445,7 +445,7 @@ EMAIL=os.environ.get("JIRA_EMAIL") or "andrius.karpavicius@opencellsoft.com"
 TOK=os.environ["JIRA_API_TOKEN"]
 AUTH=base64.b64encode(f"{EMAIL}:{TOK}".encode()).decode()
 FIELDS=["summary","issuetype","status","components","timeoriginalestimate","timespent","parent",
-        "resolutiondate","updated","aggregatetimespent",
+        "resolutiondate","updated","aggregatetimespent","fixVersions",
         "customfield_10157","customfield_10158","customfield_10189","customfield_10745"]
 
 def post(path, body):
@@ -478,6 +478,7 @@ def slim(n):
         "timeoriginalestimate":f.get("timeoriginalestimate"),"timespent":f.get("timespent"),
         "resolutiondate":f.get("resolutiondate"),"updated":f.get("updated"),
         "aggregatetimespent":f.get("aggregatetimespent"),
+        "fixVersions":[v.get("name") for v in (f.get("fixVersions") or []) if v.get("name")],
         "parent":{"key":p.get("key")} if p.get("key") else None,
         "customfield_10157":f.get("customfield_10157"),"customfield_10158":f.get("customfield_10158"),
         "customfield_10189":f.get("customfield_10189"),"customfield_10745":f.get("customfield_10745")}}
@@ -827,7 +828,8 @@ def build_ticket_rows(all_nodes, tempo, devmap, project, wdates=None, since=None
         total_logged = round(sum(areas_out[ar]["logged"] for ar in AREAS) + archpr_h, 1)
         total_dev = round(sum(areas_out[ar]["totalDev"] for ar in AREAS) + archpr_h, 1)
         date = tdate; month = (date or "")[:7] or "no-date"
-        rows.append({"key": tkey, "project": str(tkey).split("-")[0], "ttype": ttype, "title": (tf.get("summary") or "")[:60],
+        rows.append({"key": tkey, "project": str(tkey).split("-")[0], "fixVersions": tf.get("fixVersions") or [],
+                     "ttype": ttype, "title": (tf.get("summary") or "")[:60],
                      "status": status, "final": final, "date": date, "month": month, "areas": areas_out,
                      "archprH": archpr_h,
                      "archprDevs": [(n, hours(archpr_devs[n])) for n in sorted(archpr_devs, key=lambda n: -archpr_devs[n])],
@@ -878,55 +880,66 @@ def md_totals_lines(rows):
     out.append(f"| **Total** | | {t_aest} | {t_dlest} | **{grand_dev}** | **{days(grand_log)}** | {t_sub} | | 100% | | | {t_bugs} |")
     return out
 
+def gspan1(est, lb):   # single with-bug gain, coloured
+    g = gain_pct(est, lb); c = gain_cls(g)
+    return f'<span class="{c}">{gain_str(g)}</span>' if c else gain_str(g)
+
 def html_totals_table(rows, tab="all", month="all"):
-    # Each area row is split by the ticket's per-area AI flag (an "AI" Yes/No column), so an area
-    # appears once per AI value it actually has; a split with zero tickets (e.g. a month with no AI)
-    # is not rendered at all. Overhead & Total stay single. (JS totalsBody mirrors this markup.)
-    # aE/aL/aB and dE/dL/dB are the gain BASIS: est/logged/sub-bug summed over ONLY the tickets that
-    # carry that estimate (aEst>=EST_MIN for Arch, dlEst>=EST_MIN for DL), so an unestimated ticket's
-    # logged hours never inflate the aggregate gain. The displayed A.Est/Logged/Sub-bug columns stay full.
+    # One row per area. Arch gain shows THREE with-bug gains — all / no-AI / AI — each with its ticket
+    # count in ( ); DL gain is a single with-bug gain. All gains use the estimated-tickets basis
+    # (aEst/dlEst >= EST_MIN) so unestimated tickets' logged hours don't inflate them. (JS mirrors this.)
     def z(): return {"tickets": 0, "aEst": 0.0, "dlEst": 0.0, "logged": 0.0, "subBug": 0.0, "bugs": 0,
-                     "aE": 0.0, "aL": 0.0, "aB": 0.0, "dE": 0.0, "dL": 0.0, "dB": 0.0}
-    split = {ar: {True: z(), False: z()} for ar in AREAS}
+                     "aE": 0.0, "aL": 0.0, "aB": 0.0, "dE": 0.0, "dL": 0.0, "dB": 0.0,
+                     "n_no": 0, "n_ai": 0, "aE_no": 0.0, "aL_no": 0.0, "aB_no": 0.0, "aE_ai": 0.0, "aL_ai": 0.0, "aB_ai": 0.0}
+    tot = {ar: z() for ar in AREAS}
     archpr_tot = 0.0; grand_log = 0.0
     for r in rows:
         for ar in AREAS:
             a = r["areas"][ar]
             if a["logged"] or a["subBug"] or a["aEst"] or a["dlEst"]:
-                g = split[ar][bool(a["ai"])]; g["tickets"] += 1
+                g = tot[ar]; g["tickets"] += 1
                 for k in ("aEst", "dlEst", "logged", "subBug", "bugs"): g[k] += a[k]
                 if a["aEst"] >= EST_MIN: g["aE"] += a["aEst"]; g["aL"] += a["logged"]; g["aB"] += a["subBug"]
                 if a["dlEst"] >= EST_MIN: g["dE"] += a["dlEst"]; g["dL"] += a["logged"]; g["dB"] += a["subBug"]
+                if a["ai"]:
+                    g["n_ai"] += 1
+                    if a["aEst"] >= EST_MIN: g["aE_ai"] += a["aEst"]; g["aL_ai"] += a["logged"]; g["aB_ai"] += a["subBug"]
+                else:
+                    g["n_no"] += 1
+                    if a["aEst"] >= EST_MIN: g["aE_no"] += a["aEst"]; g["aL_no"] += a["logged"]; g["aB_no"] += a["subBug"]
         archpr_tot += r["archprH"]; grand_log += r["totalLogged"]
     archpr_tot = round(archpr_tot, 1); grand_log = round(grand_log, 1)
-    def pl(v): return f"{round(v / grand_log * 100)}%" if grand_log else "&ndash;"   # % of total logged h
+    def pl(v): return f"{round(v / grand_log * 100)}%" if grand_log else "&ndash;"   # % of total logged
+    def pctsub(logged, sub):
+        den = logged + sub; return f"{round(sub / den * 100)}%" if den else "&ndash;"
+    def archcell(g):
+        return (f'{gspan1(g["aE"], g["aL"] + g["aB"])} <span class="sm">({g["tickets"]})</span> &middot; '
+                f'noAI {gspan1(g["aE_no"], g["aL_no"] + g["aB_no"])} <span class="sm">({g["n_no"]})</span> &middot; '
+                f'AI {gspan1(g["aE_ai"], g["aL_ai"] + g["aB_ai"])} <span class="sm">({g["n_ai"]})</span>')
     h = [f"<div class=\"tw\" data-totals data-tab=\"{e(tab)}\" data-month=\"{e(month)}\"><table><thead><tr>"
-         "<th>Area</th><th>Project</th><th>AI</th><th class='r'>Tickets</th><th class='r'>A. Est d</th><th class='r'>DL. Est d</th>"
-         "<th class='r'>Total dev d</th><th class='r'>Logged d</th><th class='r'>Sub-bug d</th><th class='r'>% Logged</th>"
-         "<th class='r'>Arch gain</th><th class='r'>DL gain</th><th class='r'>Sub-bugs</th></tr></thead><tbody>"]
+         "<th>Area</th><th>Project</th><th class='r'>Tickets</th><th class='r'>A. Est d</th><th class='r'>DL. Est d</th>"
+         "<th class='r'>Total dev d</th><th class='r'>% Logged</th><th class='r'>Logged d</th><th class='r'>Sub-bug d</th><th class='r'>% Sub-bug</th>"
+         "<th class='r'>Arch gain (all &middot; noAI &middot; AI, w/ bugs)</th><th class='r'>DL gain</th><th class='r'>Sub-bugs</th></tr></thead><tbody>"]
     for ar in AREAS:
-        for aiflag in (True, False):
-            g = split[ar][aiflag]
-            if not g["tickets"]: continue
-            h.append(f"<tr><td class='name'>{AREA_LABEL[ar]}</td><td class='proj'>All</td><td class='c'>{'<span class=aibadge>AI</span>' if aiflag else ''}</td>"
-                     f"<td class='r'>{g['tickets']}</td>"
-                     f"<td class='r'>{days(g['aEst'])}</td><td class='r'>{days(g['dlEst'])}</td>"
-                     f"<td class='r'>{days(g['logged']+g['subBug'])}</td><td class='r'>{days(g['logged'])}</td>"
-                     f"<td class='r'>{days(g['subBug'])}</td><td class='r'>{pl(g['logged'])}</td>"
-                     f"<td class='r'>{gain_two_html(g['aE'],g['aL'],g['aB'])}</td>"
-                     f"<td class='r'>{gain_two_html(g['dE'],g['dL'],g['dB'])}</td><td class='r'>{g['bugs']}</td></tr>")
-    h.append(f"<tr><td class='name'>Overhead</td><td class='proj'>All</td><td>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td>"
-             f"<td class='r'>{days(archpr_tot)}</td><td class='r'>{days(archpr_tot)}</td><td class='r'>&ndash;</td><td class='r'>{pl(archpr_tot)}</td>"
+        g = tot[ar]
+        if not g["tickets"]: continue
+        h.append(f"<tr><td class='name'>{AREA_LABEL[ar]}</td><td class='proj'>All</td><td class='r'>{g['tickets']}</td>"
+                 f"<td class='r'>{days(g['aEst'])}</td><td class='r'>{days(g['dlEst'])}</td>"
+                 f"<td class='r'>{days(g['logged']+g['subBug'])}</td><td class='r'>{pl(g['logged'])}</td><td class='r'>{days(g['logged'])}</td>"
+                 f"<td class='r'>{days(g['subBug'])}</td><td class='r'>{pctsub(g['logged'], g['subBug'])}</td>"
+                 f"<td class='r'>{archcell(g)}</td>"
+                 f"<td class='r'>{gspan1(g['dE'], g['dL'] + g['dB'])}</td><td class='r'>{g['bugs']}</td></tr>")
+    h.append(f"<tr><td class='name'>Overhead</td><td class='proj'>All</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td>"
+             f"<td class='r'>{days(archpr_tot)}</td><td class='r'>{pl(archpr_tot)}</td><td class='r'>{days(archpr_tot)}</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td>"
              f"<td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td></tr>")
-    t_aest = sum(split[ar][x]["aEst"] for ar in AREAS for x in (True, False))
-    t_dlest = sum(split[ar][x]["dlEst"] for ar in AREAS for x in (True, False))
-    t_sub_h = sum(split[ar][x]["subBug"] for ar in AREAS for x in (True, False))
-    t_bugs = sum(split[ar][x]["bugs"] for ar in AREAS for x in (True, False))
+    t_aest = sum(tot[ar]["aEst"] for ar in AREAS); t_dlest = sum(tot[ar]["dlEst"] for ar in AREAS)
+    t_sub_h = sum(tot[ar]["subBug"] for ar in AREAS); t_log = sum(tot[ar]["logged"] for ar in AREAS)
+    t_bugs = sum(tot[ar]["bugs"] for ar in AREAS)
     grand_dev = days(grand_log + t_sub_h)   # Total dev = all logged (areas + Overhead) + all sub-bug
-    h.append(f"<tr class='tot'><td class='name'>Total</td><td class='proj'>All</td><td>&ndash;</td><td></td>"
+    h.append(f"<tr class='tot'><td class='name'>Total</td><td class='proj'>All</td><td></td>"
              f"<td class='r'>{days(t_aest)}</td><td class='r'>{days(t_dlest)}</td>"
-             f"<td class='r'>{grand_dev}</td><td class='r'>{days(grand_log)}</td><td class='r'>{days(t_sub_h)}</td>"
-             f"<td class='r'>100%</td><td></td><td></td><td class='r'>{t_bugs}</td></tr>")
+             f"<td class='r'>{grand_dev}</td><td class='r'>100%</td><td class='r'>{days(grand_log)}</td><td class='r'>{days(t_sub_h)}</td><td class='r'>{pctsub(t_log, t_sub_h)}</td>"
+             f"<td></td><td></td><td class='r'>{t_bugs}</td></tr>")
     h.append("</tbody></table></div>")
     return "".join(h)
 
@@ -965,7 +978,7 @@ def html_month_gain_table(rows, tab="all"):
 
 MATRIX_SUB = ["Main dev", "A.Est d", "DL.Est d", "Tot dev d", "Logged d", "Sub-bug d", "AI", "Arch gain", "DL gain", "#SB"]
 def html_matrix_head():
-    head1 = ['<th rowspan="2">Ticket</th><th rowspan="2">Date</th><th rowspan="2">Type</th><th rowspan="2">Title</th>'
+    head1 = ['<th rowspan="2">Ticket</th><th rowspan="2">Date</th><th rowspan="2">Type</th><th rowspan="2">Fix ver</th><th rowspan="2">Title</th>'
              '<th rowspan="2">Status</th><th rowspan="2" class="c">F</th>'
              '<th rowspan="2" class="c gaincol">Arch gain B/F/Q &middot; OH%<br><span class="sm">w/ bugs</span></th>'
              '<th rowspan="2" class="c gaincol">Logged+bug B/F/Q/OH<br><span class="sm">days</span></th>']
@@ -982,9 +995,10 @@ def html_matrix_head():
 def html_matrix_body(rows):
     out = []
     for r in rows:
+        fv = r.get("fixVersions") or []
         tds = [f'<td class="key"><a href="https://opencellsoft.atlassian.net/browse/{e(r["key"])}" target="_blank" rel="noopener">{e(r["key"])}</a></td>'
                f'<td class="sm">{e(r["date"] or "–")}</td>'
-               f'<td>{e(r["ttype"])}</td><td class="ti">{e(r["title"])}</td><td>{e(r["status"])}</td>'
+               f'<td>{e(r["ttype"])}</td><td class="sm">{e(", ".join(fv)) if fv else "&ndash;"}</td><td class="ti">{e(r["title"])}</td><td>{e(r["status"])}</td>'
                f'<td class="c">{"<span class=fin>T</span>" if r["final"] else ""}</td>']
         # single column: back / front / QA Architect gain, considering sub-bugs (est vs logged+sub-bug)
         AG_LBL = {"backend": "B", "frontend": "F", "qa": "Q"}
@@ -1015,7 +1029,7 @@ def html_matrix_body(rows):
                    f'<td class="r">{str(oh_pct) + "%" if oh_pct is not None else "&ndash;"}</td>'
                    f'<td class="sm">{people if people else "&ndash;"}</td>'
                    f'<td class="r tot">{days(r["totalLogged"])}</td>')
-        out.append(f'<tr data-project="{e(r["project"])}">' + "".join(tds) + "</tr>")
+        out.append(f'<tr data-project="{e(r["project"])}" data-fixv="{e("|".join(fv))}">' + "".join(tds) + "</tr>")
     return "".join(out)
 
 def html_report_body(rs, tab="all"):
@@ -1267,7 +1281,9 @@ PROJECT_FILTER_JS = r"""<script>
   function g2(est,log,bug){ return gspan(gp(est,log+bug))+' / '+gspan(gp(est,log)); }
   function tabMatch(r,tab){ if(tab==='all')return true; if(tab==='us')return r.t==='US'; if(tab==='usfinal')return r.t==='US'&&r.f;
     if(tab==='bugfinal')return r.t==='Bug'&&r.f; if(tab==='other')return r.t!=='US'; return true; }
-  function z(){ return {tickets:0,aEst:0,dlEst:0,logged:0,subBug:0,bugs:0,ai:0,aE:0,aL:0,aB:0,dE:0,dL:0,dB:0}; }
+  function z(){ return {tickets:0,aEst:0,dlEst:0,logged:0,subBug:0,bugs:0,ai:0,aE:0,aL:0,aB:0,dE:0,dL:0,dB:0,
+    n_no:0,n_ai:0,aE_no:0,aL_no:0,aB_no:0,aE_ai:0,aL_ai:0,aB_ai:0}; }
+  function g1(est,lb){ return gspan(gp(est,lb)); }   // single with-bug gain, coloured
 
   function agg(rows){
     var A={backend:z(),frontend:z(),qa:z()}, oh=0, grand=0;
@@ -1282,34 +1298,34 @@ PROJECT_FILTER_JS = r"""<script>
   function pl(v,grand){ return grand ? Math.round(v/grand*100)+'%' : '&ndash;'; }
 
   function totalsBody(rows, projLabel){
-    // split each area by AI (index 5 of the per-area arrays); skip empty splits
-    var S={backend:{y:z(),n:z()},frontend:{y:z(),n:z()},qa:{y:z(),n:z()}}, oh=0, grand=0;
+    var A={backend:z(),frontend:z(),qa:z()}, oh=0, grand=0;
     for(var i=0;i<rows.length;i++){ var r=rows[i];
       for(var ar in AK){ var a=r[AK[ar]];
-        if(a[2]||a[3]||a[0]||a[1]){ var g=S[ar][a[5]?'y':'n']; g.tickets++; g.aEst+=a[0]; g.dlEst+=a[1]; g.logged+=a[2]; g.subBug+=a[3]; g.bugs+=a[4];
+        if(a[2]||a[3]||a[0]||a[1]){ var g=A[ar]; g.tickets++; g.aEst+=a[0]; g.dlEst+=a[1]; g.logged+=a[2]; g.subBug+=a[3]; g.bugs+=a[4];
           if(a[0]>=EST_MIN){ g.aE+=a[0]; g.aL+=a[2]; g.aB+=a[3]; }
-          if(a[1]>=EST_MIN){ g.dE+=a[1]; g.dL+=a[2]; g.dB+=a[3]; } }
+          if(a[1]>=EST_MIN){ g.dE+=a[1]; g.dL+=a[2]; g.dB+=a[3]; }
+          if(a[5]){ g.n_ai++; if(a[0]>=EST_MIN){ g.aE_ai+=a[0]; g.aL_ai+=a[2]; g.aB_ai+=a[3]; } }
+          else { g.n_no++; if(a[0]>=EST_MIN){ g.aE_no+=a[0]; g.aL_no+=a[2]; g.aB_no+=a[3]; } } }
       }
       oh+=r.oh; grand+=r.be[2]+r.fe[2]+r.qa[2]+r.oh;
     }
+    function psub(lg,sb){ var den=lg+sb; return den?Math.round(sb/den*100)+'%':'&ndash;'; }
+    function arch(g){ return g1(g.aE,g.aL+g.aB)+' <span class="sm">('+g.tickets+')</span> &middot; noAI '+g1(g.aE_no,g.aL_no+g.aB_no)+' <span class="sm">('+g.n_no+')</span> &middot; AI '+g1(g.aE_ai,g.aL_ai+g.aB_ai)+' <span class="sm">('+g.n_ai+')</span>'; }
     var out='';
-    ['backend','frontend','qa'].forEach(function(ar){
-      [['y','Yes'],['n','No']].forEach(function(pr){ var g=S[ar][pr[0]]; if(!g.tickets) return;
-        out+='<tr><td class="name">'+LABEL[ar]+'</td><td class="proj">'+projLabel+'</td><td class="c">'+(pr[0]==='y'?'<span class=aibadge>AI</span>':'')+'</td><td class="r">'+g.tickets+'</td>'
-          +'<td class="r">'+d(g.aEst)+'</td><td class="r">'+d(g.dlEst)+'</td><td class="r">'+d(g.logged+g.subBug)+'</td>'
-          +'<td class="r">'+d(g.logged)+'</td><td class="r">'+d(g.subBug)+'</td>'
-          +'<td class="r">'+pl(g.logged,grand)+'</td><td class="r">'+g2(g.aE,g.aL,g.aB)+'</td>'
-          +'<td class="r">'+g2(g.dE,g.dL,g.dB)+'</td><td class="r">'+g.bugs+'</td></tr>';
-      });
+    ['backend','frontend','qa'].forEach(function(ar){ var g=A[ar]; if(!g.tickets) return;
+      out+='<tr><td class="name">'+LABEL[ar]+'</td><td class="proj">'+projLabel+'</td><td class="r">'+g.tickets+'</td>'
+        +'<td class="r">'+d(g.aEst)+'</td><td class="r">'+d(g.dlEst)+'</td><td class="r">'+d(g.logged+g.subBug)+'</td>'
+        +'<td class="r">'+pl(g.logged,grand)+'</td><td class="r">'+d(g.logged)+'</td><td class="r">'+d(g.subBug)+'</td><td class="r">'+psub(g.logged,g.subBug)+'</td>'
+        +'<td class="r">'+arch(g)+'</td><td class="r">'+g1(g.dE,g.dL+g.dB)+'</td><td class="r">'+g.bugs+'</td></tr>';
     });
-    out+='<tr><td class="name">Overhead</td><td class="proj">'+projLabel+'</td><td>&ndash;</td><td class="r">&ndash;</td><td class="r">&ndash;</td><td class="r">&ndash;</td>'
-      +'<td class="r">'+d(oh)+'</td><td class="r">'+d(oh)+'</td><td class="r">&ndash;</td><td class="r">'+pl(oh,grand)+'</td>'
+    out+='<tr><td class="name">Overhead</td><td class="proj">'+projLabel+'</td><td class="r">&ndash;</td><td class="r">&ndash;</td><td class="r">&ndash;</td>'
+      +'<td class="r">'+d(oh)+'</td><td class="r">'+pl(oh,grand)+'</td><td class="r">'+d(oh)+'</td><td class="r">&ndash;</td><td class="r">&ndash;</td>'
       +'<td class="r">&ndash;</td><td class="r">&ndash;</td><td class="r">&ndash;</td></tr>';
-    var tA=0,tD=0,tsub=0,tbugs=0;
-    ['backend','frontend','qa'].forEach(function(ar){ ['y','n'].forEach(function(k){ var g=S[ar][k]; tA+=g.aEst; tD+=g.dlEst; tsub+=g.subBug; tbugs+=g.bugs; }); });
-    out+='<tr class="tot"><td class="name">Total</td><td class="proj">'+projLabel+'</td><td>&ndash;</td><td></td><td class="r">'+d(tA)+'</td><td class="r">'+d(tD)+'</td>'
-      +'<td class="r">'+d(grand+tsub)+'</td><td class="r">'+d(grand)+'</td><td class="r">'+d(tsub)+'</td>'
-      +'<td class="r">'+(grand?'100%':'&ndash;')+'</td><td></td><td></td><td class="r">'+tbugs+'</td></tr>';
+    var tA=0,tD=0,tsub=0,tlog=0,tbugs=0;
+    ['backend','frontend','qa'].forEach(function(ar){ var g=A[ar]; tA+=g.aEst; tD+=g.dlEst; tsub+=g.subBug; tlog+=g.logged; tbugs+=g.bugs; });
+    out+='<tr class="tot"><td class="name">Total</td><td class="proj">'+projLabel+'</td><td></td><td class="r">'+d(tA)+'</td><td class="r">'+d(tD)+'</td>'
+      +'<td class="r">'+d(grand+tsub)+'</td><td class="r">'+(grand?'100%':'&ndash;')+'</td><td class="r">'+d(grand)+'</td><td class="r">'+d(tsub)+'</td><td class="r">'+psub(tlog,tsub)+'</td>'
+      +'<td></td><td></td><td class="r">'+tbugs+'</td></tr>';
     return out;
   }
 
@@ -1335,41 +1351,38 @@ PROJECT_FILTER_JS = r"""<script>
     }
     return out;
   }
-  function apply(proj){
+  function fvMatch(r, fx){ return fx==='all' || (r.fv && r.fv.indexOf(fx)>=0); }
+  function apply(){
+    var proj=(document.getElementById('projfilter')||{}).value||'all';
+    var fx=(document.getElementById('fixvfilter')||{}).value||'all';
     var projLabel = proj==='all' ? 'All' : proj;
-    // rebuild every Totals-by-area table for its (tab, month) scope
+    function F(r,tab,month){ return tabMatch(r,tab) && (month===undefined||month==='all'||r.m===month) && (proj==='all'||r.p===proj) && fvMatch(r,fx); }
     document.querySelectorAll('[data-totals]').forEach(function(div){
       var tab=div.getAttribute('data-tab'), month=div.getAttribute('data-month');
-      var rows=ROWS.filter(function(r){ return tabMatch(r,tab) && (month==='all'||r.m===month) && (proj==='all'||r.p===proj); });
-      var tb=div.querySelector('tbody'); if(tb) tb.innerHTML=totalsBody(rows, projLabel);
+      var tb=div.querySelector('tbody'); if(tb) tb.innerHTML=totalsBody(ROWS.filter(function(r){ return F(r,tab,month); }), projLabel);
     });
-    // rebuild the month-by-month Arch-gain summary tables
     document.querySelectorAll('[data-monthgain]').forEach(function(div){
       var tab=div.getAttribute('data-tab');
-      var rows=ROWS.filter(function(r){ return tabMatch(r,tab) && (proj==='all'||r.p===proj); });
-      var tb=div.querySelector('tbody'); if(tb) tb.innerHTML=monthGainBody(rows);
+      var tb=div.querySelector('tbody'); if(tb) tb.innerHTML=monthGainBody(ROWS.filter(function(r){ return F(r,tab); }));
     });
-    // update the "Total across all groups" lines
     document.querySelectorAll('[data-grand]').forEach(function(p){
-      var tab=p.getAttribute('data-tab');
-      var rows=ROWS.filter(function(r){ return tabMatch(r,tab) && (proj==='all'||r.p===proj); });
-      var t=agg(rows), tsub=t.A.backend.subBug+t.A.frontend.subBug+t.A.qa.subBug;
+      var t=agg(ROWS.filter(function(r){ return F(r,p.getAttribute('data-tab')); })), tsub=t.A.backend.subBug+t.A.frontend.subBug+t.A.qa.subBug;
       p.innerHTML='<b>Total across all groups:</b> '+d(t.grand)+' d logged + '+d(tsub)+' d sub-bug = <b>'+d(t.grand+tsub)+' d</b> total dev <span class="sm">(1 d = '+DAY+' h)</span>';
     });
-    // show/hide per-ticket matrix rows
     document.querySelectorAll('tr[data-project]').forEach(function(tr){
-      tr.style.display = (proj==='all'||tr.getAttribute('data-project')===proj) ? '' : 'none';
+      var okp=(proj==='all'||tr.getAttribute('data-project')===proj);
+      var okf=(fx==='all'|| ('|'+(tr.getAttribute('data-fixv')||'')+'|').indexOf('|'+fx+'|')>=0);
+      tr.style.display = (okp && okf) ? '' : 'none';
     });
-    // update tab-count badges
     var TABS={'tab-all':'all','tab-us':'us','tab-usfinal':'usfinal','tab-bugfinal':'bugfinal','tab-other':'other'};
     for(var id in TABS){ var lab=document.querySelector('label[for="'+id+'"] .cnt'); if(!lab) continue;
-      var n=ROWS.filter(function(r){ return tabMatch(r,TABS[id]) && (proj==='all'||r.p===proj); }).length;
-      lab.textContent='('+n+')';
+      lab.textContent='('+ROWS.filter(function(r){ return F(r,TABS[id]); }).length+')';
     }
   }
-  var sel=document.getElementById('projfilter');
-  if(sel){ sel.addEventListener('change', function(){ apply(this.value); });
-    if(sel.value && sel.value!=='all') apply(sel.value); }
+  var ps=document.getElementById('projfilter'), fs=document.getElementById('fixvfilter');
+  if(ps) ps.addEventListener('change', apply);
+  if(fs) fs.addEventListener('change', apply);
+  apply();
 })();
 </script>"""
 
@@ -1473,10 +1486,14 @@ def main():
         bug_final = [r for r in rows if r["ttype"] == "Bug" and r["final"]]
         other_rows = [r for r in rows if r["ttype"] != "US"]
         projects = sorted({r["project"] for r in rows})
+        fixvers = sorted({v for r in rows for v in (r.get("fixVersions") or [])})
         W('<div class="filterbar"><label><b>Project filter:</b> <select id="projfilter">'
           '<option value="all">All projects</option>'
           + "".join(f'<option value="{e(p)}">{e(p)}</option>' for p in projects)
-          + '</select></label> <span class="sm">filters Totals-by-area and the per-ticket rows; % Logged and Totals recompute live.</span></div>')
+          + '</select></label> &nbsp; <label><b>Fix version:</b> <select id="fixvfilter">'
+          '<option value="all">All versions</option>'
+          + "".join(f'<option value="{e(v)}">{e(v)}</option>' for v in fixvers)
+          + '</select></label> <span class="sm">filter the Totals-by-area and per-ticket rows; a Bug with several fix versions matches each; Totals recompute live.</span></div>')
         W('<div class="tabs">')
         W('<input type="radio" name="trtab" id="tab-all" checked>')
         W('<input type="radio" name="trtab" id="tab-us">')
@@ -1497,7 +1514,7 @@ def main():
         W('</div>')
         # ---- data + client-side project filter (recomputes Totals-by-area, % Logged, grand total) ----
         import json as _json
-        rowdata = [{"k": r["key"], "p": r["project"], "m": r["month"], "t": r["ttype"], "f": 1 if r["final"] else 0,
+        rowdata = [{"k": r["key"], "p": r["project"], "fv": r.get("fixVersions") or [], "m": r["month"], "t": r["ttype"], "f": 1 if r["final"] else 0,
                     "oh": r["archprH"],
                     "be": [r["areas"]["backend"]["aEst"], r["areas"]["backend"]["dlEst"], r["areas"]["backend"]["logged"], r["areas"]["backend"]["subBug"], r["areas"]["backend"]["bugs"], 1 if r["areas"]["backend"]["ai"] else 0],
                     "fe": [r["areas"]["frontend"]["aEst"], r["areas"]["frontend"]["dlEst"], r["areas"]["frontend"]["logged"], r["areas"]["frontend"]["subBug"], r["areas"]["frontend"]["bugs"], 1 if r["areas"]["frontend"]["ai"] else 0],
