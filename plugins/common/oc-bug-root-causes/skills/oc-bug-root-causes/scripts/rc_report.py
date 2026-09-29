@@ -282,7 +282,7 @@ def render_csv_rows(model):
 # ------------------------------------------------------------------------- HTML
 
 CSS = """
-:root{--bg:#f7f7f8;--fg:#1d1d1f;--mut:#6b6b72;--line:#e3e3e6;--card:#fff;--accent:#2f6fd0;
+:root{color-scheme:light dark;--bg:#f7f7f8;--fg:#1d1d1f;--mut:#6b6b72;--line:#e3e3e6;--card:#fff;--accent:#2f6fd0;
  --newbg:#fde7c7;--pill:#eef1f5}
 *{box-sizing:border-box}
 body{margin:0;padding:24px 16px;background:var(--bg);color:var(--fg);

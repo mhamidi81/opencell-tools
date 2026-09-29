@@ -44,3 +44,11 @@ def test_copied_transport_is_byte_identical(name, origin):
     original = REPO / "plugins" / "common" / origin / name
     assert (SCRIPTS / name).read_bytes() == original.read_bytes(), (
         f"{name} drifted from {origin}/{name}: change the original, then re-copy it here")
+
+
+def test_skill_md_frontmatter_and_script_references():
+    text = (PLUGIN_DIR / "skills" / NAME / "SKILL.md").read_text()
+    assert text.startswith(f"---\nname: {NAME}\ndescription: ")
+    for script in ("rc_fetch.py", "rc_pr.py", "rc_report.py"):
+        assert f"$S/scripts/{script}" in text
+    assert "$S/references/dev-root-causes.md" in text

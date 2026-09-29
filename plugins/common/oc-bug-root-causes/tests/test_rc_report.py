@@ -194,6 +194,7 @@ def test_html_escapes_content_and_offers_area_tabs():
     assert 'data-view="portal"' in page and 'data-view="core"' in page
     assert 'class="tab"' in page
     assert "prefers-color-scheme:dark" in page
+    assert "color-scheme:light dark" in page   # native scrollbars follow the theme
 
 
 def test_single_area_html_has_no_tabs():
