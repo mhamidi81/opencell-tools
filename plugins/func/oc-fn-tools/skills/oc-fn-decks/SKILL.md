@@ -1,7 +1,7 @@
 ---
 name: oc-fn-decks
-version: 1.4.1
-updated: 2026-09-11T09:15:00+02:00
+version: 1.6.0
+updated: 2026-09-28T11:36:12+02:00
 author: Stéphane Chambrin
 description: >
   Author and render branded slide decks with the Opencell Marp theme (Charte
@@ -9,10 +9,13 @@ description: >
   PPT template. Load this skill whenever the user mentions a slide deck, a
   presentation, slides, a pitch deck, a SteerCo deck, Marp, `.pptx` /
   PowerPoint, the official template, or rendering a Markdown deck to
-  HTML/PDF/PPTX — or asks to build, style, or render an Opencell-branded deck.
-  Carries the theme master (`theme/`), the official-template PPTX lane
-  (`pptx/` + `pptx.md`: curated pandoc reference, embedded fonts, deck2pptx
-  pipeline), the authoring conventions (lead slides, front-matter, one-way
+  HTML/PDF/PPTX — or asks to build, style, or render an Opencell-branded deck,
+  or to publish, share or present a deck as an Artifact / artefact / claude.ai
+  page / a link. Carries the theme master (`theme/`), the official-template
+  PPTX lane (`pptx/` + `pptx.md`: curated pandoc reference, embedded fonts,
+  deck2pptx pipeline), the Artifact lane (`render-artifact.sh` + `artifact/` +
+  `artifact.md`: the same `.md` as a claude.ai page, light by default with a
+  light/dark switch, reproducible from git), the authoring conventions (lead slides, front-matter, one-way
   mirror), the `YYYYMMDD_` dated-filename rule, the `marp-cli` render command,
   the overflow check, and the 24h-time / ISO-date locale non-negotiable. Used
   for the **Phase-2 approval deck** in `oc-fn-project-management` and for
@@ -46,9 +49,9 @@ must quantify*), or a standalone strategy / SteerCo deck.
   technical design vs. product value); `audience` fixes *tone* (formal SteerCo vs. informal team)
   and *depth* (headline-level for execs; detailed for practitioners).
 
-## Two deliverables — the audience also picks the lane
+## Three deliverables — the audience also picks the lane
 
-One `.md` source, two renders:
+One `.md` source, three renders:
 
 - **Marp HTML** (this file) — the presentation aid: self-contained, presenter view, 24h clock.
   Sufficient on its own for working sessions and internal product-team decks.
@@ -56,10 +59,18 @@ One `.md` source, two renders:
   template. **Mandatory deliverable for SteerCo, customers, partners — any deck leaving the
   product team** (company-wide template mandate; the CEO checks). Rendered from the *same*
   `.md` via `pptx/deck2pptx.py`.
+- **claude.ai Artifact** (`artifact.md`) — the same deck as a link any Openceller can open: Marp's
+  viewer on a claude.ai page, **light by default with a light/dark switch**, a dark slide variant
+  derived from the Charte only. **Internal scope** (product talks, all-hands, team decks) — how
+  Opencell shares internal material since 2026-09-23. Rendered by `render-artifact.sh`, which
+  **refuses an uncommitted or unpushed deck**, so every published page reproduces from git. Read
+  `artifact.md` before publishing one.
 
-The conventions below keep the source valid for both lanes; the PPTX-side deltas (front-matter
+The conventions below keep the source valid for every lane; the PPTX-side deltas (front-matter
 metadata, `<!-- note: … -->`, no fenced divs) live in `pptx.md` — read it before authoring a
-deck that will ship as PPTX.
+deck that will ship as PPTX. The Artifact-side deltas (`pagetitle:` / `artifact:` keys, a dark
+variant for any colour a deck's own `<style>` sets, no local images, speaker notes are public)
+live in `artifact.md`.
 
 ## Where the theme lives (and why it's in two places)
 
@@ -246,3 +257,5 @@ unavoidable density.
   when you do, use this theme so every Opencell deck looks consistent.
 - **Standalone decks** — strategy, SteerCo, module-map, or any internal Opencell presentation. Same
   theme, same conventions; there is no Phase-2 estimate content to worry about.
+- **Internal decks shared as a link** — product talks, all-hands, team updates: the Artifact lane
+  (`artifact.md`), from the same `.md`.

@@ -1,0 +1,35 @@
+/* @layer oc-fn-decks artifact — the PAGE around the slides (not compiled by Marp).
+ *
+ * Marp's viewer letterboxes each 16:9 slide on a black body. On a claude.ai Artifact the
+ * ground follows the page theme instead, and the light/dark switch sits in Marp's own
+ * on-screen controls (bottom-left, shown on mouse move or tap).
+ *
+ * LIGHT IS THE DEFAULT, deliberately (Stéphane, 2026-09-23: most Opencellers dislike dark
+ * themes), exactly as in oc-fn-briefs' artifact.css. A dark OS setting is ignored — there is
+ * no prefers-color-scheme block, and don't add one back. Dark applies only on an explicit
+ * choice: this page's switch ([data-oc-theme]) first, then claude.ai's theme setting
+ * ([data-theme="dark"]). Tokens only; every token has its light value on bare :root.
+ */
+
+:root{
+  --ocd-ground:#EDE4E9;       /* letterbox: the Charte's pale rose around a white slide */
+  --ocd-moon:inline-block; --ocd-sun:none;
+}
+:root[data-theme="dark"]:not([data-oc-theme="light"]),
+:root[data-oc-theme="dark"]{
+  color-scheme:dark;
+  --ocd-ground:#070606;       /* brand black deepened, so the #121011 slide keeps its edge */
+  --ocd-moon:none; --ocd-sun:inline-block;
+}
+
+/* Same specificity as the viewer's `body{background:#000}` and later in the page, so it wins;
+ * the viewer's own view-specific grounds (overview, presenter, next) keep theirs. */
+body{background:var(--ocd-ground)}
+
+/* The switch inherits the on-screen controls' button reset (colour, opacity, cursor). */
+.bespoke-marp-osc > .oc-theme{display:inline-grid;place-items:center;width:32px;height:32px;
+  padding:0;vertical-align:middle}
+.bespoke-marp-osc > .oc-theme svg{width:20px;height:20px}
+.bespoke-marp-osc > .oc-theme .moon{display:var(--ocd-moon)}
+.bespoke-marp-osc > .oc-theme .sun{display:var(--ocd-sun)}
+.bespoke-marp-osc > .oc-theme:focus-visible{outline:2px solid #fff;outline-offset:2px}
