@@ -41,9 +41,10 @@ plugins/common/oc-bug-root-causes/
   skills/oc-bug-root-causes/
     SKILL.md
     references/dev-root-causes.md
-    scripts/jira_client.py        # byte-identical copy of oc-bug-clusters' file
+    scripts/jira_client.py        # byte-identical copy (oc-bug-clusters)
+    scripts/bug_fetch.py          # byte-identical copy (oc-bug-clusters): area, ADF, window
+    scripts/bitbucket_client.py   # byte-identical copy (oc-pr-rejection-rate): token-prefix auth
     scripts/rc_fetch.py           # Jira fetch + area + comments
-    scripts/bitbucket_client.py   # REST transport, token-prefix auth
     scripts/rc_pr.py              # PR lookup + trimmed diff, cached
     scripts/rc_report.py          # validate assignments, aggregate, render
   tests/                          # pytest, fixtures, no network
@@ -76,26 +77,38 @@ Run directory: `$TMPDIR/oc-bug-root-causes/<PROJECT>_<REPO>_<SINCE>_<UNTIL>/`.
 
 - Repository from area: `portal`→`opencell-portal`, `core`→`opencell-core`, `null`→ try both.
   Workspace `opencellsoft`.
-- Lookup, as in `/oc-review-pr`: `pullrequests?q=title~"<KEY>"&state=MERGED` then
-  `q=source.branch.name~"<KEY>"`; fall back to any state if no merged PR.
+- Lookup: **one** search per repository, `q=(title ~ "<KEY>" OR source.branch.name ~ "<KEY>")`
+  with `state` repeated for MERGED, OPEN, DECLINED, SUPERSEDED. Results are re-filtered on the
+  **whole** key, because `~` is a substring match (`INTRD-4516` matches `INTRD-45162`).
 - Selection: merged PR targeting `dev` → most recent merged → most recent any state.
-- Evidence: `…/diffstat` and `…/diff`, **both with redirect-following** (they answer 302).
+- Evidence: `…/diff` only. It answers 302 to a signed URL; the redirect is followed by hand
+  and the `Authorization` header is dropped when the host changes. The per-file list
+  (`path +added -removed`, capped at 40 files) is **computed from the full diff** instead of a
+  separate `…/diffstat` call: with one search per repository that keeps a 280-bug window
+  near 600 requests, inside Bitbucket's hourly rate limit. 429/503 are retried with backoff.
 - Diff trimming: drop files matching tests (`*.test.*`, `*.spec.*`, `src/test/`), lockfiles,
   i18n JSON (`**/i18n/**`, `**/locales/**`), generated/minified files; keep hunks in file
-  order until a **4 KB** cap; always keep the full diffstat file list.
+  order until a **4 KB** cap; the per-file list always covers every file, tests included.
 - Auth: `ATCTT…` → `Authorization: Bearer`; otherwise Basic `BITBUCKET_EMAIL:token`. Keyed
   off the token prefix, never off whether an email is set.
-- Per-bug cache `pr/<KEY>.json` in the run directory; a re-run makes no Bitbucket calls.
+- Per-bug cache `pr/<KEY>.json` in the run directory, for bugs **with** PR evidence only; a
+  Jira-only fallback is not cached, so a later run with a working token looks again.
 - Output: `classify_input.jsonl`, one line per bug: `key, area, summary, excerpt, comments[],
-  evidence ("pr"|"jira"), pr_url, diffstat[], diff`.
+  evidence ("pr"|"jira"), pr_url, pr_title, files[], diff`; plus the same rows split into
+  `batches/classify.NNN.jsonl` of 30 lines each (stale batch files removed first).
 - `--no-pr` skips this stage and writes the same file with `evidence: "jira"`.
 
 ### 3. Classify — the only LLM step (SKILL.md)
 
-- Read `references/dev-root-causes.md`; its `## <name>` headings are the vocabulary.
-- Read `classify_input.jsonl` in batches (≤ 30 lines, because of diffs).
-- Write `assignments.json`: `{"<KEY>": {"category", "confidence": "high"|"low",
-  "regression": true|false, "cause": "<≤ 120 chars>"}}` covering every key.
+- **Fanned out to sub-agents, one per batch file.** A month's evidence (~1.5k tokens per bug
+  with its diff) does not fit one context, so the orchestrating session never reads
+  `classify_input.jsonl`: it dispatches one sub-agent per `batches/classify.NNN.jsonl` (up to 4
+  in parallel), each reading `references/dev-root-causes.md` and writing
+  `assignments/NNN.json`: `{"<KEY>": {"category", "confidence": "high"|"low",
+  "regression": true|false, "cause": "<≤ 120 chars>"}}` covering every key of its batch.
+- A new category needs ≥ 5 bugs **across the run**, which no single sub-agent can see: a
+  sub-agent may *propose* one, and the report stage decides (below 5 → rejected, and the
+  orchestrator re-dispatches those bugs with the proposal removed).
 - Rules: exactly one category; ask "what mistake does the fix correct?"; prefer the diff over
   the prose when they disagree; `regression` is true when the bug says it (`[REG]`,
   "Regression …", "since INTRD-…") or the diff reverts/repairs a recent change;
@@ -105,8 +118,10 @@ Run directory: `$TMPDIR/oc-bug-root-causes/<PROJECT>_<REPO>_<SINCE>_<UNTIL>/`.
 
 ### 4. Report — `rc_report.py` (no network)
 
-- Validates: every key present (else exit 2 listing keys), every category seeded or declared
-  new with ≥ 5 bugs (else exit 2), confidence/regression well-typed.
+- Merges the `assignments/*.json` parts (a key assigned differently in two parts → exit 2).
+- Validates: every key present (else exit 2 listing keys), no key outside the run, every
+  category seeded or carried by ≥ 5 bugs (else exit 2), confidence/regression/cause well-typed.
+  The cause line is truncated to 120 characters rather than rejected.
 - Model: per category → count, % of total, per-area counts (portal/core/none), regression
   count and rate, evidence split (pr/jira), low-confidence count, up to 5 examples (newest
   first, `pr` evidence preferred).
@@ -149,14 +164,15 @@ Adding a category is safe; renaming one breaks period-over-period comparison.
 | Other Bitbucket error on one bug | That bug becomes `evidence: jira`; warn, continue |
 | Inverted window | Relay `must be before`, stop |
 | Zero "Development issue" bugs | Report and stop |
-| Missing keys / unknown category in assignments | Exit 2 naming them; classify and re-run |
+| Missing keys / unknown category in assignments | Exit 2 naming them; re-dispatch those batches |
 
 ## Testing
 
 `python3 -m pytest plugins/common/oc-bug-root-causes/tests -q`, no network (fake openers):
 JQL includes the Root-cause clause and exclusive `until`; area resolution; comment
 flattening/trimming; PR selection order; diff trimming (filters + 4 KB cap, redirect
-followed); auth scheme by token prefix; cache hit avoids calls; assignment validation;
+followed without credentials on host change, 429 retried); whole-key PR matching; batch
+files; auth scheme by token prefix; cache hit avoids calls; assignment-part merging; assignment validation;
 aggregation maths (percentages, regression rate, evidence split); Markdown/CSV/HTML
-rendering; `jira_client.py` byte-identical to `oc-bug-clusters`'; packaging (marketplace
+rendering; the three copied scripts byte-identical to their originals; packaging (marketplace
 entry, plugin.json name, SKILL.md frontmatter).
