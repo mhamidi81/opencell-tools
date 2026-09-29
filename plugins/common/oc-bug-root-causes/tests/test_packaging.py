@@ -52,3 +52,9 @@ def test_skill_md_frontmatter_and_script_references():
     for script in ("rc_fetch.py", "rc_pr.py", "rc_report.py"):
         assert f"$S/scripts/{script}" in text
     assert "$S/references/dev-root-causes.md" in text
+
+
+def test_skill_clears_old_assignments_before_dispatching():
+    text = (PLUGIN_DIR / "skills" / NAME / "SKILL.md").read_text()
+    assert 'rm -rf "$RUN/assignments"' in text
+    assert "classify.NNN.md" in text and "Exit code `4`" in text

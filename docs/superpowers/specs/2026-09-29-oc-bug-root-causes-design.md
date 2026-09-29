@@ -94,15 +94,21 @@ Run directory: `$TMPDIR/oc-bug-root-causes/<PROJECT>_<REPO>_<SINCE>_<UNTIL>/`.
 - Per-bug cache `pr/<KEY>.json` in the run directory, for bugs **with** PR evidence only; a
   Jira-only fallback is not cached, so a later run with a working token looks again.
 - Output: `classify_input.jsonl`, one line per bug: `key, area, summary, excerpt, comments[],
-  evidence ("pr"|"jira"), pr_url, pr_title, files[], diff`; plus the same rows split into
-  `batches/classify.NNN.jsonl` of 30 lines each (stale batch files removed first).
+  evidence ("pr"|"jira"), pr_url, pr_title, files[], diff`; plus the same bugs rendered as
+  readable Markdown in `batches/classify.NNN.md`, 30 bugs each (stale batch files removed
+  first): evidence before prose, the diff un-escaped, no line over 1000 characters — a JSON
+  row is one long line that the Read tool truncates before the diff.
+- Exit `4` when any lookup failed (network error, or the rate limit exhausted — which also
+  stops further lookups); the orchestrator re-runs the stage before classifying.
+- Selection first keeps the PRs *about* the key (branch carries it, or the title leads
+  with it); a later PR that merely mentions it ("fix regression from INTRD-X") loses.
 - `--no-pr` skips this stage and writes the same file with `evidence: "jira"`.
 
 ### 3. Classify — the only LLM step (SKILL.md)
 
 - **Fanned out to sub-agents, one per batch file.** A month's evidence (~1.5k tokens per bug
   with its diff) does not fit one context, so the orchestrating session never reads
-  `classify_input.jsonl`: it dispatches one sub-agent per `batches/classify.NNN.jsonl` (up to 4
+  `classify_input.jsonl`: it dispatches one sub-agent per `batches/classify.NNN.md` (up to 4
   in parallel), each reading `references/dev-root-causes.md` and writing
   `assignments/NNN.json`: `{"<KEY>": {"category", "confidence": "high"|"low",
   "regression": true|false, "cause": "<≤ 120 chars>"}}` covering every key of its batch.

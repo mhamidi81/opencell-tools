@@ -45,6 +45,7 @@ EXCLUDED = [re.compile(p) for p in (
     r"(^|/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$",
     r"(^|/)(i18n|locales)/", r"\.min\.(js|css)$", r"(^|/)(dist|build|generated)/",
 )]
+LINE_CAP = 1000
 FILE_HEADER = re.compile(r"^diff --git a/(\S+) b/(\S+)", re.M)
 TRUNCATED = "\n… [diff truncated at {cap} bytes]\n"
 
@@ -61,12 +62,24 @@ def mentions(pr, key):
     return bool(pattern.search(title) or pattern.search(branch))
 
 
-def select_pr(prs):
-    """Merged into dev, else the newest merged, else the newest of any state.
-    A fix merged to several branches has one PR per branch; the dev one is canonical."""
+def is_primary(pr, key):
+    """The PR is ABOUT the key: its branch carries it, or its title leads with it.
+    "INTRD-9 fix regression from INTRD-1" merely mentions INTRD-1."""
+    pattern = _key_pattern(key)
+    branch = ((pr.get("source") or {}).get("branch") or {}).get("name") or ""
+    title = pr.get("title") or ""
+    return bool(pattern.search(branch)) or bool(re.match(r"^\W*" + pattern.pattern, title, re.I))
+
+
+def select_pr(prs, key=None):
+    """Among the PRs about the key (all of them if none is), merged into dev, else the
+    newest merged, else the newest of any state. A fix merged to several branches has
+    one PR per branch; the dev one is canonical."""
     def dest(p):
         return ((p.get("destination") or {}).get("branch") or {}).get("name")
 
+    if key:
+        prs = [p for p in prs if is_primary(p, key)] or list(prs)
     merged = [p for p in prs if p.get("state") == "MERGED"]
     for pool in ([p for p in merged if dest(p) == "dev"], merged, list(prs)):
         if pool:
@@ -114,22 +127,53 @@ def jira_evidence(note):
             "note": note}
 
 
+def _cap(line):
+    return line if len(line) <= LINE_CAP else line[:LINE_CAP] + "…"
+
+
+def render_batch(rows, number):
+    """One batch as Markdown for a sub-agent's Read tool. Not JSONL: a JSON row is one
+    5-9 KB line with the diff escaped and last, and the Read tool truncates long lines —
+    the classifier would silently judge from the prose alone. Evidence comes first, and
+    no line exceeds LINE_CAP."""
+    out = [f"# Batch {number:03d} — {len(rows)} bugs", "",
+           "Keys: " + ", ".join(r["key"] for r in rows), ""]
+    for r in rows:
+        out += [f"## {r['key']}", "", f"- area: {r['area'] or 'none'}"]
+        if r["evidence"] == "pr":
+            out.append(f"- evidence: pr — {r['pr_title'] or ''} {r['pr_url'] or ''}")
+        else:
+            out.append("- evidence: jira only (no PR diff)")
+        out += ["", f"### Summary", "", r["summary"] or "—", ""]
+        if r["evidence"] == "pr":
+            out += ["### Files changed", ""] + [f"- {f}" for f in r["files"]] + [""]
+            out += ["### Diff (trimmed: tests, lockfiles, i18n removed)", "", "````diff"]
+            out += r["diff"].rstrip("\n").split("\n") if r["diff"] else []
+            out += ["````", ""]
+        out += ["### Description", "", r["excerpt"] or "—", "", "### Last comments", ""]
+        out += [f"- {c}" for c in r["comments"]] or ["—"]
+        out.append("")
+    return "\n".join(_cap(line) for line in out) + "\n"
+
+
 def write_batches(rows, directory, size=BATCH_SIZE):
-    """One classify.NNN.jsonl per `size` rows. Stale files from a larger earlier run are
+    """One classify.NNN.md per `size` rows. Stale files from a larger earlier run are
     removed first, or a sub-agent would classify bugs that are no longer in the window."""
     os.makedirs(directory, exist_ok=True)
-    for stale in glob.glob(os.path.join(directory, "classify.*.jsonl")):
+    for stale in glob.glob(os.path.join(directory, "classify.*")):
         os.remove(stale)
     paths = []
     for start in range(0, len(rows), size):
-        path = os.path.join(directory, f"classify.{start // size + 1:03d}.jsonl")
+        number = start // size + 1
+        path = os.path.join(directory, f"classify.{number:03d}.md")
         with open(path, "w", encoding="utf-8") as handle:
-            for row in rows[start:start + size]:
-                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+            handle.write(render_batch(rows[start:start + size], number))
         paths.append(path)
     return paths
 
 
+LOOKUPS_FAILED = 4
+FAILED_NOTES = ("PR lookup failed", "Bitbucket rate limit")
 MAX_ATTEMPTS = 5
 RETRY_STATUS = (429, 503)
 REDIRECT_STATUS = (301, 302, 303, 307, 308)
@@ -195,7 +239,7 @@ class EvidenceFetcher:
     def evidence_for(self, bug):
         key = bug["key"]
         prs = [p for slug in REPOS[bug.get("area")] for p in self.candidates(slug, key)]
-        chosen = select_pr(prs)
+        chosen = select_pr(prs, key)
         if chosen is None:
             return jira_evidence("no PR found")
         slug = chosen["_slug"]
@@ -226,10 +270,21 @@ def gather_all(bugs, fetcher, cache_dir, warn=sys.stderr.write,
             continue
         try:
             evidence = fetcher.evidence_for(bug)
-        except BitbucketError as ex:
-            if str(ex).startswith("HTTP 401"):
+        except (BitbucketError, OSError, ValueError) as ex:
+            # OSError covers URLError, timeouts and resets; ValueError a truncated JSON body.
+            message = str(ex)
+            if message.startswith("HTTP 401"):
                 warn(f"WARNING: Bitbucket rejected the credential; continuing Jira-only.\n{ex}\n")
                 fetcher, disabled_reason = None, "Bitbucket 401"
+                results[key] = jira_evidence(disabled_reason)
+                continue
+            if message.startswith(("HTTP 429", "HTTP 503")):
+                # Retries are exhausted: this is the hourly quota, not a burst. Every
+                # later call would sleep and fail too. PR hits are cached, so a re-run
+                # later only asks for the bugs that are left.
+                warn(f"WARNING: Bitbucket rate limit reached at {key}; stopping PR lookups; "
+                     f"re-run rc_pr.py later — found PRs are cached.\n{ex}\n")
+                fetcher, disabled_reason = None, "Bitbucket rate limit"
                 results[key] = jira_evidence(disabled_reason)
                 continue
             warn(f"WARNING: PR lookup failed for {key}: {ex}\n")
@@ -285,8 +340,14 @@ def main(argv=None, fetcher_factory=None, warn=sys.stderr.write):
     batches = write_batches(rows, os.path.join(args.run, "batches"), args.batch_size)
 
     with_pr = sum(1 for r in rows if r["evidence"] == "pr")
-    sys.stderr.write(f"PR evidence for {with_pr} of {len(rows)} bugs; "
-                     f"{len(batches)} batch file(s) in {os.path.join(args.run, 'batches')}\n")
+    failed = sum(1 for e in evidence.values() if e["note"] in FAILED_NOTES)
+    sys.stderr.write(f"PR evidence for {with_pr} of {len(rows)} bugs; {failed} lookup(s) "
+                     f"failed; {len(batches)} batch file(s) in "
+                     f"{os.path.join(args.run, 'batches')}\n")
+    if failed:
+        sys.stderr.write("Some PR lookups failed: re-run rc_pr.py before classifying, or the "
+                         "report will understate PR evidence.\n")
+        return LOOKUPS_FAILED
     return 0
 
 

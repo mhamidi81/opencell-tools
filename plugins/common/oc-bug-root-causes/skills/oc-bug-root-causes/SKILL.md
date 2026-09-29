@@ -77,23 +77,39 @@ python3 "$S/scripts/rc_pr.py" --bugs "$RUN/bugs.json" --run "$RUN" \
   --out-classify "$RUN/classify_input.jsonl" [--no-pr]
 ```
 
-It prints how many bugs got PR evidence and how many batch files it wrote to
-`$RUN/batches/`. Relay every `WARNING:` line. A Bitbucket 401 is not fatal — the run
-continues Jira-only — but tell the user, since the message names both auth schemes.
-Evidence is cached per bug in `$RUN/pr/`, so a re-run of the same window is cheap.
+It prints how many bugs got PR evidence, how many lookups failed, and how many batch
+files it wrote to `$RUN/batches/`. Relay every `WARNING:` line. A Bitbucket 401 is not
+fatal — the run continues Jira-only — but tell the user, since the message names both auth
+schemes.
+
+**Exit code `4` means some PR lookups failed** (a network error, or the Bitbucket rate
+limit was reached). Do not classify yet: tell the user, and re-run the same command —
+found PRs are cached per bug in `$RUN/pr/`, so it only asks for the bugs that are left.
+For a rate limit, wait before re-running (the quota is hourly). Proceed on exit `4` only if
+the user says so, and then say in the summary that PR evidence is understated.
+
 **Never read `classify_input.jsonl` or the batch files yourself.**
 
 ## Task 3 — Classify (fanned out to sub-agents)
 
-`mkdir -p "$RUN/assignments"`, then for each `$RUN/batches/classify.NNN.jsonl` dispatch one
+Clear the previous run's results first — a stale part file from an earlier run of the
+same window makes the report fail:
+
+```bash
+rm -rf "$RUN/assignments" && mkdir -p "$RUN/assignments"
+```
+
+Then for each `$RUN/batches/classify.NNN.md` dispatch one
 `general-purpose` sub-agent with the Agent tool, **at most 4 at a time**, each with this
 prompt (fill in the paths):
 
 > You classify "Development issue" bugs by the developer mistake their fix corrects.
 > 1. Read the taxonomy `$S/references/dev-root-causes.md`. Its `## <name>` headings are the
 >    only categories you may use, apart from the rule in step 4.
-> 2. Read `$RUN/batches/classify.NNN.jsonl`: one bug per line with `summary`, `excerpt`,
->    `comments`, `evidence` (`pr` or `jira`), `pr_title`, `files` and `diff`.
+> 2. Read `$RUN/batches/classify.NNN.md` **to the end** — if it is too large for one Read,
+>    page through it with offset/limit. It starts with the list of keys, then one
+>    `## <KEY>` section per bug: evidence type and PR, summary, files changed, the trimmed
+>    diff, the description and the last comments.
 > 3. For **every** line, decide:
 >    - `category` — exactly one. Ask "what did the developer get wrong that the fix
 >      corrects?", not "where did the user see it?". When a diff is present, trust it over
@@ -133,7 +149,10 @@ On exit `2` it lists every problem. Fix them and re-run Task 4:
 - `unknown category '…' on N bug(s)` — a sub-agent coined a category too small to keep.
   Re-dispatch the batches holding those bugs, adding to the prompt that this name is not
   allowed.
-- `classified differently in two parts` — a stale part file: delete the older one.
+- `classified differently in two parts` or `assignments for bugs not in this run` — a
+  stale part file survived: clear `$RUN/assignments` and re-dispatch every batch.
+- `confidence must be…`, `regression must be…`, `category must be lower-kebab-case`,
+  `cause must be…` — a malformed part: re-dispatch the batch holding that key.
 
 When presenting, point out the **evidence split**: a category ranked mostly on Jira-only
 evidence is a weaker finding than one ranked on diffs. Name any new category the report
@@ -149,4 +168,5 @@ kept so `dev-root-causes.md` can be updated.
 | `BITBUCKET_ACCESS_TOKEN` unset | The run continues Jira-only; say so in the summary |
 | Bitbucket 401 warning | Continue; tell the user the credential was rejected and relay the message |
 | `WARNING: PR lookup failed for …` | That bug is Jira-only; relay it |
+| Exit 4 from `rc_pr.py` | Lookups failed or the rate limit was hit: re-run `rc_pr.py` (later, for a rate limit) before classifying |
 | Exit 2 from `rc_report.py` | Fix as described in Task 4 and re-run it |

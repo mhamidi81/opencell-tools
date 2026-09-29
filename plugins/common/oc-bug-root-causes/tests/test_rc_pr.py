@@ -1,4 +1,5 @@
 import json
+import re
 
 from conftest import SAMPLE_DIFF
 
@@ -78,17 +79,22 @@ def test_jira_evidence_shape():
         "note": "no PR found"}
 
 
+def row(key, diff="", evidence="jira"):
+    return {"key": key, "area": "portal", "summary": "s", "excerpt": "e", "comments": ["c1"],
+            "evidence": evidence, "pr_url": None, "pr_title": None, "files": [], "diff": diff}
+
+
 def test_write_batches_splits_rows_and_removes_stale_files(tmp_path):
     (tmp_path / "classify.009.jsonl").write_text("stale\n")
-    rows = [{"key": f"INTRD-{i}"} for i in range(65)]
+    rows = [row(f"INTRD-{i}") for i in range(65)]
 
     paths = rp.write_batches(rows, str(tmp_path), size=30)
 
     assert [p.rsplit("/", 1)[1] for p in paths] == [
-        "classify.001.jsonl", "classify.002.jsonl", "classify.003.jsonl"]
+        "classify.001.md", "classify.002.md", "classify.003.md"]
     assert not (tmp_path / "classify.009.jsonl").exists()
-    lines = (tmp_path / "classify.003.jsonl").read_text().splitlines()
-    assert [json.loads(l)["key"] for l in lines] == [f"INTRD-{i}" for i in range(60, 65)]
+    text = (tmp_path / "classify.003.md").read_text()
+    assert re.findall(r"^## (INTRD-\d+)$", text, re.M) == [f"INTRD-{i}" for i in range(60, 65)]
 import pytest
 
 from conftest import FakeOpener, http_error
@@ -272,7 +278,7 @@ def test_main_without_a_token_continues_jira_only(tmp_path):
     assert rows[0]["evidence"] == "jira"
     assert rows[0]["summary"] == "s" and rows[0]["comments"] == ["c"]
     assert "Jira-only" in warnings[0]
-    assert (tmp_path / "batches" / "classify.001.jsonl").exists()
+    assert (tmp_path / "batches" / "classify.001.md").exists()
 
 
 def test_main_no_pr_never_builds_a_fetcher(tmp_path):
@@ -281,3 +287,62 @@ def test_main_no_pr_never_builds_a_fetcher(tmp_path):
 
     code, rows = run_main(tmp_path, ["--no-pr"], boom)
     assert code == 0 and rows[0]["evidence"] == "jira"
+
+
+# ------------------------------------------------------------ final-review fixes
+
+
+def test_batches_are_readable_text_with_the_diff_unescaped(tmp_path):
+    r = dict(row("INTRD-1", diff='diff --git a/a.ts b/a.ts\n+x = "q"\n', evidence="pr"),
+             pr_url="https://bb/pr/1", pr_title="INTRD-1 fix", files=["a.ts +1 -0"])
+    [path] = rp.write_batches([r], str(tmp_path))
+    text = open(path, encoding="utf-8").read()
+    assert "Keys: INTRD-1" in text and "## INTRD-1" in text
+    assert '+x = "q"' in text             # not JSON-escaped
+    assert text.index("### Diff") < text.index("### Description")   # evidence before prose
+    assert "https://bb/pr/1" in text and "a.ts +1 -0" in text
+
+
+def test_batch_lines_are_capped_for_the_read_tool(tmp_path):
+    [path] = rp.write_batches([row("INTRD-1", diff="diff --git a/a b/a\n+" + "x" * 5000 + "\n",
+                                   evidence="pr")], str(tmp_path))
+    assert max(len(l) for l in open(path, encoding="utf-8").read().splitlines()) <= rp.LINE_CAP + 1
+
+
+def test_a_transport_error_on_one_bug_does_not_stop_the_run(tmp_path):
+    import urllib.error
+    warnings = []
+    f = StubFetcher({"INTRD-1": urllib.error.URLError("timed out"), "INTRD-2": PR_EV,
+                     "INTRD-3": ValueError("bad JSON")})
+    ev = rp.gather_all(BUGS, f, str(tmp_path), warn=warnings.append)
+    assert ev["INTRD-1"]["note"] == ev["INTRD-3"]["note"] == "PR lookup failed"
+    assert ev["INTRD-2"] == PR_EV
+    assert len(warnings) == 2
+
+
+def test_an_exhausted_rate_limit_stops_lookups_and_asks_for_a_rerun(tmp_path):
+    warnings = []
+    f = StubFetcher({"INTRD-1": PR_EV, "INTRD-2": BitbucketError("HTTP 429 on GET x: slow down")})
+    ev = rp.gather_all(BUGS, f, str(tmp_path), warn=warnings.append)
+    assert f.seen == ["INTRD-1", "INTRD-2"]
+    assert ev["INTRD-2"]["note"] == ev["INTRD-3"]["note"] == "Bitbucket rate limit"
+    assert "re-run" in warnings[0]
+
+
+def test_main_exits_4_when_a_lookup_failed(tmp_path):
+    class Failing:
+        def evidence_for(self, bug):
+            raise BitbucketError("HTTP 500 on GET x")
+
+    code, rows = run_main(tmp_path, [], lambda: Failing())
+    assert code == rp.LOOKUPS_FAILED
+    assert rows[0]["evidence"] == "jira"
+
+
+def test_a_later_pr_that_only_mentions_the_key_does_not_win():
+    real = pr(1, title="INTRD-1 fix", branch="fix/INTRD-1", updated="2026-08-01")
+    later = pr(2, title="INTRD-9 fix regression from INTRD-1", branch="fix/INTRD-9",
+               updated="2026-09-01")
+    assert rp.select_pr([later, real], "INTRD-1")["id"] == 1
+    assert rp.select_pr([later], "INTRD-1")["id"] == 2      # a mention beats nothing
+    assert rp.select_pr([pr(3, title="[INTRD-1] fix"), later], "INTRD-1")["id"] == 3
