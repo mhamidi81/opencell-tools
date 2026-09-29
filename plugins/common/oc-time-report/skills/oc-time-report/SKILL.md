@@ -963,15 +963,15 @@ def html_month_gain_table(rows, tab="all"):
     h.append("</tbody></table></div>")
     return "".join(h)
 
-MATRIX_SUB = ["Main dev", "A.Est", "DL.Est", "Tot dev", "Logged", "Sub-bug h", "AI", "Arch gain", "DL gain", "#SB"]
+MATRIX_SUB = ["Main dev", "A.Est d", "DL.Est d", "Tot dev d", "Logged d", "Sub-bug d", "AI", "Arch gain", "DL gain", "#SB"]
 def html_matrix_head():
     head1 = ['<th rowspan="2">Ticket</th><th rowspan="2">Date</th><th rowspan="2">Type</th><th rowspan="2">Title</th>'
              '<th rowspan="2">Status</th><th rowspan="2" class="c">F</th>'
              '<th rowspan="2" class="c gaincol">Arch gain B/F/Q &middot; OH%<br><span class="sm">w/ bugs</span></th>'
-             '<th rowspan="2" class="c gaincol">Logged+bug B/F/Q/OH<br><span class="sm">hours</span></th>']
+             '<th rowspan="2" class="c gaincol">Logged+bug B/F/Q/OH<br><span class="sm">days</span></th>']
     for ar in AREAS:
         head1.append(f'<th colspan="{len(MATRIX_SUB)}" class="grp {ar}">{AREA_LABEL[ar]}</th>')
-    head1.append('<th rowspan="2" class="r">Overhead h</th><th rowspan="2">Overhead people</th><th rowspan="2" class="r">Total log h</th>')
+    head1.append('<th rowspan="2" class="r">Overhead d</th><th rowspan="2">Overhead people</th><th rowspan="2" class="r">Total log d</th>')
     head2 = []
     for ar in AREAS:
         for i, s in enumerate(MATRIX_SUB):
@@ -995,24 +995,24 @@ def html_matrix_body(rows):
         oh_pct = round(r["archprH"] / r["totalLogged"] * 100) if r["totalLogged"] else None   # overhead share of ticket's total logged
         ag_parts.append(f'OH&nbsp;{oh_pct}%' if oh_pct is not None else 'OH&nbsp;&ndash;')
         tds.append(f'<td class="c gaincol sm">{" ".join(ag_parts)}</td>')
-        # total logged incl. sub-bug hours, per area + overhead
-        lb_parts = [f'{AG_LBL[ar]}&nbsp;{round(r["areas"][ar]["logged"] + r["areas"][ar]["subBug"], 1)}' for ar in AREAS]
-        lb_parts.append(f'OH&nbsp;{r["archprH"]}')
+        # total logged incl. sub-bug, per area + overhead (days)
+        lb_parts = [f'{AG_LBL[ar]}&nbsp;{days(r["areas"][ar]["logged"] + r["areas"][ar]["subBug"])}' for ar in AREAS]
+        lb_parts.append(f'OH&nbsp;{days(r["archprH"])}')
         tds.append(f'<td class="c gaincol sm">{" ".join(lb_parts)}</td>')
         for ar in AREAS:
             x = r["areas"][ar]; blank = not (x["logged"] or x["subBug"] or x["aEst"] or x["dlEst"] or x["main"])
             if blank:
                 tds.append(f'<td class="ledge dim area-{ar}" colspan="{len(MATRIX_SUB)}">&ndash;</td>'); continue
             tds.append(f'<td class="name ledge area-{ar}">{e(x["main"])}</td>'
-                       f'<td class="r area-{ar}">{x["aEst"]}</td><td class="r area-{ar}">{x["dlEst"]}</td>'
-                       f'<td class="r area-{ar}">{x["totalDev"]}</td><td class="r area-{ar}">{x["logged"]}</td><td class="r area-{ar}">{x["subBug"]}</td>'
+                       f'<td class="r area-{ar}">{days(x["aEst"])}</td><td class="r area-{ar}">{days(x["dlEst"])}</td>'
+                       f'<td class="r area-{ar}">{days(x["totalDev"])}</td><td class="r area-{ar}">{days(x["logged"])}</td><td class="r area-{ar}">{days(x["subBug"])}</td>'
                        f'<td class="c area-{ar}">{"<span class=aibadge>AI</span>" if x["ai"] else ""}</td>'
                        f'<td class="r area-{ar}">{gain_two_html(x["aEst"], x["logged"], x["subBug"])}</td>'
                        f'<td class="r area-{ar}">{gain_two_html(x["dlEst"], x["logged"], x["subBug"])}</td><td class="r area-{ar}">{x["bugs"]}</td>')
-        people = ", ".join(f'{e(n)} {h}h' for n, h in r["archprDevs"])
-        tds.append(f'<td class="r">{r["archprH"] if r["archprH"] else "&ndash;"}</td>'
+        people = ", ".join(f'{e(n)} {days(h)}d' for n, h in r["archprDevs"])
+        tds.append(f'<td class="r">{days(r["archprH"]) if r["archprH"] else "&ndash;"}</td>'
                    f'<td class="sm">{people if people else "&ndash;"}</td>'
-                   f'<td class="r tot">{r["totalLogged"]}</td>')
+                   f'<td class="r tot">{days(r["totalLogged"])}</td>')
         out.append(f'<tr data-project="{e(r["project"])}">' + "".join(tds) + "</tr>")
     return "".join(out)
 
@@ -1422,15 +1422,15 @@ def main():
         for m in mons:
             mr = [r for r in rows if r["month"] == m]
             P(f"\n### {m} ({len(mr)} tickets)\n")
-            P("| Ticket | Date | Type | Status | F | Back (dev · log) | Front (dev · log) | QA (dev · log) | Overhead h | Overhead people | Total h |")
+            P("| Ticket | Date | Type | Status | F | Back (dev · log d) | Front (dev · log d) | QA (dev · log d) | Overhead d | Overhead people | Total d |")
             P("|---|---|---|---|:-:|---|---|---|--:|---|--:|")
             for r in mr:
                 def cell(ar):
                     x = r["areas"][ar]
-                    return f"{x['main']} · {x['logged']}" if x["logged"] else "–"
-                people = ", ".join(f"{n} {h}h" for n, h in r["archprDevs"]) or "–"
+                    return f"{x['main']} · {days(x['logged'])}" if x["logged"] else "–"
+                people = ", ".join(f"{n} {days(h)}d" for n, h in r["archprDevs"]) or "–"
                 P(f"| {r['key']} | {r['date']} | {r['ttype']} | {r['status']} | {'T' if r['final'] else ''} | "
-                  f"{cell('backend')} | {cell('frontend')} | {cell('qa')} | {r['archprH'] or '–'} | {people} | {r['totalLogged']} |")
+                  f"{cell('backend')} | {cell('frontend')} | {cell('qa')} | {days(r['archprH']) or '–'} | {people} | {days(r['totalLogged'])} |")
     md_text = "\n".join(md)
     if a.md: open(a.md, "w", encoding="utf-8").write(md_text)
     print(md_text)
@@ -1438,29 +1438,29 @@ def main():
     # ---------- CSV (full per-area matrix, flattened) ----------
     if a.csv:
         os.makedirs(os.path.dirname(os.path.abspath(a.csv)) or ".", exist_ok=True)
-        percol = ["Main dev", "A. Est h", "DL. Est h", "Total dev h", "Logged h", "Sub-bug h", "AI",
+        percol = ["Main dev", "A. Est d", "DL. Est d", "Total dev d", "Logged d", "Sub-bug d", "AI",
                   "Arch gain (w bug)", "Arch gain (no bug)", "DL gain (w bug)", "DL gain (no bug)", "Sub-bugs"]
         header = ["Ticket", "Date", "Month", "Type", "Title", "Status", "Final"]
         for ar in AREAS: header += [f"{AREA_LABEL[ar]} {c}" for c in percol]
-        header += ["Overhead logged h", "Overhead devs", "Total logged h", "Total dev h"]
+        header += ["Overhead logged d", "Overhead devs", "Total logged d", "Total dev d"]
         with open(a.csv, "w", encoding="utf-8-sig", newline="") as fh:
             w = csv.writer(fh); w.writerow(header)
             for r in rows:
                 row = [r["key"], r["date"], r["month"], r["ttype"], r["title"], r["status"], "T" if r["final"] else ""]
                 for ar in AREAS:
                     x = r["areas"][ar]
-                    row += [x["main"], x["aEst"], x["dlEst"], x["totalDev"], x["logged"], x["subBug"],
+                    row += [x["main"], days(x["aEst"]), days(x["dlEst"]), days(x["totalDev"]), days(x["logged"]), days(x["subBug"]),
                             "Yes" if x["ai"] else "",
                             gain_cell(x["aEst"], x["logged"] + x["subBug"]), gain_cell(x["aEst"], x["logged"]),
                             gain_cell(x["dlEst"], x["logged"] + x["subBug"]), gain_cell(x["dlEst"], x["logged"]),
                             x["bugs"]]
-                row += [r["archprH"], "; ".join(f"{n} {h}h" for n, h in r["archprDevs"]), r["totalLogged"], r["totalDev"]]
+                row += [days(r["archprH"]), "; ".join(f"{n} {days(h)}d" for n, h in r["archprDevs"]), days(r["totalLogged"]), days(r["totalDev"])]
                 w.writerow(row)
 
     # ---------- HTML (wide per-area matrix) ----------
     os.makedirs(os.path.dirname(os.path.abspath(a.out)) or ".", exist_ok=True)
     B = []; W = B.append
-    W("<h1>Estimation vs logged hours — per area</h1>")
+    W("<h1>Estimation vs logged — per area <span class='sm'>(all figures in days, 1 d = 8 h)</span></h1>")
     W(f'<p class="meta">Project <b>{e(a.project)}</b> &middot; [{e(a.since or "…")} … {e(a.until or "…")}) &middot; {len(rows)} tickets</p>')
     if not rows:
         W('<p>No logged time for the roster in this window.</p>')
@@ -1505,20 +1505,20 @@ def main():
     W('<p class="foot">One row per ticket, with a column group per area (Backend / Frontend / QA). '
       '<b>Date</b> = the ticket\'s date (resolutiondate, else updated); tickets are selected and grouped into that month. '
       '<b>Arch gain B/F/Q &middot; OH%</b> (right after Final) is a single column giving each area\'s Architect gain <i>considering sub-bugs</i> '
-      '(A.Est vs Logged + Sub-bug h): B = backend, F = frontend, Q = QA; <b>OH%</b> is overhead\'s share of the ticket\'s total logged hours. '
+      '(A.Est vs Logged + Sub-bug, in days): B = backend, F = frontend, Q = QA; <b>OH%</b> is overhead\'s share of the ticket\'s total logged hours. '
       '<b>Main dev</b> = the roster developer of that area with the most logged hours on the ticket. '
-      '<b>Logged h</b> = hours booked by that area\'s developers. Hours logged by <b>overhead</b> people '
-      '(Architect / PO / DevOps / Consultant / management) are moved out of the areas into the <b>Overhead h</b> column, and each '
+      '<b>Logged d</b> = days booked by that area\'s developers (1 d = 8 h). Time logged by <b>overhead</b> people '
+      '(Architect / PO / DevOps / Consultant / management) are moved out of the areas into the <b>Overhead d</b> column, and each '
       'contributing person is named with their hours in the <b>Overhead people</b> column. '
-      '<b>Sub-bug h</b> / <b>#SB</b> = hours this area\'s developers logged fixing the ticket\'s child Bug/Sub-bug sub-issues, and '
+      '<b>Sub-bug d</b> / <b>#SB</b> = days this area\'s developers logged fixing the ticket\'s child Bug/Sub-bug sub-issues, and '
       'the count of such sub-bugs they worked on (attributed by the fixer\'s area, so nothing is lost when a sub-bug has no component). '
-      '<b>Total dev h</b> = Logged + Sub-bug h. <b>A.Est</b> (Architect, per-area estimate '
+      '<b>Total dev d</b> = Logged + Sub-bug d. <b>A.Est</b> (Architect, per-area estimate '
       'field &times;8) and <b>DL.Est</b> (Dev-lead; a US sums that area\'s child sub-task estimates, else the ticket estimate). '
       '<b>Arch/DL gain</b> = (Est&minus;Logged)/Est shown with / without sub-bug hours; green positive, red negative, "-" when meaningless. '
       'The per-ticket <b>AI</b> badge marks an area developed with AI assistance (the ticket carries an AI-metrics record for '
       'that area, or a same-area sub-task does); in the Totals, <b>AI-assisted</b> = AI-assisted tickets / total tickets for that area, and '
       '<b>% Logged</b> = that area\'s (or Overhead\'s) share of the total logged hours. '
-      '<b>Total log h</b> = logged across all groups (areas + Overhead). '
+      '<b>Total log d</b> = logged across all groups (areas + Overhead). '
       'Generated by <code>/oc-time-report</code>.</p>')
     doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
