@@ -918,7 +918,7 @@ def html_totals_table(rows, tab="all", month="all"):
                 f'AI {gspan1(g["aE_ai"], g["aL_ai"] + g["aB_ai"])} <span class="sm">({g["n_ai"]})</span>')
     h = [f"<div class=\"tw\" data-totals data-tab=\"{e(tab)}\" data-month=\"{e(month)}\"><table><thead><tr>"
          "<th>Area</th><th>Project</th><th class='r'>Tickets</th><th class='r'>A. Est d</th><th class='r'>DL. Est d</th>"
-         "<th class='r'>Total dev d</th><th class='r'>% Logged</th><th class='r'>Logged d</th><th class='r'>Sub-bug d</th><th class='r'>% Sub-bug</th>"
+         "<th class='r'>Total dev d</th><th class='r'>%</th><th class='r'>Logged d</th><th class='r'>Sub-bug d</th><th class='r'>% Sub-bug</th>"
          "<th class='r'>Arch gain (all &middot; noAI &middot; AI, w/ bugs)</th><th class='r'>DL gain</th><th class='r'>Sub-bugs</th></tr></thead><tbody>"]
     for ar in AREAS:
         g = tot[ar]
