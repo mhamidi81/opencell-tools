@@ -54,29 +54,40 @@ Provide Postman collection with:
 
 ### Test Data Variables
 
-**CRITICAL: The ONLY collection variable for building codes is a per-domain sequence number. Everything else is written literally in the request body.**
+**CRITICAL: The ONLY collection variable for building codes is a per-domain sequence number, referenced *directly in the request body*. Individual requests carry NO pre-request script for building codes — they reference the counter inline. Everything else is written literally in the body.**
 
-1. **Iteration number = a sequence, NOT a timestamp.** In the folder's first pre-request script, increment a stored counter:
+1. **The sequence counter is a collection variable, not per-request script logic.** Declare it once in the collection's `variable` list — e.g. `{ "key": "iteration_nr", "value": "1" }` — and reference `{{iteration_nr}}` directly in bodies (this is how the existing collections use `{{indexation_iteration_nr}}`). Do NOT use `Date.now()` / `{{$timestamp}}`: a timestamp is unreadable, non-reproducible, and breaks idempotency — a re-run produces different codes and cannot tear down what a previous run created.
+
+   Increment it **at most once per run, in a single dedicated init request at the very start of the suite** — never in each folder and never in each request. Put it in a top-level `Setup` folder as the first item, on a cheap dependency-free call such as `GET /v2/version` (this is the pattern the existing collections use):
    ```javascript
+   // pre-request of ONE init request (top-level Setup -> GET /v2/version) — not per folder, not per request
    let iterationNr = parseInt(pm.collectionVariables.get("iteration_nr") || "0", 10) + 1;
    pm.collectionVariables.set("iteration_nr", iterationNr);
    ```
-   Do NOT use `Date.now()` / `{{$timestamp}}` — a readable, reproducible sequence number is required.
+   US-Tests collections are validated against a freshly-cleared database, so even that single init is optional — a seeded collection variable referenced inline is enough.
 
-2. **Build codes as a descriptive literal prefix + the sequence number, written directly in the body** — do not hide them behind per-code variables:
+2. **Reference the counter inline in the body — never build a code in a request's pre-request script.** The most common mistake is a per-request script that manufactures a code (often from a timestamp) and stores it in a variable; do the opposite — no script, code built inline:
+   - ✅ in the body: `"code": "CONTRACT_TEST_SUB_FOR_CONTRACT_{{iteration_nr}}"`
+   - ❌ in a request pre-request script (exactly what NOT to do):
+     ```javascript
+     var run = String(Date.now());                       // timestamp — forbidden
+     pm.collectionVariables.set("acc", "MYACC_" + run);  // code built in a script AND hidden behind a variable — forbidden
+     ```
+     …then `"code": "{{acc}}"`. Write `"code": "MYACC_{{iteration_nr}}"` in the body instead.
+
+3. **Build codes as a descriptive literal prefix + the sequence number, written directly in the body** — do not hide them behind per-code variables:
    - ✅ `"code": "CONTRACT_TEST_SUB_FOR_CONTRACT_{{iteration_nr}}"`
    - ❌ `"code": "{{test_sub_code}}"` (forces the reader to hunt for what `test_sub_code` is)
 
-3. **Static values are literals, never variables.** A value that never changes (an article code `ART-STD`, an invoice type `COM`, a category `CONSUMPTION`, a seller `SELLER_FR`) is written directly in the body. Do NOT do `pm.collectionVariables.set("test_accounting_article_code", "ART-STD")` and then reference `{{test_accounting_article_code}}` — it makes request bodies unreadable. Only IDs the server generates at runtime (invoice id, line id) are stored in variables and referenced back.
+4. **Static values are literals, never variables.** A value that never changes (an article code `ART-STD`, an invoice type `COM`, a category `CONSUMPTION`, a seller `SELLER_FR`) is written directly in the body. Do NOT do `pm.collectionVariables.set("test_accounting_article_code", "ART-STD")` and then reference `{{test_accounting_article_code}}` — it makes request bodies unreadable. Only IDs the server generates at runtime (invoice id, line id) are stored in variables and referenced back.
 
-**Example:**
+**Example — the counter is seeded once as a collection variable, then used inline with no per-request script:**
 
-```javascript
-// Pre-request: only the sequence counter
-let iterationNr = parseInt(pm.collectionVariables.get("iteration_nr") || "0", 10) + 1;
-pm.collectionVariables.set("iteration_nr", iterationNr);
+```jsonc
+// collection variable, declared once in the collection's "variable" list:
+//   { "key": "iteration_nr", "value": "1" }
 
-// Request body: descriptive code + sequence, statics inline
+// request body — reference it directly; the request has NO pre-request script:
 {
     "code": "INVOICE_CRUD_BA_{{iteration_nr}}",
     "customerAccount": "INVOICE_CA_{{iteration_nr}}",

@@ -109,6 +109,7 @@ Locale/timezone-sensitive formatting, `Math.random()`, and `UUID.randomUUID()` a
 
 ### Mockito Best Practices
 
+- **CRITICAL: Annotate the test class with `@RunWith(MockitoJUnitRunner.class)` — NEVER `@RunWith(MockitoJUnitRunner.Silent.class)` (nor `Strictness.LENIENT` / `lenient()`).** The `Silent` runner disables strict stubbing, so unnecessary stubs and silent matcher mismatches (see *Build Expected Stub Values the Way Production Builds Them* below) go unreported instead of failing the test — producing green tests that prove nothing. When a test fails under the strict runner, fix or remove the offending stub; never silence it.
 - Use `@Mock` for dependencies
 - Use `@InjectMocks` for the class under test
 - Use `ArgumentCaptor` to verify complex arguments

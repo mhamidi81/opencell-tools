@@ -75,8 +75,8 @@ You will receive file paths of REST resource interfaces.
    - OAuth2 auth at collection level (Keycloak) — do NOT use Basic Auth
    - **For a NEW collection file, copy the collection-level OAuth2 `auth` block AND the collection-level pre-request and post-response (test) `event` scripts verbatim from `US-Tests/Opencell_Setup.postman_collection.json`** (token / `401`-retry handling, the `[SKIP]` convention, per-run initialisation, and the `" - fail"` success/expected-failure assertion). See POSTMAN_TESTING.md "Authorization".
    - Environment variable: `{{opencell.url}}` for base URL
-   - Test-data codes: follow the "Test Data Variables" rules in POSTMAN_TESTING.md — a per-domain `iteration_nr` sequence counter (incremented in a pre-request script) with codes built as an inline literal prefix + `{{iteration_nr}}` written directly in the body. Never use `Date.now()` / `{{$timestamp}}`, and never hide codes behind per-code variables. Static/reference codes are written as literals.
-   - Pre-request scripts to set the per-domain `iteration_nr` sequence counter
+   - Test-data codes: follow the "Test Data Variables" rules in POSTMAN_TESTING.md — a per-domain `iteration_nr` sequence counter declared as a collection variable and referenced inline in the body (codes built as a literal prefix + `{{iteration_nr}}`, e.g. `INTRD47162_ACC_{{iteration_nr}}`). Requests carry NO pre-request script for building codes. Never use `Date.now()` / `{{$timestamp}}`, and never hide codes behind per-code variables. Static/reference codes are written as literals.
+   - The `iteration_nr` counter is seeded as a collection variable; if it must be bumped for re-runnability, do it in a single init request at the start of the suite — never per folder or per request
    - **Every URL must match the endpoint map exactly — no guessing**
    - **Every request body must use only the fields from the DTO field list — no guessing**
 
