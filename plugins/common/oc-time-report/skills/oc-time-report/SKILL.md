@@ -27,9 +27,9 @@ Fixed columns per row: **Ticket · Date · Type · Fix ver · Title · Status ·
 - **Status / Final** — the ticket's Jira status and a **T** flag when terminal for its type (Bug: Done/Invalid; US: Ready for Sprint review / Need documentation / Ready for release / Released; others: Done).
 - **Overhead d** — logged hours from overhead people (Architect / PO / DevOps / Consultant / management) on the ticket. **Overhead people** — those contributors named with their individual hours (e.g. `Adil El Jaouhari 12.0h, Stéphane Chambrin 3.0h`). **Total log d** — logged across all groups (areas + Overhead).
 
-**Totals by area** — one row per area (Backend / Frontend / QA), then an **Overhead** row and a **Total** row, in **days** (1 d = 8 h). Column order: **Area · Project · Tickets · A. Est d · DL. Est d · Total dev d · % Logged · Logged d · Sub-bug d · % Sub-bug · Arch gain (all · noAI · AI) · DL gain · Sub-bugs**. **% Logged** (right after Total dev d) is each area's / Overhead's share of the total logged; **% Sub-bug** (right after Sub-bug d) is the sub-bug share of the area's own logged (sub-bug ÷ (logged + sub-bug)). The **Arch gain** cell shows **three with-bug gains** — for **all** tickets, the **no-AI** ones and the **AI** ones — each with its ticket count in ( ); **DL gain** is a single with-bug gain (both drop the "without bugs" variant here). In **every aggregate** (Totals-by-area, the per-month Totals, and the Arch-gain-by-month table) the gain is computed over **only the tickets that carry that estimate** — an unestimated ticket's logged hours are excluded from the gain (though the A.Est/Logged/Sub-bug columns still show the full sums) — which keeps an aggregate gain in the same range as the per-ticket gains. (The Markdown Totals keep a single row per area with the with/without-bug gains.)
+**Totals by area** — one row per area (Backend / Frontend / QA), then an **Overhead** row and a **Total** row, in **days** (1 d = 8 h). Column order: **Area · Project · Tickets · A. Est d · DL. Est d · Total dev d · % Logged · Logged d · Sub-bug d · % Sub-bug · Arch gain all · Arch gain noAI · Arch gain AI · DL gain · Sub-bugs**. **% Logged** (right after Total dev d) is each area's / Overhead's share of the total logged; **% Sub-bug** (right after Sub-bug d) is the sub-bug share of the area's own logged (sub-bug ÷ (logged + sub-bug)). There are **three separate Arch gain columns** — **all / noAI / AI** — each a with-bug gain with its ticket count in ( ); **DL gain** is a single with-bug gain. On the **Total** row the Arch-gain-all cell instead shows the plain ratio **Total dev d ÷ A. Est d** (e.g. `3.6×`). In **every aggregate** (Totals-by-area, the per-month Totals, and the Arch-gain-by-month table) the gain is computed over **only the tickets that carry that estimate** — an unestimated ticket's logged hours are excluded from the gain (though the A.Est/Logged/Sub-bug columns still show the full sums) — which keeps an aggregate gain in the same range as the per-ticket gains. (The Markdown Totals keep a single row per area with the with/without-bug gains.)
 
-**Arch gain by month (HTML).** Immediately after the Totals-by-area table, each tab shows an **Arch gain by month** summary: rows are months, columns are **Backend · Backend AI · Frontend · Frontend AI · QA · QA AI · Overhead**, and each cell is that group's **Architect gain (with sub-bugs)** with the **ticket count in ( )** (an empty group shows –; **Overhead** has no estimate, so it shows its **share of that month's total logged hours** — overhead logged ÷ all logged that month — with its ticket count). It recomputes live under the project filter.
+**Arch gain by month (HTML).** Immediately after the Totals-by-area table, each tab shows an **Arch gain by month** summary: rows are months, columns are **Backend · Backend AI · Frontend · Frontend AI · QA · QA AI · Overhead**, and each cell is that group's **Architect gain (with sub-bugs)** with the **ticket count in ( )** (an empty group shows –; **Overhead** has no estimate, so it shows its **share of that month's total logged hours** — overhead logged ÷ all logged that month — with its ticket count). Each **month is a link** to that month's Totals-by-area block below, and in that By-month block the **ticket count** next to the month is a link to the per-ticket matrix for the month. It recomputes live under the project/fix-version filters.
 
 Output: a compact **Markdown** printout (Totals by area overall + by month, then a condensed per-ticket table grouped by month), plus a styled **HTML** file (the full wide per-area matrix, split into **five tabs** — All · User Stories (All) · User Stories (Final) · Bugs (Final) · Bugs and Others — each with Totals-by-area overall + expandable per-month, and the per-ticket matrix grouped by month) and a **CSV** (the full matrix flattened), all date-stamped in `./docs/`. Users/developers are ordered **by area, then name**.
 
@@ -919,7 +919,7 @@ def html_totals_table(rows, tab="all", month="all"):
     h = [f"<div class=\"tw\" data-totals data-tab=\"{e(tab)}\" data-month=\"{e(month)}\"><table><thead><tr>"
          "<th>Area</th><th>Project</th><th class='r'>Tickets</th><th class='r'>A. Est d</th><th class='r'>DL. Est d</th>"
          "<th class='r'>Total dev d</th><th class='r'>%</th><th class='r'>Logged d</th><th class='r'>Sub-bug d</th><th class='r'>% Sub-bug</th>"
-         "<th class='r'>Arch gain (all &middot; noAI &middot; AI, w/ bugs)</th><th class='r'>DL gain</th><th class='r'>Sub-bugs</th></tr></thead><tbody>"]
+         "<th class='r'>Arch gain all</th><th class='r'>Arch gain noAI</th><th class='r'>Arch gain AI</th><th class='r'>DL gain</th><th class='r'>Sub-bugs</th></tr></thead><tbody>"]
     for ar in AREAS:
         g = tot[ar]
         if not g["tickets"]: continue
@@ -927,19 +927,23 @@ def html_totals_table(rows, tab="all", month="all"):
                  f"<td class='r'>{days(g['aEst'])}</td><td class='r'>{days(g['dlEst'])}</td>"
                  f"<td class='r'>{days(g['logged']+g['subBug'])}</td><td class='r'>{pl(g['logged'])}</td><td class='r'>{days(g['logged'])}</td>"
                  f"<td class='r'>{days(g['subBug'])}</td><td class='r'>{pctsub(g['logged'], g['subBug'])}</td>"
-                 f"<td class='r'>{archcell(g)}</td>"
+                 f"<td class='r'>{gspan1(g['aE'], g['aL'] + g['aB'])} <span class='sm'>({g['tickets']})</span></td>"
+                 f"<td class='r'>{gspan1(g['aE_no'], g['aL_no'] + g['aB_no'])} <span class='sm'>({g['n_no']})</span></td>"
+                 f"<td class='r'>{gspan1(g['aE_ai'], g['aL_ai'] + g['aB_ai'])} <span class='sm'>({g['n_ai']})</span></td>"
                  f"<td class='r'>{gspan1(g['dE'], g['dL'] + g['dB'])}</td><td class='r'>{g['bugs']}</td></tr>")
     h.append(f"<tr><td class='name'>Overhead</td><td class='proj'>All</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td>"
              f"<td class='r'>{days(archpr_tot)}</td><td class='r'>{pl(archpr_tot)}</td><td class='r'>{days(archpr_tot)}</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td>"
-             f"<td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td></tr>")
+             f"<td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td><td class='r'>&ndash;</td></tr>")
     t_aest = sum(tot[ar]["aEst"] for ar in AREAS); t_dlest = sum(tot[ar]["dlEst"] for ar in AREAS)
     t_sub_h = sum(tot[ar]["subBug"] for ar in AREAS); t_log = sum(tot[ar]["logged"] for ar in AREAS)
     t_bugs = sum(tot[ar]["bugs"] for ar in AREAS)
     grand_dev = days(grand_log + t_sub_h)   # Total dev = all logged (areas + Overhead) + all sub-bug
+    t_aest_d = days(t_aest)
+    ratio = f"{round(grand_dev / t_aest_d, 2)}&times;" if t_aest_d else "&ndash;"   # Total row Arch gain = Total dev d / A.Est d
     h.append(f"<tr class='tot'><td class='name'>Total</td><td class='proj'>All</td><td></td>"
-             f"<td class='r'>{days(t_aest)}</td><td class='r'>{days(t_dlest)}</td>"
+             f"<td class='r'>{t_aest_d}</td><td class='r'>{days(t_dlest)}</td>"
              f"<td class='r'>{grand_dev}</td><td class='r'>100%</td><td class='r'>{days(grand_log)}</td><td class='r'>{days(t_sub_h)}</td><td class='r'>{pctsub(t_log, t_sub_h)}</td>"
-             f"<td></td><td></td><td class='r'>{t_bugs}</td></tr>")
+             f"<td class='r'>{ratio}</td><td></td><td></td><td></td><td class='r'>{t_bugs}</td></tr>")
     h.append("</tbody></table></div>")
     return "".join(h)
 
@@ -954,7 +958,7 @@ def html_month_gain_table(rows, tab="all"):
          + "".join(f'<th class="r">{e(lbl)}</th>' for _, _, lbl in MG_COLS) + "</tr></thead><tbody>"]
     for m in months:
         mr = [r for r in rows if r["month"] == m]
-        h.append(f'<tr><td class="name">{e(m)}</td>')
+        h.append(f'<tr><td class="name"><a href="#tot-{e(tab)}-{e(m)}">{e(m)}</a></td>')
         for ar, aiflag, _ in MG_COLS:
             if ar == "overhead":
                 cnt = sum(1 for r in mr if r["archprH"])
@@ -1049,11 +1053,12 @@ def html_report_body(rs, tab="all"):
     w('<p class="bm">By month</p>')
     for i, m in enumerate(ms):
         mr = [r for r in rs if r["month"] == m]; op = " open" if i == 0 else ""
-        w(f'<details{op}><summary>{e(m)} <span class="cnt">({len(mr)} tickets)</span></summary>{html_totals_table(mr, tab, m)}</details>')
+        w(f'<details id="tot-{e(tab)}-{e(m)}"{op}><summary>{e(m)} '
+          f'<span class="cnt">(<a href="#mtx-{e(tab)}-{e(m)}">{len(mr)} tickets</a>)</span></summary>{html_totals_table(mr, tab, m)}</details>')
     w("<h2>Per ticket &mdash; per-area columns</h2>")
     for i, m in enumerate(ms):
         mr = [r for r in rs if r["month"] == m]; op = " open" if i == 0 else ""
-        w(f'<details{op}><summary>{e(m)} <span class="cnt">({len(mr)} tickets)</span></summary>'
+        w(f'<details id="mtx-{e(tab)}-{e(m)}"{op}><summary>{e(m)} <span class="cnt">({len(mr)} tickets)</span></summary>'
           f'<div class="tw wide"><table class="matrix">{html_matrix_head()}<tbody>{html_matrix_body(mr)}</tbody></table></div></details>')
     return "".join(h)
 
@@ -1310,22 +1315,24 @@ PROJECT_FILTER_JS = r"""<script>
       oh+=r.oh; grand+=r.be[2]+r.fe[2]+r.qa[2]+r.oh;
     }
     function psub(lg,sb){ var den=lg+sb; return den?Math.round(sb/den*100)+'%':'&ndash;'; }
-    function arch(g){ return g1(g.aE,g.aL+g.aB)+' <span class="sm">('+g.tickets+')</span> &middot; noAI '+g1(g.aE_no,g.aL_no+g.aB_no)+' <span class="sm">('+g.n_no+')</span> &middot; AI '+g1(g.aE_ai,g.aL_ai+g.aB_ai)+' <span class="sm">('+g.n_ai+')</span>'; }
+    function ac(est,lb,n){ return g1(est,lb)+' <span class="sm">('+n+')</span>'; }
     var out='';
     ['backend','frontend','qa'].forEach(function(ar){ var g=A[ar]; if(!g.tickets) return;
       out+='<tr><td class="name">'+LABEL[ar]+'</td><td class="proj">'+projLabel+'</td><td class="r">'+g.tickets+'</td>'
         +'<td class="r">'+d(g.aEst)+'</td><td class="r">'+d(g.dlEst)+'</td><td class="r">'+d(g.logged+g.subBug)+'</td>'
         +'<td class="r">'+pl(g.logged,grand)+'</td><td class="r">'+d(g.logged)+'</td><td class="r">'+d(g.subBug)+'</td><td class="r">'+psub(g.logged,g.subBug)+'</td>'
-        +'<td class="r">'+arch(g)+'</td><td class="r">'+g1(g.dE,g.dL+g.dB)+'</td><td class="r">'+g.bugs+'</td></tr>';
+        +'<td class="r">'+ac(g.aE,g.aL+g.aB,g.tickets)+'</td><td class="r">'+ac(g.aE_no,g.aL_no+g.aB_no,g.n_no)+'</td><td class="r">'+ac(g.aE_ai,g.aL_ai+g.aB_ai,g.n_ai)+'</td>'
+        +'<td class="r">'+g1(g.dE,g.dL+g.dB)+'</td><td class="r">'+g.bugs+'</td></tr>';
     });
     out+='<tr><td class="name">Overhead</td><td class="proj">'+projLabel+'</td><td class="r">&ndash;</td><td class="r">&ndash;</td><td class="r">&ndash;</td>'
       +'<td class="r">'+d(oh)+'</td><td class="r">'+pl(oh,grand)+'</td><td class="r">'+d(oh)+'</td><td class="r">&ndash;</td><td class="r">&ndash;</td>'
-      +'<td class="r">&ndash;</td><td class="r">&ndash;</td><td class="r">&ndash;</td></tr>';
+      +'<td class="r">&ndash;</td><td class="r">&ndash;</td><td class="r">&ndash;</td><td class="r">&ndash;</td><td class="r">&ndash;</td></tr>';
     var tA=0,tD=0,tsub=0,tlog=0,tbugs=0;
     ['backend','frontend','qa'].forEach(function(ar){ var g=A[ar]; tA+=g.aEst; tD+=g.dlEst; tsub+=g.subBug; tlog+=g.logged; tbugs+=g.bugs; });
+    var ratio = tA ? (Math.round((grand+tsub)/tA*100)/100+'&times;') : '&ndash;';
     out+='<tr class="tot"><td class="name">Total</td><td class="proj">'+projLabel+'</td><td></td><td class="r">'+d(tA)+'</td><td class="r">'+d(tD)+'</td>'
       +'<td class="r">'+d(grand+tsub)+'</td><td class="r">'+(grand?'100%':'&ndash;')+'</td><td class="r">'+d(grand)+'</td><td class="r">'+d(tsub)+'</td><td class="r">'+psub(tlog,tsub)+'</td>'
-      +'<td></td><td></td><td class="r">'+tbugs+'</td></tr>';
+      +'<td class="r">'+ratio+'</td><td></td><td></td><td></td><td class="r">'+tbugs+'</td></tr>';
     return out;
   }
 
@@ -1382,6 +1389,15 @@ PROJECT_FILTER_JS = r"""<script>
   var ps=document.getElementById('projfilter'), fs=document.getElementById('fixvfilter');
   if(ps) ps.addEventListener('change', apply);
   if(fs) fs.addEventListener('change', apply);
+  // clicking a month link (Arch-gain-by-month date, or a "N tickets" count) opens the target <details>
+  document.addEventListener('click', function(ev){
+    var t=ev.target, a=null;
+    while(t && t!==document){ if(t.tagName==='A'){ a=t; break; } t=t.parentNode; }
+    if(!a) return; var href=a.getAttribute('href')||'';
+    if(href.indexOf('#tot-')!==0 && href.indexOf('#mtx-')!==0) return;
+    var el=document.getElementById(href.slice(1)); var p=el;
+    while(p){ if(p.tagName==='DETAILS') p.open=true; p=p.parentNode; }
+  });
   apply();
 })();
 </script>"""
