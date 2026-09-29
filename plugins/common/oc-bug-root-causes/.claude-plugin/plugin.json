@@ -1,0 +1,5 @@
+{
+  "name": "oc-bug-root-causes",
+  "description": "Reclassify a period's Jira bugs whose Root cause is \"Development issue\" onto a granular developer-mistake taxonomy (null-handling, dto-payload-mapping, update-overwrites-state, ...), judged from the bug's Jira text and the diff of the PR that fixed it. Regression is recorded as a separate flag. Ranks the categories per area with regression rate and evidence quality, prints Markdown and writes a date-stamped HTML + CSV to ./docs/. Read-only. Jira via direct Cloud REST (JIRA_API_TOKEN), Bitbucket via REST (BITBUCKET_ACCESS_TOKEN, optional - without it the run is Jira-only).",
+  "version": "1.0.0"
+}
