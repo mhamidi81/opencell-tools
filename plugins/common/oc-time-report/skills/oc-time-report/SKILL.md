@@ -27,7 +27,7 @@ Fixed columns per row: **Ticket · Date · Type · Fix ver · Title · Status ·
 - **Status / Final** — the ticket's Jira status and a **T** flag when terminal for its type (Bug: Done/Invalid; US: Ready for Sprint review / Need documentation / Ready for release / Released; others: Done).
 - **Overhead d** — logged hours from overhead people (Architect / PO / DevOps / Consultant / management) on the ticket. **Overhead people** — those contributors named with their individual hours (e.g. `Adil El Jaouhari 12.0h, Stéphane Chambrin 3.0h`). **Total log d** — logged across all groups (areas + Overhead).
 
-**Totals by area** — one row per area (Backend / Frontend / QA), then an **Overhead** row and a **Total** row, in **days** (1 d = 8 h). Column order: **Area · Project · Tickets · A. Est d · DL. Est d · Total dev d · % Logged · Logged d · Sub-bug d · % Sub-bug · Arch gain all · Arch gain noAI · Arch gain AI · DL gain · Sub-bugs**. **% Logged** (right after Total dev d) is each area's / Overhead's share of the total logged; **% Sub-bug** (right after Sub-bug d) is the sub-bug share of the area's own logged (sub-bug ÷ (logged + sub-bug)). There are **three separate Arch gain columns** — **all / noAI / AI** — each a with-bug gain with its ticket count in ( ); **DL gain** is a single with-bug gain. On the **Total** row the Arch-gain-all cell instead shows the plain ratio **Total dev d ÷ A. Est d** (e.g. `3.6×`). In **every aggregate** (Totals-by-area, the per-month Totals, and the Arch-gain-by-month table) the gain is computed over **only the tickets that carry that estimate** — an unestimated ticket's logged hours are excluded from the gain (though the A.Est/Logged/Sub-bug columns still show the full sums) — which keeps an aggregate gain in the same range as the per-ticket gains. (The Markdown Totals keep a single row per area with the with/without-bug gains.)
+**Totals by area** — one row per area (Backend / Frontend / QA), then an **Overhead** row and a **Total** row, in **days** (1 d = 8 h). Column order: **Area · Project · Tickets · A. Est d · DL. Est d · Total dev d · % Logged · Logged d · Sub-bug d · % Sub-bug · Arch gain all · Arch gain noAI · Arch gain AI · DL gain · Sub-bugs**. **% Logged** (right after Total dev d) is each area's / Overhead's share of the total logged; **% Sub-bug** (right after Sub-bug d) is the sub-bug share of the area's own logged (sub-bug ÷ (logged + sub-bug)). There are **three separate Arch gain columns** — **all / noAI / AI** — each a with-bug gain with its ticket count in ( ); **DL gain** is a single with-bug gain. On the **Total** row the Arch-gain-all cell shows the overall gain **(A. Est d − Total dev d) / A. Est d** — i.e. Total dev d ÷ A. Est d expressed as a gain % (e.g. a 1.67× overrun shows as −67%). In **every aggregate** (Totals-by-area, the per-month Totals, and the Arch-gain-by-month table) the gain is computed over **only the tickets that carry that estimate** — an unestimated ticket's logged hours are excluded from the gain (though the A.Est/Logged/Sub-bug columns still show the full sums) — which keeps an aggregate gain in the same range as the per-ticket gains. (The Markdown Totals keep a single row per area with the with/without-bug gains.)
 
 **Arch gain by month (HTML).** Immediately after the Totals-by-area table, each tab shows an **Arch gain by month** summary: rows are months, columns are **Backend · Backend AI · Frontend · Frontend AI · QA · QA AI · Overhead**, and each cell is that group's **Architect gain (with sub-bugs)** with the **ticket count in ( )** (an empty group shows –; **Overhead** has no estimate, so it shows its **share of that month's total logged hours** — overhead logged ÷ all logged that month — with its ticket count). Each **month is a link** to that month's Totals-by-area block below, and in that By-month block the **ticket count** next to the month is a link to the per-ticket matrix for the month. It recomputes live under the project/fix-version filters.
 
@@ -939,11 +939,11 @@ def html_totals_table(rows, tab="all", month="all"):
     t_bugs = sum(tot[ar]["bugs"] for ar in AREAS)
     grand_dev = days(grand_log + t_sub_h)   # Total dev = all logged (areas + Overhead) + all sub-bug
     t_aest_d = days(t_aest)
-    ratio = f"{round(grand_dev / t_aest_d, 2)}&times;" if t_aest_d else "&ndash;"   # Total row Arch gain = Total dev d / A.Est d
+    tot_gain = gspan1(t_aest, grand_log + t_sub_h)   # Total row Arch gain = (A.Est - Total dev)/A.Est, i.e. -(Total dev/A.Est-1)
     h.append(f"<tr class='tot'><td class='name'>Total</td><td class='proj'>All</td><td></td>"
              f"<td class='r'>{t_aest_d}</td><td class='r'>{days(t_dlest)}</td>"
              f"<td class='r'>{grand_dev}</td><td class='r'>100%</td><td class='r'>{days(grand_log)}</td><td class='r'>{days(t_sub_h)}</td><td class='r'>{pctsub(t_log, t_sub_h)}</td>"
-             f"<td class='r'>{ratio}</td><td></td><td></td><td></td><td class='r'>{t_bugs}</td></tr>")
+             f"<td class='r'>{tot_gain}</td><td></td><td></td><td></td><td class='r'>{t_bugs}</td></tr>")
     h.append("</tbody></table></div>")
     return "".join(h)
 
@@ -1329,10 +1329,10 @@ PROJECT_FILTER_JS = r"""<script>
       +'<td class="r">&ndash;</td><td class="r">&ndash;</td><td class="r">&ndash;</td><td class="r">&ndash;</td><td class="r">&ndash;</td></tr>';
     var tA=0,tD=0,tsub=0,tlog=0,tbugs=0;
     ['backend','frontend','qa'].forEach(function(ar){ var g=A[ar]; tA+=g.aEst; tD+=g.dlEst; tsub+=g.subBug; tlog+=g.logged; tbugs+=g.bugs; });
-    var ratio = tA ? (Math.round((grand+tsub)/tA*100)/100+'&times;') : '&ndash;';
+    var totg = g1(tA, grand+tsub);   // Total row Arch gain = (A.Est - Total dev)/A.Est
     out+='<tr class="tot"><td class="name">Total</td><td class="proj">'+projLabel+'</td><td></td><td class="r">'+d(tA)+'</td><td class="r">'+d(tD)+'</td>'
       +'<td class="r">'+d(grand+tsub)+'</td><td class="r">'+(grand?'100%':'&ndash;')+'</td><td class="r">'+d(grand)+'</td><td class="r">'+d(tsub)+'</td><td class="r">'+psub(tlog,tsub)+'</td>'
-      +'<td class="r">'+ratio+'</td><td></td><td></td><td></td><td class="r">'+tbugs+'</td></tr>';
+      +'<td class="r">'+totg+'</td><td></td><td></td><td></td><td class="r">'+tbugs+'</td></tr>';
     return out;
   }
 
