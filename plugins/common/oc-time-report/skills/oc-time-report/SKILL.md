@@ -14,7 +14,7 @@ Fixed columns per row: **Ticket · Date · Type · Title · Status · Final**, t
 
 **Interactive HTML — project filter.** The page has a **Project filter** picklist (the distinct Jira ticket prefixes, e.g. INTRD / MACRD, plus *All*). Choosing a project **live-filters** the Totals-by-area tables and the per-ticket rows and **recomputes % Logged, the per-area figures, the Total row and the grand total** in the browser (no reload). The Totals-by-area tables carry a **Project** column (right after Area) showing the active filter. (The CSV is left unfiltered — filter it in a spreadsheet.)
 
-- **Arch gain B/F/Q** (right after Final) — one column with **three percentages**: each area's **Architect gain considering sub-bugs** = `(A.Est − (Logged + Sub-bug h)) / A.Est`, labelled **B** (backend), **F** (frontend), **Q** (QA); green positive / red negative, `-` when meaningless.
+- **Arch gain B/F/Q · OH%** (right after Final) — one column with each area's **Architect gain considering sub-bugs** = `(A.Est − (Logged + Sub-bug h)) / A.Est`, labelled **B** (backend), **F** (frontend), **Q** (QA); green positive / red negative, `-` when meaningless — plus **OH%**, overhead's share of the ticket's total logged hours.
 - **Logged+bug B/F/Q/OH** (right after the Arch-gain column) — the ticket's **total logged hours including sub-bug hours** for each area (B/F/Q) and the **overhead** total (OH).
 - **Main dev** (per area) — the area's roster developer with the **most total work on the ticket** = non-bug logged + their own **sub-bug-fixing** hours. So a genuine bug-fixer outranks someone who only did a token review/touch on the parent. (A US worked by all three areas therefore credits three developers.)
 - **Date** — the ticket's **resolutiondate** (else **updated**); tickets are **grouped by that month**.
@@ -967,7 +967,7 @@ MATRIX_SUB = ["Main dev", "A.Est", "DL.Est", "Tot dev", "Logged", "Sub-bug h", "
 def html_matrix_head():
     head1 = ['<th rowspan="2">Ticket</th><th rowspan="2">Date</th><th rowspan="2">Type</th><th rowspan="2">Title</th>'
              '<th rowspan="2">Status</th><th rowspan="2" class="c">F</th>'
-             '<th rowspan="2" class="c gaincol">Arch gain B/F/Q<br><span class="sm">w/ bugs</span></th>'
+             '<th rowspan="2" class="c gaincol">Arch gain B/F/Q &middot; OH%<br><span class="sm">w/ bugs</span></th>'
              '<th rowspan="2" class="c gaincol">Logged+bug B/F/Q/OH<br><span class="sm">hours</span></th>']
     for ar in AREAS:
         head1.append(f'<th colspan="{len(MATRIX_SUB)}" class="grp {ar}">{AREA_LABEL[ar]}</th>')
@@ -992,6 +992,8 @@ def html_matrix_body(rows):
         for ar in AREAS:
             x = r["areas"][ar]
             ag_parts.append(f'{AG_LBL[ar]}&nbsp;{gain_span(gain_pct(x["aEst"], x["logged"] + x["subBug"]))}')
+        oh_pct = round(r["archprH"] / r["totalLogged"] * 100) if r["totalLogged"] else None   # overhead share of ticket's total logged
+        ag_parts.append(f'OH&nbsp;{oh_pct}%' if oh_pct is not None else 'OH&nbsp;&ndash;')
         tds.append(f'<td class="c gaincol sm">{" ".join(ag_parts)}</td>')
         # total logged incl. sub-bug hours, per area + overhead
         lb_parts = [f'{AG_LBL[ar]}&nbsp;{round(r["areas"][ar]["logged"] + r["areas"][ar]["subBug"], 1)}' for ar in AREAS]
@@ -1502,8 +1504,8 @@ def main():
         W(PROJECT_FILTER_JS)
     W('<p class="foot">One row per ticket, with a column group per area (Backend / Frontend / QA). '
       '<b>Date</b> = the ticket\'s date (resolutiondate, else updated); tickets are selected and grouped into that month. '
-      '<b>Arch gain B/F/Q</b> (right after Final) is a single column giving each area\'s Architect gain <i>considering sub-bugs</i> '
-      '(A.Est vs Logged + Sub-bug h): B = backend, F = frontend, Q = QA. '
+      '<b>Arch gain B/F/Q &middot; OH%</b> (right after Final) is a single column giving each area\'s Architect gain <i>considering sub-bugs</i> '
+      '(A.Est vs Logged + Sub-bug h): B = backend, F = frontend, Q = QA; <b>OH%</b> is overhead\'s share of the ticket\'s total logged hours. '
       '<b>Main dev</b> = the roster developer of that area with the most logged hours on the ticket. '
       '<b>Logged h</b> = hours booked by that area\'s developers. Hours logged by <b>overhead</b> people '
       '(Architect / PO / DevOps / Consultant / management) are moved out of the areas into the <b>Overhead h</b> column, and each '
