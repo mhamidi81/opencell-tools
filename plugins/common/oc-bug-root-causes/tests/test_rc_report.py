@@ -142,3 +142,96 @@ def test_cause_is_trimmed_and_new_categories_are_labelled():
     assert row["is_new"] and "dev-root-causes.md" in row["definition"]
     assert len(m["bugs"][0]["cause"]) == rr.CAUSE_LIMIT
     assert m["new_categories"] == ["brand-new"]
+
+
+import json
+
+
+def sample_model():
+    bugs = [bug("A-1", "portal", summary="Grid | broken <script>"), bug("A-2", "core"),
+            bug("A-3", None)]
+    asg = {"A-1": a("null-handling", reg=True, cause="guard missing on `cfg`"),
+           "A-2": a("brand-new"), "A-3": a("insufficient-evidence")}
+    rows = [{"key": "A-1", "evidence": "pr", "pr_url": "https://bb/pr/1"},
+            {"key": "A-2", "evidence": "jira", "pr_url": None},
+            {"key": "A-3", "evidence": "jira", "pr_url": None}]
+    return model_for(bugs, asg, rows, new=["brand-new"])
+
+
+def test_markdown_header_ranking_and_sections():
+    md = rr.render_markdown(sample_model())
+    assert md.startswith("# Development-issue root causes")
+    assert "**3** bugs · PR evidence **1** · Jira-only **2** · regressions **1**" in md
+    assert "| `null-handling` | 1 | 33.3% | 1 | 0 | 0 | 1 (100%) | 1 / 0 | 0 |" in md
+    assert "`brand-new` **(new)**" in md
+    assert "## Ranking — Frontend" in md and "## Ranking — Backend" in md
+    assert "Grid \\| broken" in md
+    assert "[PR](https://bb/pr/1)" in md
+    assert "## Insufficient evidence — 1 bugs" in md
+    assert "## No resolvable area — 1 bugs" in md
+    assert "## New categories" in md
+
+
+def test_single_area_markdown_shows_one_ranking():
+    md = rr.render_markdown(model_for([bug("A-1")], {"A-1": a("api-contract")}, repo="portal"))
+    assert md.count("## Ranking") == 1
+
+
+def test_csv_has_one_row_per_bug():
+    rows = rr.render_csv_rows(sample_model())
+    assert rows[0] == rr.CSV_HEADER
+    assert len(rows) == 4
+    first = dict(zip(rows[0], rows[1]))
+    assert first["key"] == "A-1" and first["regression"] == "yes"
+    assert first["evidence"] == "pr" and first["pr_url"] == "https://bb/pr/1"
+    assert first["cause"] == "guard missing on `cfg`"
+    assert dict(zip(rows[0], rows[3]))["area"] == ""
+
+
+def test_html_escapes_content_and_offers_area_tabs():
+    page = rr.render_html(sample_model(), today="2026-09-29")
+    assert "Grid | broken &lt;script&gt;" in page
+    assert 'data-view="portal"' in page and 'data-view="core"' in page
+    assert 'class="tab"' in page
+    assert "prefers-color-scheme:dark" in page
+
+
+def test_single_area_html_has_no_tabs():
+    page = rr.render_html(model_for([bug("A-1")], {"A-1": a("api-contract")}, repo="portal"),
+                          today="2026-09-29")
+    assert 'class="tab"' not in page
+
+
+def write_run(tmp_path, parts):
+    (tmp_path / "bugs.json").write_text(json.dumps({
+        "repo": "both", "window": {"since": "2026-09-01", "until": "2026-10-01"},
+        "projects": ["INTRD"], "bugs": [bug("A-1"), bug("A-2", "core")]}))
+    (tmp_path / "ci.jsonl").write_text(
+        json.dumps({"key": "A-1", "evidence": "jira", "pr_url": None}) + "\n"
+        + json.dumps({"key": "A-2", "evidence": "jira", "pr_url": None}) + "\n")
+    (tmp_path / "tax.md").write_text(TAXONOMY_MD)
+    paths = []
+    for i, part in enumerate(parts, 1):
+        p = tmp_path / f"{i:03d}.json"
+        p.write_text(json.dumps(part))
+        paths.append(str(p))
+    return (["--bugs", str(tmp_path / "bugs.json"), "--classify", str(tmp_path / "ci.jsonl"),
+             "--assignments", *paths, "--taxonomy", str(tmp_path / "tax.md"),
+             "--out", str(tmp_path / "docs" / "r.html"), "--csv", str(tmp_path / "docs" / "r.csv"),
+             "--model", str(tmp_path / "model.json")])
+
+
+def test_main_merges_parts_and_writes_every_report(tmp_path, capsys):
+    args = write_run(tmp_path, [{"A-1": a("null-handling")}, {"A-2": a("api-contract")}])
+    assert rr.main(args) == 0
+    assert (tmp_path / "docs" / "r.html").exists()
+    assert (tmp_path / "docs" / "r.csv").exists()
+    assert json.loads((tmp_path / "model.json").read_text())["total"] == 2
+    assert "# Development-issue root causes" in capsys.readouterr().out
+
+
+def test_main_exits_2_and_names_the_missing_bug(tmp_path, capsys):
+    args = write_run(tmp_path, [{"A-1": a("null-handling")}])
+    assert rr.main(args) == 2
+    err = capsys.readouterr().err
+    assert "A-2" in err and "re-run" in err
