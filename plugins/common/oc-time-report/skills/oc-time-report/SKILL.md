@@ -1337,12 +1337,12 @@ PROJECT_FILTER_JS = r"""<script>
   }
 
   var MGCOLS=[['backend',0],['backend',1],['frontend',0],['frontend',1],['qa',0],['qa',1],['overhead',null]];
-  function monthGainBody(rows){
+  function monthGainBody(rows, tab){
     var bym={}, order=[];
     for(var i=0;i<rows.length;i++){ var m=rows[i].m; if(!(m in bym)){ bym[m]=[]; order.push(m); } bym[m].push(rows[i]); }
     order.sort(function(a,b){ return a<b?1:(a>b?-1:0); });
     var out='';
-    for(var k=0;k<order.length;k++){ var m=order[k], mr=bym[m]; out+='<tr><td class="name">'+m+'</td>';
+    for(var k=0;k<order.length;k++){ var m=order[k], mr=bym[m]; out+='<tr><td class="name"><a href="#tot-'+tab+'-'+m+'">'+m+'</a></td>';
       for(var ci=0;ci<MGCOLS.length;ci++){ var ar=MGCOLS[ci][0], af=MGCOLS[ci][1];
         if(ar==='overhead'){ var oc=0, oh=0, mtot=0;
           for(var j=0;j<mr.length;j++){ if(mr[j].oh) oc++; oh+=mr[j].oh; mtot+=mr[j].be[2]+mr[j].fe[2]+mr[j].qa[2]+mr[j].oh; }
@@ -1370,7 +1370,7 @@ PROJECT_FILTER_JS = r"""<script>
     });
     document.querySelectorAll('[data-monthgain]').forEach(function(div){
       var tab=div.getAttribute('data-tab');
-      var tb=div.querySelector('tbody'); if(tb) tb.innerHTML=monthGainBody(ROWS.filter(function(r){ return F(r,tab); }));
+      var tb=div.querySelector('tbody'); if(tb) tb.innerHTML=monthGainBody(ROWS.filter(function(r){ return F(r,tab); }), tab);
     });
     document.querySelectorAll('[data-grand]').forEach(function(p){
       var t=agg(ROWS.filter(function(r){ return F(r,p.getAttribute('data-tab')); })), tsub=t.A.backend.subBug+t.A.frontend.subBug+t.A.qa.subBug;
