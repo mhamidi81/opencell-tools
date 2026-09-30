@@ -1,27 +1,21 @@
 ---
 name: oc-fn-func-design
-version: 1.33.0
-updated: 2026-09-17T13:02:56+02:00
+version: 1.33.1
+updated: 2026-09-30T11:54:26+02:00
 author: Stéphane Chambrin
 description: >
-  Rules and reference data for working with Jira issues in the Opencell INTRD project
-  (opencellsoft.atlassian.net) and the CR (Change Requests) project. Use this skill whenever the
-  user mentions Jira, INTRD, User Story, Epic, Bug, Feature, Initiative, or a Change Request / CR —
-  including creating, reading, updating, or writing content for any issue type. Also trigger when
-  the user asks about custom fields, acceptance criteria, functional design, requirements,
-  product-area Components (modules), issue templates for Opencell, or triaging / responding to
-  Change Requests (the CR project, the Product response decision field, To Study / In Study) —
-  and for the scaffold/read/review side of a Story's Technical Design (creating the empty
-  customfield_10137 template, or reviewing it). Authoring/filling the Technical Design field
-  is the architect lane — defer to oc-ar-tech-design for "write the technical design for INTRD-*".
-  Also trigger on the PO review lane: reviewing, validating or rejecting a delivered Story,
-  a PO verdict, the To Review by PO / Validated by PO / Rejected by PO / PO can't test yet
-  transitions, INTRD workflow transitions generally, and the Sub-bug issue type. The same lane
-  covers retesting a delivered Bug fix ("test this ticket for me", In Test, Test failed) and how
-  to write the result up — the Case / Expected / Actual test-report comment, reassigning a
-  rejection to the developer, and the short thank-you on a pass.
-  Always load this skill before any Atlassian Rovo Jira tool call — or direct Jira
-  REST API calls — on the INTRD or CR projects.
+  Rules and data for Jira issues in the Opencell INTRD project and the CR (Change Requests)
+  project. Use whenever the user mentions Jira, INTRD, User Story, Epic, Bug, Feature,
+  Initiative or a Change Request / CR — creating, reading, updating or writing any issue type
+  — or asks about custom fields, acceptance criteria, functional design, requirements,
+  Components (modules), issue templates, or triaging / responding to Change Requests (Product
+  response field, To Study / In Study). Technical Design (customfield_10137):
+  scaffold/read/review only; authoring is the architect lane — defer to oc-ar-tech-design.
+  Also the PO review lane: reviewing, validating or rejecting a delivered Story (To Review /
+  Validated / Rejected by PO, PO can't test yet), INTRD workflow transitions, the Sub-bug
+  type, and retesting a Bug fix ("test this ticket for me", In Test, Test failed) with its
+  Case / Expected / Actual report. Always load before any Atlassian Rovo Jira tool call or
+  direct Jira REST call on INTRD or CR.
 ---
 
 # Jira — INTRD & CR projects
