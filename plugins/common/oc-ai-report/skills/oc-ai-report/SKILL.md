@@ -9,7 +9,7 @@ argument-hint: "[--since 2026-07-01] [--until <tomorrow>] [--project INTRD,MACRD
 Aggregate the machine-readable **AI-usage records** that `/oc-be-calculate-ai-use` (and the future frontend / QA equivalents) write to the **"AI metrics"** field (`customfield_10745`), across many tickets over a time window, into one report:
 
 - A **summary table by user** (one row per developer, aggregated), then **details per user by ticket**, then **totals by area** (a plain sum of the detail rows).
-- **AI metrics** (contribution / retention / tests / requests) are grouped by each record's **domain** (`backend`/`frontend`/`qa`, per developer). Each detail row also shows the **ticket type** (US / Bug / Enabler) and **two estimates per area**: **A. Est h** (Architect) from the Story's estimate custom fields — *Architect estimate back* (`customfield_10157`), *front* (`customfield_10158`), *QA estimate* (`customfield_10189`), days ×8, else the ticket's own estimate; and **DL. Est h** (Dev-lead) from the ticket's *estimation field* — for a User Story the sum of that area's child **sub-task** estimates (sub-bug estimates excluded), for a Bug/Enabler the ticket's own estimate. A **Sub-bugs** count and a separate **Sub-bug h** (hours logged on child Bug/Sub-bug sub-issues) are attributed per area. **Logged hours** are per user & ticket (booked on the parent): Tempo per-user → Jira worklog → ticket total. Plus a **time-gain %** (Architect estimate vs. logged, shown **with / without** bug hours) — in every **aggregate** row (area, user, month, KPI card) the gain is computed over **only the tickets carrying that estimate**, so an unestimated ticket contributes neither its estimate nor its logged hours. Every **ticket key is a link** to `https://opencellsoft.atlassian.net/browse/<KEY>`. Sections are ordered **Totals by area → Summary by user → Detail per user**, and users are ordered **by area, then name**. A cross-area sub-bug (one whose component area has no AI record on the ticket) is not mixed into another area's numbers — it is shown as an annotation like **`2 (front +1 7.8h)`**.
+- **AI metrics** (contribution / retention / tests / requests) are grouped by each record's **domain** (`backend`/`frontend`/`qa`, per developer). Each detail row also shows the **ticket type** (US / Bug / Sub-bug / Enabler) and **two estimates per area**: **A. Est h** (Architect) from the Story's estimate custom fields — *Architect estimate back* (`customfield_10157`), *front* (`customfield_10158`), *QA estimate* (`customfield_10189`), days ×8, else the ticket's own estimate; and **DL. Est h** (Dev-lead) from the ticket's *estimation field* — for a User Story the sum of that area's child **sub-task** estimates (sub-bug estimates excluded), for a Bug/Enabler the ticket's own estimate. A **Sub-bugs** count and a separate **Sub-bug h** (hours logged on child Bug/Sub-bug sub-issues) are attributed per area; a sub-bug counts **only once time has been logged on it** — a sub-bug with zero logged hours does not exist for the report (matching the time report). **Logged hours** are the record author's own Tempo hours **across the whole User Story** — the parent **plus its non-bug sub-tasks** (a US's dev work is booked on its sub-tasks), falling back to the parent Jira worklog → ticket total only when Tempo has nothing for that author anywhere on the US. A **sub-bug's hours always count against its parent US** (in the US's Sub-bug h and count). If the sub-bug **also** carries its own AI record it is *additionally* shown as its **own row** in *Detail per user* — its Type is **Sub-bug**, tagged **`(part of <US>)`** — and that separate row is **excluded from every aggregate** (Totals / Summary / month / KPI / gain) so its hours are counted once, in the US (Case 2: JSON on the US **and** on a sub-bug). A non-bug **sub-task** with its own record is likewise its own row and excluded from the parent's Logged rollup. Plus a **time-gain %** (Architect estimate vs. logged, shown **with / without** bug hours) — in every **aggregate** row (area, user, month, KPI card) the gain is computed over **only the tickets carrying that estimate**, so an unestimated ticket contributes neither its estimate nor its logged hours. Every **ticket key is a link** to `https://opencellsoft.atlassian.net/browse/<KEY>`. Sections are ordered **Totals by area → Summary by user → Detail per user**, and users are ordered **by area, then name**. A cross-area sub-bug (one whose component area has no AI record on the ticket) is not mixed into another area's numbers — it is shown as an annotation like **`2 (front +1 7.8h)`**.
 
 This command is **read-only** — it only queries Jira. It needs **no** Bitbucket token, **no** git, and **no** repo checkout; it can run from any directory.
 
@@ -50,7 +50,7 @@ python "<SCRATCHPAD>/ai_jira_fetch.py" --since [SINCE] --project [PROJECT] \
 ```
 
 - **Pass A** runs `project = [PROJECT] AND cf[10745] IS NOT EMPTY AND updated >= "[SINCE]"` with fields `["summary","assignee","issuetype","status","resolutiondate","updated","timeoriginalestimate","timespent","worklog","components","customfield_10157","customfield_10158","customfield_10189","customfield_10745","customfield_10613"]` → `tickets.json`. If it returns 0 tickets, tell the user "No tickets with AI-metrics data found for [PROJECT] since [SINCE]" and stop.
-- **Pass B** fetches every child sub-issue of those parents (`parent in (<keys>)`, batched) with `["summary","issuetype","components","timeoriginalestimate","timespent","parent"]` → `children.json`. Both regular sub-tasks and Bug/Sub-bug sub-tasks are needed: non-bug sub-tasks feed the Dev-lead estimate, Bug/Sub-bug ones feed the bug count and Sub-bug h. **Issue links are deliberately NOT used.**
+- **Pass B** fetches every child sub-issue of those parents (`parent in (<keys>)`, batched) with `["summary","issuetype","components","timeoriginalestimate","timespent","parent","customfield_10745"]` → `children.json`. Both regular sub-tasks and Bug/Sub-bug sub-tasks are needed: non-bug sub-tasks feed the Dev-lead estimate **and roll their logged hours up into the parent US's record** (a US's dev work is booked on its sub-tasks), while Bug/Sub-bug ones feed the bug count and Sub-bug h. **`customfield_10745` on the child** tells the aggregator whether the sub-issue carries its **own** AI record — if it does, that sub-issue is its own report row and is *excluded* from the parent's rollup (no double-count). **Issue links are deliberately NOT used.**
 
 Notes on the fields:
 - `status` drives the **Status** column and the **Final** flag in the *Detail per user* tables: a ticket is *final* when its Jira status (case-insensitive) is terminal for its type — **Bug**: Done/Invalid; **US**: Ready for Sprint review / Need documentation / Ready for release / Released; **any other type**: Done. **AI Contrib below 60% is shown in red** in both the *Summary by user* and *Detail per user* tables.
@@ -58,9 +58,9 @@ Notes on the fields:
 
 **Pass C — per-user logged time from Tempo (optional but preferred):**
 5. Tempo Timesheets syncs its worklogs into the Jira `worklog` field **under the Tempo app account**, so Jira alone cannot split logged time per developer. Tempo's own REST API keeps the real `author.accountId`. If the environment variable **`TEMPO_API_TOKEN`** is set (each developer creates their own token in *Tempo → Settings → API keys*, worklog **read** scope), fetch true per-user hours; otherwise skip and the aggregator falls back to Jira worklogs / ticket total.
-6. Write `fetch_tempo.py` (below) to scratchpad and run it with the **numeric issue ids** of the parents (`node.id` from Pass A) **and the bug sub-issues** (from Pass B) — so both the ticket's per-user logged hours and the per-user *Bug h* can be resolved:
+6. Write `fetch_tempo.py` (below) to scratchpad and run it with the **numeric issue ids** of the parents (`node.id` from Pass A) **and ALL of their child sub-issues** (from Pass B — both the Bug/Sub-bug sub-issues *and* the non-bug sub-tasks). A User Story's dev work is booked on its **sub-tasks**, so their per-user hours must be fetched for the record's *Logged* to reflect the real work (parent + non-bug sub-tasks); the Bug/Sub-bug ids resolve the per-user *Sub-bug h*:
    ```bash
-   python "<SCRATCHPAD>/fetch_tempo.py" --ids "93179,107118,109478,<bug-ids…>" --out "<SCRATCHPAD>/tempo.json"
+   python "<SCRATCHPAD>/fetch_tempo.py" --ids "93179,107118,109478,<all-child-sub-issue-ids…>" --out "<SCRATCHPAD>/tempo.json"
    ```
    It reads `TEMPO_API_TOKEN` from the environment (never pass the token on the command line), calls `GET https://api.tempo.io/4/worklogs/issue/{id}` (paginated via `metadata.next`), and writes `{"<issueId>": {"<accountId>": seconds}}`. On a missing token or a 401 it writes `{}` and the report still runs (logged falls back to Jira worklog / ticket total; Bug h to the bug's `timespent`).
 
@@ -79,7 +79,7 @@ AUTH=base64.b64encode(f"{EMAIL}:{TOK}".encode()).decode()
 FIELDS_A=["summary","assignee","issuetype","status","resolutiondate","updated","timeoriginalestimate",
           "timespent","worklog","components","customfield_10157","customfield_10158","customfield_10189",
           "customfield_10745","customfield_10613"]
-FIELDS_B=["summary","issuetype","components","timeoriginalestimate","timespent","parent"]
+FIELDS_B=["summary","issuetype","components","timeoriginalestimate","timespent","parent","customfield_10745"]
 
 def post(path, body):
     for attempt in range(5):
@@ -204,7 +204,9 @@ python "<SCRATCHPAD>/ai_report.py" --input "<SCRATCHPAD>/tickets.json" --childre
 """AI-usage report. AI metrics grouped by record domain. Estimate hours come from per-area
 Architect/QA estimate custom fields on the Story (days x8), else the ticket's own estimate
 (sub-issue estimates are never summed). Sub-bug counts and bug-logged hours come from Bug/Sub-bug
-sub-issues, per area. Aggregate gains use only the rows that carry the matching estimate. Logged hours are per user & ticket (Tempo per-user -> Jira -> ticket total).
+sub-issues, per area. Aggregate gains use only the rows that carry the matching estimate. Logged hours are
+the record author's own Tempo hours across the whole US (parent + its non-bug sub-tasks; sub-tasks/sub-bugs
+carrying their own AI record are separate rows, excluded from the parent rollup) -> Jira worklog -> ticket total.
 Totals = plain sum of the detail rows."""
 import argparse, json, re
 from collections import defaultdict
@@ -287,7 +289,7 @@ def bugs_label(n, foreign, foreign_h=None):
         return f"{n} ({extra})"
     return f"{n}"
 
-TYPE_MAP = {"story": "US", "bug": "Bug", "sub-bug": "Bug", "enabler": "Enabler"}
+TYPE_MAP = {"story": "US", "bug": "Bug", "sub-bug": "Sub-bug", "enabler": "Enabler"}
 def ticket_type(pf):
     n = (pf.get("issuetype") or {}).get("name") or ""
     return TYPE_MAP.get(n.lower(), n or "?")
@@ -322,6 +324,13 @@ def bug_logged_h(bug_nodes, acc, tempo):
         total += hours(tw.get(acc)) if acc in tw else hours(bf.get("timespent"))
     return round(total, 1)
 
+def bug_has_time(c, tempo):
+    """A sub-bug 'exists' only once time is logged on it (any author's Tempo worklog, else its own
+    timespent). A sub-bug with zero logged time is not counted (matches the time report)."""
+    tw = tempo.get(str(c.get("id"))) or {}
+    if any((v or 0) > 0 for v in tw.values()): return True
+    return hours((c.get("fields") or {}).get("timespent")) > 0
+
 GAIN_CAP = 1000  # |time gain %| beyond this is placeholder-driven noise -> show "-"
 EST_MIN = 0.5    # estimates at/below this (e.g. a 0.01-day placeholder ~= 0.1h) are meaningless
 def gain_pct(est, logged):
@@ -351,25 +360,38 @@ def build_rows(parents, children, tempo, since, until):
 
     # From the ticket's OWN child sub-issues only (never issue links): Bug/Sub-bug -> count + Sub-bug h;
     # non-bug sub-tasks -> Dev-lead estimate (DL. Est h), summed per area (sub-bug estimates excluded).
-    p_bugs = {}; p_dl = {}; p_has_sub = {}; p_foreign_ct = {}; p_foreign_hr = {}
+    p_bugs = {}; p_dl = {}; p_has_sub = {}; p_foreign_ct = {}; p_foreign_hr = {}; p_sub_nodes = {}
+    included = {}   # recorded sub-bug key -> the parent US key whose Sub-bug h already counts its hours
     for p in parents:
         key = p.get("key"); pf = p.get("fields", {}) or {}
         raw_bugs = {ar: [] for ar in AREAS}; dl_by_area = {ar: 0.0 for ar in AREAS}
         pa = area_of(pf); saw_sub = False; rec_areas = record_domains(pf)
+        sub_nodes = []   # non-bug sub-tasks WITHOUT their own AI record (their logged hours roll up to the US)
         for c in ch_by_parent.get(key, []):
             cf = c.get("fields", {}) or {}
             if is_bug(cf):
-                bar = area_of(cf)              # bugs: attributed by their OWN component/title only (no parent inheritance)
-                if bar: raw_bugs[bar].append(c)
+                # bugs: attributed by their OWN component/title only (no parent inheritance). A sub-bug
+                # counts on its parent US once it has logged time (bug_has_time). If it also carries its
+                # own AI record it still counts here (visibility), but its HOURS are kept on its own row
+                # (bug_logged_h skips recorded sub-bugs) so nothing is double-counted (Case 2).
+                bar = area_of(cf)
+                if bar and bug_has_time(c, tempo): raw_bugs[bar].append(c)
             else:
                 ar = area_of(cf) or pa         # non-bug sub-tasks still inherit the parent area for the DL estimate
                 saw_sub = True
                 if ar: dl_by_area[ar] += hours(cf.get("timeoriginalestimate"))
+                # a sub-task carrying its own AI record is its own report row -> don't also roll it up here
+                if not recover_json(cf.get("customfield_10745")): sub_nodes.append(c)
         # Only own-area sub-bugs drive an area's count & Sub-bug h. A sub-bug whose area has no
         # AI record on the ticket is NOT mixed into another area's numbers (this report measures
         # per-area AI impact, and each area is a different developer) — it is surfaced only as an
         # annotation "(front +1 7.8h)" on a record area's cell, carrying its count and total hours.
         bugs_by_area = {ar: list(raw_bugs[ar]) if ar in rec_areas else [] for ar in AREAS}
+        for ar in AREAS:
+            if ar in rec_areas:
+                for b in raw_bugs[ar]:
+                    bk = b.get("key")
+                    if bk and recover_json((b.get("fields") or {}).get("customfield_10745")): included.setdefault(bk, key)
         fct = {ar: {} for ar in AREAS}; fhr = {ar: {} for ar in AREAS}
         fallback = pa if pa in rec_areas else (sorted(rec_areas)[0] if rec_areas else None)
         if fallback:
@@ -379,7 +401,7 @@ def build_rows(parents, children, tempo, since, until):
                 fhr[fallback][ar] = round(fhr[fallback].get(ar, 0.0)
                     + sum(hours((b.get("fields") or {}).get("timespent")) for b in raw_bugs[ar]), 1)
         p_bugs[key] = bugs_by_area; p_dl[key] = dl_by_area; p_has_sub[key] = saw_sub
-        p_foreign_ct[key] = fct; p_foreign_hr[key] = fhr
+        p_foreign_ct[key] = fct; p_foreign_hr[key] = fhr; p_sub_nodes[key] = sub_nodes
 
     rows = []
     for p in parents:
@@ -406,7 +428,15 @@ def build_rows(parents, children, tempo, since, until):
             foreign_ct = dict(p_foreign_ct[key][domain])        # {srcArea: n} cross-area, annotation only
             foreign_hr = dict(p_foreign_hr[key][domain])        # {srcArea: hours} cross-area, annotation only
             bug_logged = bug_logged_h(bug_nodes, acc, tempo)    # Sub-bug h = own-area only (no cross-area mixing)
-            if acc in tw: logged = hours(tw.get(acc))
+            # Logged = the author's own Tempo hours across the US: the parent PLUS its non-bug sub-tasks
+            # (a US's dev work is booked on its sub-tasks). Fall back to the parent Jira worklog / total
+            # timespent only when Tempo has nothing for this author anywhere on the US.
+            lg = 0.0; seen = False
+            if acc in tw: lg += hours(tw.get(acc)); seen = True
+            for c in p_sub_nodes[key]:
+                ctw = tempo.get(str(c.get("id")), {})
+                if acc in ctw: lg += hours(ctw.get(acc)); seen = True
+            if seen: logged = round(lg, 1)
             elif acc in wl: logged = hours(wl.get(acc))
             else: logged = parent_logged
             rows.append({"area": domain, "at": at, "acc": acc, "name": name, "key": key,
@@ -416,7 +446,8 @@ def build_rows(parents, children, tempo, since, until):
                          "turns": num(rec.get("subReq") if rec.get("subReq") is not None else rec.get("turns")),
                          "aEst": round(a_est, 1), "dlEst": round(dl_est, 1),
                          "logged": round(logged, 1), "bugLogged": bug_logged,
-                         "bugs": len(bug_nodes), "bugsForeign": foreign_ct, "bugsForeignH": foreign_hr})
+                         "bugs": len(bug_nodes), "bugsForeign": foreign_ct, "bugsForeignH": foreign_hr,
+                         "partOf": included.get(key)})   # set => hours already counted in that parent US
     return rows
 
 def main():
@@ -434,10 +465,11 @@ def main():
         P("_No AI-usage records in this window._"); print("\n".join(out)); return
     avg = lambda xs: round(sum(xs) / len(xs)) if xs else "-"
     SUM = ("utAdd", "utMod", "pmTests", "turns", "aEst", "dlEst", "logged", "bugLogged", "bugs")
+    agg_rows = [r for r in rows if not r.get("partOf")]   # aggregates exclude sub-bugs already counted in their US
 
     # ---- Totals by area (shown first) ----
     areas = {ar: {"contrib": [], "retain": [], "rows": [], **{k: 0 for k in SUM}} for ar in AREAS}
-    for r in rows:
+    for r in agg_rows:
         g = areas[r["area"]]; g["contrib"].append(r["contrib"]); g["retain"].append(r["retain"])
         g["rows"].append(r)
         for k in SUM: g[k] += r[k]
@@ -454,7 +486,7 @@ def main():
 
     # ---- Summary by user ----
     users = {}
-    for r in rows:
+    for r in agg_rows:
         u = users.setdefault(r["acc"], {"name": r["name"], "areas": set(), "tickets": set(),
              "contrib": [], "retain": [], "rework": [], "rows": [], **{k: 0 for k in SUM}})
         u["name"] = r["name"]; u["areas"].add(r["area"]); u["tickets"].add(r["key"]); u["rows"].append(r)
@@ -474,14 +506,19 @@ def main():
     P("\n## Detail per user")
     by_user = defaultdict(list)
     for r in rows: by_user[r["acc"]].append(r)
-    for acc, u in sorted(users.items(), key=lambda kv: ("/".join(sorted(kv[1]["areas"])), kv[1]["name"].lower())):
+    users_all = {}   # Detail shows every record (incl. sub-bugs noted "part of US"), so use the full row set
+    for r in rows:
+        ua = users_all.setdefault(r["acc"], {"name": r["name"], "areas": set()})
+        ua["name"] = r["name"]; ua["areas"].add(r["area"])
+    for acc, u in sorted(users_all.items(), key=lambda kv: ("/".join(sorted(kv[1]["areas"])), kv[1]["name"].lower())):
         P(f"\n### {u['name']}\n")
         P("| Ticket | Date | Type | Area | Summary | Status | Final | AI Contrib | Retain | Review phase | U.tests +/~ | P.tests | Requests | A. Est h | DL. Est h | Total dev h | Logged h | Sub-bug h | Arch gain | DL gain | Sub-bugs |")
         P("|---|---|---|---|---|---|:--:|--:|--:|--:|:--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")
         for r in sorted(by_user[acc], key=lambda x: (x["at"], x["key"])):
             c = r['contrib']
             cc = f"**{c}%**" if isinstance(c, (int, float)) and c < 60 else f"{c}%"  # <60% flagged (red in HTML)
-            P(f"| [{r['key']}]({JIRA_BROWSE}{r['key']}) | {r['at']} | {r['ttype']} | {r['area']} | {r['summary']} | {r['status']} | {'T' if r['final'] else ''} | {cc} | {r['retain']}% | {r['rework']}% | "
+            summ = f"{r['summary']} _(part of {r['partOf']})_" if r.get("partOf") else r['summary']
+            P(f"| [{r['key']}]({JIRA_BROWSE}{r['key']}) | {r['at']} | {r['ttype']} | {r['area']} | {summ} | {r['status']} | {'T' if r['final'] else ''} | {cc} | {r['retain']}% | {r['rework']}% | "
               f"{r['utAdd']}/{r['utMod']} | {r['pmTests']} | {r['turns']} | {r['aEst']} | {r['dlEst']} | {round(r['logged'] + r['bugLogged'],1)} | {r['logged']} | "
               f"{r['bugLogged']} | {gain_two(r['aEst'], r['logged'], r['bugLogged'])} | {gain_two(r['dlEst'], r['logged'], r['bugLogged'])} | {bugs_label(r['bugs'], r['bugsForeign'], r['bugsForeignH'])} |")
     print("\n".join(out))
@@ -513,7 +550,9 @@ The page is theme-aware (light/dark) and embeds all CSS — no external assets �
 domain. Estimate hours from per-area Architect/QA estimate custom fields on the Story (days x8),
 else the ticket's own estimate. Sub-bug counts & bug-logged hours from Bug/Sub-bug sub-issues, per area.
 Aggregate gains use only the rows carrying that estimate; ticket keys link to Jira.
-Logged hours per user & ticket (Tempo per-user -> Jira -> ticket total). Totals = sum of detail rows."""
+Logged hours = the record author's own Tempo hours across the whole US (parent + its non-bug sub-tasks;
+sub-tasks/sub-bugs with their own AI record are separate rows, excluded from the parent rollup) -> Jira -> ticket total.
+Totals = sum of detail rows."""
 import argparse, json, re, html, csv, os
 from collections import defaultdict
 
@@ -594,7 +633,7 @@ def bugs_label(n, foreign, foreign_h=None):
         return f"{n} ({extra})"
     return f"{n}"
 
-TYPE_MAP = {"story": "US", "bug": "Bug", "sub-bug": "Bug", "enabler": "Enabler"}
+TYPE_MAP = {"story": "US", "bug": "Bug", "sub-bug": "Sub-bug", "enabler": "Enabler"}
 def ticket_type(pf):
     n = (pf.get("issuetype") or {}).get("name") or ""
     return TYPE_MAP.get(n.lower(), n or "?")
@@ -619,10 +658,18 @@ def area_estimate_h(pf, area):
 def bug_logged_h(bug_nodes, acc, tempo):
     total = 0.0
     for b in bug_nodes:
-        bid = str(b.get("id")); bf = b.get("fields", {}) or {}
+        bf = b.get("fields", {}) or {}
+        bid = str(b.get("id"))
         tw = tempo.get(bid, {})
         total += hours(tw.get(acc)) if acc in tw else hours(bf.get("timespent"))
     return round(total, 1)
+
+def bug_has_time(c, tempo):
+    """A sub-bug 'exists' only once time is logged on it (any author's Tempo worklog, else its own
+    timespent). A sub-bug with zero logged time is not counted (matches the time report)."""
+    tw = tempo.get(str(c.get("id"))) or {}
+    if any((v or 0) > 0 for v in tw.values()): return True
+    return hours((c.get("fields") or {}).get("timespent")) > 0
 
 GAIN_CAP = 1000  # |time gain %| beyond this is placeholder-driven noise -> show dash
 EST_MIN = 0.5    # estimates at/below this (e.g. a 0.01-day placeholder ~= 0.1h) are meaningless
@@ -654,27 +701,42 @@ def build_rows(parents, children, tempo, since, until):
         cf = c.get("fields", {}) or {}
         pk = (cf.get("parent") or {}).get("key")
         if pk: ch_by_parent[pk].append(c)
-    p_bugs = {}; p_dl = {}; p_has_sub = {}; p_foreign_ct = {}; p_foreign_hr = {}
+    p_bugs = {}; p_dl = {}; p_has_sub = {}; p_foreign_ct = {}; p_foreign_hr = {}; p_sub_nodes = {}
+    included = {}   # recorded sub-bug key -> the parent US key whose Sub-bug h already counts its hours
     for p in parents:
         key = p.get("key"); pf = p.get("fields", {}) or {}
         raw_bugs = {ar: [] for ar in AREAS}; dl_by_area = {ar: 0.0 for ar in AREAS}
         pa = area_of(pf); saw_sub = False; rec_areas = record_domains(pf)
+        sub_nodes = []   # non-bug sub-tasks WITHOUT their own AI record (their logged hours roll up to the US)
         # Only the ticket's OWN child sub-issues (never issue links): Bug/Sub-bug -> count + Sub-bug h;
         # non-bug sub-tasks -> Dev-lead estimate (sub-bug estimates excluded).
         for c in ch_by_parent.get(key, []):
             cf = c.get("fields", {}) or {}
             if is_bug(cf):
-                bar = area_of(cf)              # bugs: attributed by their OWN component/title only (no parent inheritance)
-                if bar: raw_bugs[bar].append(c)
+                # bugs: attributed by their OWN component/title only (no parent inheritance). A sub-bug
+                # counts on its parent US once it has logged time (bug_has_time). If it also carries its
+                # own AI record it still counts here (visibility), but its HOURS are kept on its own row
+                # (bug_logged_h skips recorded sub-bugs) so nothing is double-counted (Case 2).
+                bar = area_of(cf)
+                if bar and bug_has_time(c, tempo): raw_bugs[bar].append(c)
             else:
                 ar = area_of(cf) or pa         # non-bug sub-tasks still inherit the parent area for the DL estimate
                 saw_sub = True
                 if ar: dl_by_area[ar] += hours(cf.get("timeoriginalestimate"))
+                # a sub-task carrying its own AI record is its own report row -> don't also roll it up here
+                if not recover_json(cf.get("customfield_10745")): sub_nodes.append(c)
         # Only own-area sub-bugs drive an area's count & Sub-bug h. A sub-bug whose area has no
         # AI record on the ticket is NOT mixed into another area's numbers (this report measures
         # per-area AI impact, and each area is a different developer) — it is surfaced only as an
         # annotation "(front +1 7.8h)" on a record area's cell, carrying its count and total hours.
         bugs_by_area = {ar: list(raw_bugs[ar]) if ar in rec_areas else [] for ar in AREAS}
+        # a recorded sub-bug whose hours are folded into this US (its area has a record here) is marked
+        # "included in <US>": it still gets its own row (own AI metrics), noted + excluded from aggregates.
+        for ar in AREAS:
+            if ar in rec_areas:
+                for b in raw_bugs[ar]:
+                    bk = b.get("key")
+                    if bk and recover_json((b.get("fields") or {}).get("customfield_10745")): included.setdefault(bk, key)
         fct = {ar: {} for ar in AREAS}; fhr = {ar: {} for ar in AREAS}
         fallback = pa if pa in rec_areas else (sorted(rec_areas)[0] if rec_areas else None)
         if fallback:
@@ -684,7 +746,7 @@ def build_rows(parents, children, tempo, since, until):
                 fhr[fallback][ar] = round(fhr[fallback].get(ar, 0.0)
                     + sum(hours((b.get("fields") or {}).get("timespent")) for b in raw_bugs[ar]), 1)
         p_bugs[key] = bugs_by_area; p_dl[key] = dl_by_area; p_has_sub[key] = saw_sub
-        p_foreign_ct[key] = fct; p_foreign_hr[key] = fhr
+        p_foreign_ct[key] = fct; p_foreign_hr[key] = fhr; p_sub_nodes[key] = sub_nodes
 
     rows = []
     for p in parents:
@@ -710,7 +772,15 @@ def build_rows(parents, children, tempo, since, until):
             bug_nodes = p_bugs[key][domain]                     # own-area sub-bugs only
             foreign_ct = dict(p_foreign_ct[key][domain])        # {srcArea: n} cross-area, annotation only
             foreign_hr = dict(p_foreign_hr[key][domain])        # {srcArea: hours} cross-area, annotation only
-            if acc in tw: logged = hours(tw.get(acc))
+            # Logged = the author's own Tempo hours across the US: the parent PLUS its non-bug sub-tasks
+            # (a US's dev work is booked on its sub-tasks). Fall back to the parent Jira worklog / total
+            # timespent only when Tempo has nothing for this author anywhere on the US.
+            lg = 0.0; seen = False
+            if acc in tw: lg += hours(tw.get(acc)); seen = True
+            for c in p_sub_nodes[key]:
+                ctw = tempo.get(str(c.get("id")), {})
+                if acc in ctw: lg += hours(ctw.get(acc)); seen = True
+            if seen: logged = round(lg, 1)
             elif acc in wl: logged = hours(wl.get(acc))
             else: logged = parent_logged
             rows.append({"area": domain, "at": at, "acc": acc, "name": name, "key": key,
@@ -721,7 +791,8 @@ def build_rows(parents, children, tempo, since, until):
                          "turns": num(rec.get("subReq") if rec.get("subReq") is not None else rec.get("turns")),
                          "aEst": round(a_est, 1), "dlEst": round(dl_est, 1), "logged": round(logged, 1),
                          "bugLogged": bug_logged_h(bug_nodes, acc, tempo),   # own-area only
-                         "bugs": len(bug_nodes), "bugsForeign": foreign_ct, "bugsForeignH": foreign_hr})
+                         "bugs": len(bug_nodes), "bugsForeign": foreign_ct, "bugsForeignH": foreign_hr,
+                         "partOf": included.get(key)})   # set => this row's hours are already counted in that parent US
     return rows
 
 CSV_COLS = [
@@ -734,6 +805,7 @@ CSV_COLS = [
     ("gainBug", "Arch gain % (with bugs)"), ("gain", "Arch gain % (no bugs)"),
     ("gainDlBug", "DL gain % (with bugs)"), ("gainDl", "DL gain % (no bugs)"),
     ("bugs", "Sub-bugs"), ("bugsForeignTxt", "Sub-bugs (other areas)"),
+    ("partOfTxt", "Part of US (hours counted there)"),
     ("url", "URL"),
 ]
 
@@ -749,6 +821,7 @@ def write_csv(rows, path):
             fg = r.get("bugsForeign") or {}; fh = r.get("bugsForeignH") or {}
             r["bugsForeignTxt"] = ", ".join(f"{FOREIGN_SHORT.get(a, a)} +{c} {fh.get(a, 0)}h" for a, c in sorted(fg.items()))
             r["url"] = JIRA_BROWSE + r["key"]
+            r["partOfTxt"] = r.get("partOf") or ""
             r["totalDev"] = round(r["logged"] + r["bugLogged"], 1)
             r["gain"] = gain_cell(r["aEst"], r["logged"])            # gains are ratios (unit-independent)
             r["gainBug"] = gain_cell(r["aEst"], r["logged"] + r["bugLogged"])
@@ -777,6 +850,13 @@ AI_FILTER_JS = r"""<script>
   }
   if(bar) bar.addEventListener('click', function(ev){ var b=ev.target.closest('button'); if(!b) return; cur.tab=b.getAttribute('data-tab'); apply(); });
   if(sel) sel.addEventListener('change', function(){ cur.scope=this.value; apply(); });
+  // in-page links (Summary name -> By-user->month; month -> Detail) open the target <details>
+  document.addEventListener('click', function(ev){
+    var t=ev.target, a=null; while(t && t!==document){ if(t.tagName==='A'){ a=t; break; } t=t.parentNode; }
+    if(!a) return; var href=a.getAttribute('href')||''; if(href.charAt(0)!=='#' || href.length<2) return;
+    var el=document.getElementById(href.slice(1)); var p=el;
+    while(p){ if(p.tagName==='DETAILS') p.open=true; p=p.parentNode; }
+  });
   apply();
 })();
 </script>"""
@@ -816,6 +896,7 @@ def main():
         def month_of(at): return (at or "")[:7] or "no-date"
 
         def totals_area_html(rs):
+            rs = [r for r in rs if not r.get("partOf")]   # recorded sub-bugs counted in their US are not re-summed
             ag = {ar: {"contrib": [], "retain": [], "rows": [], **{k: 0 for k in SUM}} for ar in AREAS}
             for r in rs:
                 gg = ag[r["area"]]; gg["contrib"].append(r["contrib"]); gg["retain"].append(r["retain"])
@@ -840,6 +921,7 @@ def main():
             return "".join(h)
 
         def summary_user_html(rs, pfx=""):
+            rs = [r for r in rs if not r.get("partOf")]   # recorded sub-bugs counted in their US are not re-summed
             uu = {}
             for r in rs:
                 u = uu.setdefault(r["acc"], {"name": r["name"], "areas": set(), "tickets": set(),
@@ -852,7 +934,7 @@ def main():
             for _acc, u in sorted(uu.items(), key=lambda kv: ("/".join(sorted(kv[1]["areas"])), kv[1]["name"].lower())):
                 ba = gain_basis(u["rows"], "aEst"); bd = gain_basis(u["rows"], "dlEst")
                 g = gain_pct(ba[0], ba[1] + ba[2]); gd = gain_pct(bd[0], bd[1] + bd[2])  # colour by with-bug (shown first)
-                namecell = f'<a href="#{pfx}-user-{e(_acc)}">{e(u["name"])}</a>' if pfx else e(u["name"])
+                namecell = f'<a href="#{pfx}-um-{e(_acc)}">{e(u["name"])}</a>' if pfx else e(u["name"])
                 h.append(f'<tr><td class="name">{namecell}</td><td>{e("/".join(sorted(u["areas"])))}</td>'
                   f'<td class="r">{len(u["tickets"])}</td>'
                   f'<td class="r{" low" if avg(u["contrib"]) < 60 else ""}">{pct(avg(u["contrib"]))}</td><td class="r">{pct(avg(u["retain"]))}</td>'
@@ -867,8 +949,9 @@ def main():
             return "".join(h)
 
         MHEAD = ["Month","Tickets","AI Contrib","Retain","Review phase","U.tests +/~","P.tests","Requests","A. Est d","DL. Est d","Total dev d","Logged d","Sub-bug d","Arch gain","DL gain","Sub-bugs"]
-        def user_month_html(user_rows):
+        def user_month_html(user_rows, pfx="", acc=""):
             """One row per month for a single user (used under the per-user Summary groups)."""
+            user_rows = [r for r in user_rows if not r.get("partOf")]   # exclude sub-bugs already counted in their US
             h = ['<div class="tw"><table><thead><tr>'
                  + "".join(f'<th class="{ "" if x == "Month" else "r" }">{e(x)}</th>' for x in MHEAD)
                  + "</tr></thead><tbody>"]
@@ -880,7 +963,8 @@ def main():
                     for k in SUM: agg[k] += r[k]
                 ba = gain_basis(rs, "aEst"); bd = gain_basis(rs, "dlEst")
                 g = gain_pct(ba[0], ba[1] + ba[2]); gd = gain_pct(bd[0], bd[1] + bd[2])  # colour by with-bug (shown first)
-                h.append(f'<tr><td class="name">{e(m)}</td><td class="r">{len({r["key"] for r in rs})}</td>'
+                mcell = f'<a href="#{pfx}-det-{e(acc)}-{e(m)}">{e(m)}</a>' if pfx else e(m)
+                h.append(f'<tr><td class="name">{mcell}</td><td class="r">{len({r["key"] for r in rs})}</td>'
                   f'<td class="r{" low" if avg(contrib) < 60 else ""}">{pct(avg(contrib))}</td>'
                   f'<td class="r">{pct(avg(retain))}</td><td class="r">{pct(avg(rework))}</td>'
                   f'<td class="r">{agg["utAdd"]}/{agg["utMod"]}</td><td class="r">{agg["pmTests"]}</td><td class="r">{agg["turns"]}</td>'
@@ -900,8 +984,9 @@ def main():
                 g = gain_pct(r["aEst"], r["logged"] + r["bugLogged"]); gd = gain_pct(r["dlEst"], r["logged"] + r["bugLogged"])  # colour by with-bug (shown first)
                 finalcell = '<span class="finalbadge">T</span>' if r["final"] else ""
                 low = isinstance(r["contrib"], (int, float)) and r["contrib"] < 60  # flag weak AI contribution
+                note = f' <span class="cnt">(part of {e(r["partOf"])})</span>' if r.get("partOf") else ""
                 h.append(f'<tr><td class="key"><a href="{JIRA_BROWSE}{e(r["key"])}" target="_blank" rel="noopener">{e(r["key"])}</a></td><td>{e(r["at"])}</td><td>{e(r["ttype"])}</td><td>{e(r["area"])}</td>'
-                  f'<td>{e(r["summary"])}</td><td>{e(r["status"])}</td><td class="c">{finalcell}</td>'
+                  f'<td>{e(r["summary"])}{note}</td><td>{e(r["status"])}</td><td class="c">{finalcell}</td>'
                   f'<td class="r{" low" if low else ""}">{r["contrib"]}%</td><td class="r">{r["retain"]}%</td><td class="r">{r["rework"]}%</td>'
                   f'<td class="r">{r["utAdd"]}/{r["utMod"]}</td><td class="r">{r["pmTests"]}</td>'
                   f'<td class="r">{r["turns"]}</td><td class="r">{days(r["aEst"])}</td><td class="r">{days(r["dlEst"])}</td>'
@@ -916,31 +1001,39 @@ def main():
             """Full report body (KPI cards + Totals + Summary + Detail) for a subset of rows."""
             if not rs:
                 return '<p class="empty">No records of this ticket type in this window.</p>'
+            # Aggregate sections exclude recorded sub-bugs already counted in their US (partOf); the Detail
+            # section shows every record (those sub-bugs appear with a "part of <US>" note).
+            agg_rs = [r for r in rs if not r.get("partOf")]
             users_x = {}
-            for r in rs:
+            for r in agg_rs:
                 u = users_x.setdefault(r["acc"], {"name": r["name"], "areas": set(), "tickets": set(),
                      "contrib": [], "retain": [], "rework": [], **{k: 0 for k in SUM}})
                 u["name"] = r["name"]; u["areas"].add(r["area"]); u["tickets"].add(r["key"])
                 u["contrib"].append(r["contrib"]); u["retain"].append(r["retain"]); u["rework"].append(r["rework"])
                 for k in SUM: u[k] += r[k]
+            users_all = {}   # for the Detail section (every record, incl. sub-bugs noted "part of US")
+            for r in rs:
+                ua = users_all.setdefault(r["acc"], {"name": r["name"], "areas": set(), "tickets": set()})
+                ua["name"] = r["name"]; ua["areas"].add(r["area"]); ua["tickets"].add(r["key"])
             by_user_x = defaultdict(list)
             for r in rs: by_user_x[r["acc"]].append(r)
             latest_month = max((month_of(r["at"]) for r in rs), default=None)
 
-            def month_details(section_rows, render_fn):
+            def month_details(section_rows, render_fn, idpfx=None):
                 out = []
                 for m in sorted({month_of(r["at"]) for r in section_rows}, reverse=True):
                     mr = [r for r in section_rows if month_of(r["at"]) == m]
                     op = " open" if m == latest_month else ""
-                    out.append(f'<details{op}><summary>{e(m)} <span class="cnt">({len(mr)} record(s))</span></summary>')
+                    idattr = f' id="{idpfx}-{e(m)}"' if idpfx else ''
+                    out.append(f'<details{idattr}{op}><summary>{e(m)} <span class="cnt">({len(mr)} record(s))</span></summary>')
                     out.append(render_fn(mr)); out.append('</details>')
                 return "".join(out)
 
             h = []; w = h.append
-            allc = [r["contrib"] for r in rs]; allr = [r["retain"] for r in rs]
+            allc = [r["contrib"] for r in agg_rs]; allr = [r["retain"] for r in agg_rs]
             tot_aest = sum(u["aEst"] for u in users_x.values()); tot_dlest = sum(u["dlEst"] for u in users_x.values())
             tot_log = sum(u["logged"] for u in users_x.values()); tot_bug = sum(u["bugLogged"] for u in users_x.values())
-            card_a = gain_basis(rs, "aEst"); card_d = gain_basis(rs, "dlEst")  # gains skip unestimated rows
+            card_a = gain_basis(agg_rs, "aEst"); card_d = gain_basis(agg_rs, "dlEst")  # gains skip unestimated + partOf rows
             w('<div class="cards">')
             for label, val in [("Avg contribution", pct(avg(allc))), ("Avg retention", pct(avg(allr))),
                                ("Requests", sum(u["turns"] for u in users_x.values())),
@@ -952,19 +1045,19 @@ def main():
             w('</div>')
             # Totals by area (overall, then expandable by month)
             w("<h2>Totals by area <span class=\"sub\">(sum of detail rows; hours in days, 1 d = 8 h)</span></h2>")
-            w(totals_area_html(rs)); w('<p class="bm">By month</p>'); w(month_details(rs, totals_area_html))
+            w(totals_area_html(rs)); w('<p class="bm">By month</p>'); w(month_details(agg_rs, totals_area_html))
             # Summary by user (overall, then expandable per user -> month)
             w("<h2>Summary by user</h2>")
             w(summary_user_html(rs, pfx)); w('<p class="bm">By user &rarr; month</p>')
             for acc, u in sorted(users_x.items(), key=lambda kv: ("/".join(sorted(kv[1]["areas"])), kv[1]["name"].lower())):
                 ur = by_user_x[acc]; ac = avg([r["contrib"] for r in ur])
-                w(f'<details><summary>{e(u["name"])} '
+                w(f'<details id="{pfx}-um-{e(acc)}"><summary>{e(u["name"])} '
                   f'<span class="cnt">({len(u["tickets"])} ticket(s), avg contrib {pct(ac)})</span></summary>')
-                w(user_month_html(ur)); w('</details>')
-            # Detail per user (grouped by month)
+                w(user_month_html(ur, pfx, acc)); w('</details>')
+            # Detail per user (grouped by month) — every record, incl. sub-bugs noted "part of <US>"
             w("<h2>Detail per user</h2>")
-            for acc, u in sorted(users_x.items(), key=lambda kv: ("/".join(sorted(kv[1]["areas"])), kv[1]["name"].lower())):
-                w(f'<h3 id="{pfx}-user-{e(acc)}">{e(u["name"])}</h3>'); w(month_details(by_user_x[acc], detail_table_html))
+            for acc, u in sorted(users_all.items(), key=lambda kv: ("/".join(sorted(kv[1]["areas"])), kv[1]["name"].lower())):
+                w(f'<h3 id="{pfx}-user-{e(acc)}">{e(u["name"])}</h3>'); w(month_details(by_user_x[acc], detail_table_html, f"{pfx}-det-{e(acc)}"))
             return "".join(h)
 
         # Ticket-type tabs (JS) + project-scope filter (JS). Each project scope gets its own set of
@@ -1000,7 +1093,7 @@ def main():
       '<b>A. Est d</b> (Architect) per area from the estimate '
       'custom fields (days &times;8), else the ticket estimate; <b>DL. Est d</b> (Dev-lead) from the ticket estimation '
       'field &mdash; a User Story sums its child sub-task estimates per area (sub-bugs excluded), a Bug/Enabler uses its '
-      'own estimate. <b>Sub-bugs</b> = count of the area\'s <b>own</b> child Bug/Sub-bug sub-issues (by their component), with <b>Sub-bug d</b> (days logged on them). '
+      'own estimate. <b>Sub-bugs</b> = count of the area\'s <b>own</b> child Bug/Sub-bug sub-issues (by their component) <b>that have logged time</b> (a sub-bug with no logged hours does not count), with <b>Sub-bug d</b> (days logged on them). '
       'This report measures per-area AI impact (a different developer per area), so a cross-area sub-bug is <b>not</b> mixed into another area\'s numbers: '
       'a sub-bug whose component is a different area (when that area has no AI record on the ticket) is shown only as an annotation, e.g. '
       '<b>2 (front +1 7.8h)</b> &mdash; 2 own-area sub-bugs, plus 1 frontend sub-bug totalling 7.8h that is counted under frontend, not here. '
@@ -1095,7 +1188,7 @@ if __name__ == "__main__":
 - **Two area sources & two estimates.** *AI metrics* group by the record `domain` (per developer — a story worked by backend and frontend keeps both). **A. Est h** (Architect) comes from the Story's **per-area estimate custom fields** — `customfield_10157` (back), `customfield_10158` (front), `customfield_10189` (QA), in **days ×8**; if none are set (a standalone Bug/Enabler) the ticket's own `timeoriginalestimate` is used. **DL. Est h** (Dev-lead) comes from the **ticket estimation field**: for a User Story, the **sum of that area's child sub-task estimates** (sub-bug estimates excluded); for a Bug/Enabler, the ticket's own estimate. *Sub-bugs* (the count) and *Sub-bug h* come from the ticket's **child Bug/Sub-bug** sub-issues (never issue links), attributed by the bug's Component/title, else the parent's area. Ticket **type** (US/Bug/Enabler) is shown per detail row. Only areas that have an AI record show up (the report is record-driven).
 - **Totals = sum of the detail rows** (no independent recompute). A ticket's estimate/bugs land under the area(s) with records; if two developers in the same area worked one ticket, their rows both count (rare).
 - **Date = the AI record's `at`** (the day the metric was measured/confirmed). The JQL `updated >=` window is only a pre-filter; precise period membership is decided by `at` in the aggregator.
-- **Logged hours** (per user & ticket, booked on the parent): **Tempo per-user** (`TEMPO_API_TOKEN`, real author) → **Jira worklog** author → **ticket-total** `timespent`. All time figures in the HTML tables and the CSV are shown in **days** (1 d = 8 h). **Time gain** is shown as **two numbers, `with / without` bug hours**, and in the aggregate rows is computed over **only the tickets that have the matching estimate** (a ticket with no Architect estimate is left out of the Arch gain entirely — both its estimate and its logged hours — and likewise for the Dev-lead gain), so an unestimated ticket can no longer drag a whole area or developer negative; the Est h / Logged h columns beside it still show the **full** sums: `(estimate − (logged + Bug h))/estimate` first (with bugs), then `(estimate − logged)/estimate` (without bugs). Positive = under estimate. (When logged falls back to a ticket total rather than Tempo per-user, the estimate is per-area while logged is whole-ticket, so the value can read oddly.)
+- **Logged hours** (the record author's own hours across the whole US — parent **+ its non-bug sub-tasks**): **Tempo per-user** (`TEMPO_API_TOKEN`, real author), falling back to the parent **Jira worklog** author → **ticket-total** `timespent` only when Tempo has nothing for that author on the US. A sub-task/sub-bug with its **own** AI record is its own row and is excluded from the parent rollup (no double-count). All time figures in the HTML tables and the CSV are shown in **days** (1 d = 8 h). **Time gain** is shown as **two numbers, `with / without` bug hours**, and in the aggregate rows is computed over **only the tickets that have the matching estimate** (a ticket with no Architect estimate is left out of the Arch gain entirely — both its estimate and its logged hours — and likewise for the Dev-lead gain), so an unestimated ticket can no longer drag a whole area or developer negative; the Est h / Logged h columns beside it still show the **full** sums: `(estimate − (logged + Bug h))/estimate` first (with bugs), then `(estimate − logged)/estimate` (without bugs). Positive = under estimate. (When logged falls back to a ticket total rather than Tempo per-user, the estimate is per-area while logged is whole-ticket, so the value can read oddly.)
 - **Sub-bugs & Sub-bug h** = the ticket's **own child sub-issues** of type `Bug` or `Sub-bug` — **issue links are not counted** (a "Relates" link would pull in duplicate/related bugs not raised against this ticket's work). Each sub-bug is attributed to an area **by its own Component/title only** — unlike non-bug sub-tasks (which inherit the parent's area for the DL estimate), a sub-bug does **not** inherit the parent's area, so a sub-bug with **no area signal of its own is not counted**. Only a sub-bug **in the area's own component** drives that area's count and **Sub-bug h**. Because this report measures **per-area AI impact** (a different developer per area — one backend, one frontend, one QA on a User Story), a cross-area sub-bug is **not mixed into another area's numbers**: a sub-bug whose component is a different area (and that area has no AI record on the ticket) is surfaced **only as an annotation**, **`2 (front +1 7.8h)`** — 2 own-area sub-bugs, plus a note that 1 frontend sub-bug totalling 7.8h exists (counted under frontend, not here). The base number and **Sub-bug h** are own-area only; the parenthetical lists each cross-area source's count and total hours. **Sub-bug h** is the hours logged on the own-area bugs (Tempo per-user → the bug's `timespent`), shown as a **separate** column from the ticket's Logged h. The CSV keeps the own count in **Sub-bugs** and the cross-area note in a **Sub-bugs (other areas)** column.
 - **Read-only** — the command never writes to Jira, Bitbucket, or git; outbound calls are read-only: the Jira REST enhanced-search reads (Passes A/B) and the Tempo worklog fetch (Pass C) when a token is set.
 - The AI records are **latest-only per developer×domain**, so the report reflects the most recent measurement per person per ticket, not a full history.

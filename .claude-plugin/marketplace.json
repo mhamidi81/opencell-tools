@@ -116,7 +116,7 @@
     {
       "name": "oc-time-report",
       "source": "./plugins/common/oc-time-report",
-      "description": "Estimation-vs-logged-hours report over a period (independent of the AI-usage JSON) — Tempo-worklog driven, one row per ticket with a PER-AREA column group (Backend/Frontend/QA): area main developer, Architect & Dev-lead estimates, logged/sub-bug hours, AI flag, two gains (with/without sub-bugs) and sub-bug count, plus an Arch/PR/management logged column and total. Date per ticket + month grouping, five HTML tabs, and a second finished-US per-developer summary. Date-stamped HTML + CSV to ./docs/. Jira via direct REST + Tempo per-user, both mandatory tokens; no MCP"
+      "description": "Estimation-vs-logged-hours report over a period (independent of the AI-usage JSON) — Tempo-worklog driven, one row per ticket with a PER-AREA column group (Backend/Frontend/QA): area main developer, Architect & Dev-lead estimates, logged/sub-bug hours each split into AI and non-AI streams (a worklog is AI-assisted when its author holds an AI-metrics record covering that issue; a US's record also covers its non-bug sub-tasks, a sub-bug uses its own record — no per-area AI flag), two gains (with/without sub-bugs) and sub-bug count, plus an Arch/PR/management logged column and total. Date per ticket + month grouping, five HTML tabs, and a second finished-US per-developer summary. Date-stamped HTML + CSV to ./docs/. Jira via direct REST + Tempo per-user, both mandatory tokens; no MCP"
     },
     {
       "name": "oc-bug-clusters",
