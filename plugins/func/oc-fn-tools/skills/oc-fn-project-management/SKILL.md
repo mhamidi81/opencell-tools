@@ -1,24 +1,21 @@
 ---
 name: oc-fn-project-management
-version: 1.11.3
-updated: 2026-09-21T11:15:00+02:00
+version: 1.12.1
+updated: 2026-09-30T11:54:26+02:00
 author: Stéphane Chambrin
 description: >
-  How to run an Opencell project from kickoff to release: the design-first phased
-  delivery model with hard gates, ADR/decision discipline, staged stakeholder
-  engagement, and repo/branch/CI/doc conventions. Load this skill when starting a
-  NEW Opencell project or product, or a BIG feature / Epic that warrants design-first
-  delivery — and whenever the user mentions project kickoff, phased delivery, phase
-  gates, "ways of working", the Decision Register, ADR setup, DECISIONS.md,
-  scaffolding a project, or "how we run this project". Opencell projects are
-  Bitbucket/Jira/Jenkins/Confluence-hosted. This skill orchestrates the *process*; it
-  defers issue authoring to `oc-fn-func-design` and Confluence to
-  `oc-fn-documentation`. Do NOT load it for a single routine Story, Enabler, or
-  Bug — that is `oc-fn-func-design`'s job. Do NOT load it to decide what goes into a
-  version, to score, rank or arbitrate candidates, to run a roadmap pre-gate or gate,
-  or to prepare a SteerCo roadmap item — that is `oc-roadmap` (personal, unpublished).
-  This skill starts once an item has been *selected* and needs running as a phased
-  project.
+  How to run an Opencell project from kickoff to release: the design-first phased delivery
+  model with hard gates, ADR/decision discipline, staged stakeholder engagement, and
+  repo/branch/CI/doc conventions. Load when starting a NEW Opencell project or product, or a
+  BIG feature / Epic that warrants design-first delivery — and whenever the user mentions
+  project kickoff, phased delivery, phase gates, "ways of working", the Decision Register, ADR
+  setup, DECISIONS.md, scaffolding a project, or "how we run this project". This skill
+  orchestrates the *process*; it defers issue authoring to `oc-fn-func-design` and Confluence
+  to `oc-fn-documentation`. Do NOT load for a single routine Story, Enabler or Bug
+  (`oc-fn-func-design`), nor to decide what goes into a version, score, rank or arbitrate
+  candidates, run a roadmap pre-gate or gate, or prepare a SteerCo roadmap item (`oc-roadmap`,
+  personal, unpublished). It starts once an item has been *selected* and needs running as a
+  phased project.
 ---
 
 # Running an Opencell project — phased delivery, decisions, engagement

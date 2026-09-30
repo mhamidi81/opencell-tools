@@ -1,25 +1,20 @@
 ---
 name: oc-fn-decks
-version: 1.6.0
-updated: 2026-09-28T11:36:12+02:00
+version: 1.6.1
+updated: 2026-09-30T11:54:26+02:00
 author: Stéphane Chambrin
 description: >
-  Author and render branded slide decks with the Opencell Marp theme (Charte
-  Graphique 2023) and/or as editable PowerPoint files on the OFFICIAL Opencell
-  PPT template. Load this skill whenever the user mentions a slide deck, a
-  presentation, slides, a pitch deck, a SteerCo deck, Marp, `.pptx` /
-  PowerPoint, the official template, or rendering a Markdown deck to
-  HTML/PDF/PPTX — or asks to build, style, or render an Opencell-branded deck,
-  or to publish, share or present a deck as an Artifact / artefact / claude.ai
-  page / a link. Carries the theme master (`theme/`), the official-template
-  PPTX lane (`pptx/` + `pptx.md`: curated pandoc reference, embedded fonts,
-  deck2pptx pipeline), the Artifact lane (`render-artifact.sh` + `artifact/` +
-  `artifact.md`: the same `.md` as a claude.ai page, light by default with a
-  light/dark switch, reproducible from git), the authoring conventions (lead slides, front-matter, one-way
-  mirror), the `YYYYMMDD_` dated-filename rule, the `marp-cli` render command,
-  the overflow check, and the 24h-time / ISO-date locale non-negotiable. Used
-  for the **Phase-2 approval deck** in `oc-fn-project-management` and for
-  standalone strategy / SteerCo decks.
+  Author and render branded slide decks with the Opencell Marp theme (Charte Graphique 2023)
+  and/or as editable PowerPoint files on the OFFICIAL Opencell PPT template. Load whenever the
+  user mentions a slide deck, a presentation, slides, a pitch deck, a SteerCo deck, Marp,
+  `.pptx` / PowerPoint, the official template, or rendering a Markdown deck to HTML/PDF/PPTX —
+  or asks to build, style or render an Opencell-branded deck, or to publish, share or present
+  a deck as an Artifact / artefact / claude.ai page / a link. Carries the Marp theme, the
+  official-template PPTX lane (deck2pptx pipeline), the Artifact lane (the same `.md` as a
+  claude.ai page, light by default, reproducible from git), the authoring conventions, the
+  `YYYYMMDD_` dated-filename rule, the `marp-cli` render command, the overflow check, and the
+  24h-time / ISO-date locale rule. Used for the **Phase-2 approval deck** in
+  `oc-fn-project-management` and for standalone strategy / SteerCo decks.
 ---
 
 # Opencell slide decks — authoring & rendering with the Marp theme
