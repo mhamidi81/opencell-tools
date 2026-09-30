@@ -1,22 +1,21 @@
 ---
 name: oc-fn-portal
-version: 1.7.0
-updated: 2026-09-23T19:00:00+02:00
+version: 1.7.1
+updated: 2026-09-30T11:54:26+02:00
 author: Stéphane Chambrin
 description: >
-  Drive the Opencell Portal (React SPA) through the Playwright MCP server to navigate
-  pages, explore the UI, and capture screenshots — in support of design assistance and
-  Confluence/Jira documentation, NOT automated testing. Also the lane for diagnosing a
-  Portal action that fails server-side: replaying the failing call against the API rather
-  than fighting the UI. Load this skill whenever the user
-  asks to open / navigate / log in to the portal or the sandbox, to take or capture a
-  screenshot of a portal page, to see "what a page looks like", to explore the portal UI,
-  or whenever a Playwright `browser_*` tool is about to be used against the Opencell Portal
-  — and whenever a Portal request fails: "why did this save fail", a 400 or a 500 from the
-  Portal, a "Server communication error" toast, replaying an API call, getting a Keycloak
-  token to reproduce a request, or reproducing a reported Portal defect. Carries the
-  token-discipline rules for using Playwright frugally, the persistent-login / screenshot
-  conventions, and the API-replay lane (`api-replay.md`).
+  Drive the Opencell Portal (React SPA) through the Playwright MCP server to navigate pages,
+  explore the UI, and capture screenshots — in support of design assistance and
+  Confluence/Jira documentation, NOT automated testing. Also the lane for a Portal action that
+  fails server-side: replay the call against the API rather than fighting the UI. Load
+  whenever the user asks to open / navigate / log in to the portal or the sandbox, to capture
+  a screenshot of a portal page, to see "what a page looks like", to explore the portal UI, or
+  whenever a Playwright `browser_*` tool is about to be used against the Opencell Portal — and
+  whenever a Portal request fails: "why did this save fail", a 400 or a 500, a "Server
+  communication error" toast, replaying an API call, getting a Keycloak token to reproduce a
+  request, or reproducing a reported Portal defect. Carries the Playwright token-discipline
+  rules, the persistent-login / screenshot conventions, and the API-replay lane
+  (`api-replay.md`).
 ---
 
 # Opencell Portal — navigate, explore, screenshot
