@@ -46,7 +46,7 @@ skill/agent name (e.g. plugin `oc-fe-engineer` holds agent `oc-fe-engineer`).
 
 There are three kinds of plugins:
 
-1. **Skills & commands** — Slash commands users invoke directly: `/oc-cache-jira`, `/oc-commit`, `/oc-pull-request`, `/oc-review-pr`, `/oc-bug-clusters`, `/oc-pr-rejection-rate`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr`, `/oc-fe-create-ui`, `/oc-fe-write-tests`, `/oc-fe-create-e2e-test`, `/oc-fe-regression-test`, `/oc-fe-calculate-ai-use`, `/oc-ar-tech-design`, `/oc-be-implement`, `/oc-be-review`, the backend guide skills (`/oc-be-api-guide`, `/oc-be-db-guide`, `/oc-be-entity-guide`, `/oc-be-service-guide`), and the MCP skills (`/oc-figma`, `/oc-playwright`, `/oc-opencell`). Defined in `SKILL.md` files (or `commands/*.md` for `oc-be-tools`).
+1. **Skills & commands** — Slash commands users invoke directly: `/oc-cache-jira`, `/oc-commit`, `/oc-pull-request`, `/oc-review-pr`, `/oc-bug-clusters`, `/oc-pr-rejection-rate`, `/oc-clean-branches`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr`, `/oc-fe-create-ui`, `/oc-fe-write-tests`, `/oc-fe-create-e2e-test`, `/oc-fe-regression-test`, `/oc-fe-calculate-ai-use`, `/oc-ar-tech-design`, `/oc-be-implement`, `/oc-be-review`, the backend guide skills (`/oc-be-api-guide`, `/oc-be-db-guide`, `/oc-be-entity-guide`, `/oc-be-service-guide`), and the MCP skills (`/oc-figma`, `/oc-playwright`, `/oc-opencell`). Defined in `SKILL.md` files (or `commands/*.md` for `oc-be-tools`).
 2. **Sub-agents** — Specialized AI personas spawned by skills or the main agent: `oc-fe-engineer`, `oc-fe-reviewer`, `oc-fe-designer`, `oc-fe-test-writer`, `oc-fe-cypress-expert`, `oc-fe-e2e-expert`, and the backend agents `oc-be-entity-builder`, `oc-be-service-builder`, `oc-be-api-builder`, `oc-be-test-generator`, `oc-be-postman-generator`, `oc-be-pr-reviewer`. Defined in `.md` files under `agents/` with YAML frontmatter (`name`, `color`, `model`).
 3. **MCP Servers** — External service integrations configured in `plugin.json` under `mcpServers` (Figma, Playwright, Opencell, SonarQube, PostgreSQL), all under `plugins/mcp/`. **Atlassian is not one of them** — Jira/Confluence come from the official `atlassian` plugin in Anthropic's `claude-plugins-official` marketplace, which this repo does not vendor.
 
@@ -272,6 +272,36 @@ Four things are not obvious from the code:
 It is **read-only** — no Bitbucket writes, no Jira writes — and uses the same
 `BITBUCKET_EMAIL` + `BITBUCKET_ACCESS_TOKEN` Basic auth as `/oc-review-pr`; see
 **Atlassian and Bitbucket Access**.
+
+## Branch clean-up (`/oc-clean-branches`)
+
+`plugins/common/oc-clean-branches` deletes Bitbucket branches whose tip commit is older than
+`--before`, behind five guards (R1 protected/structural or branch-restricted, R2 open PR as
+source **or** destination, R3 commits not in the target, R4 recent commit, R5 ticket not a
+Bug / Sub-bug / Task / Sub-task). Same shape as `oc-pr-rejection-rate`: real Python under
+`skills/oc-clean-branches/scripts/` and a pytest suite:
+
+```bash
+python3 -m pytest plugins/common/oc-clean-branches/tests -q
+```
+
+It is the **only plugin in this repo that deletes on Bitbucket**, so four things matter:
+
+- **Every guard fails safe.** An unreadable ticket, a failed merge check or a branch with no
+  Jira key is *kept*. A repository whose `branch-restrictions` cannot be read is **skipped
+  whole** — that endpoint needs `repository:admin`, and the `pullrequest:write` tokens used
+  elsewhere in this repo get a `403` there (verified live 2026-10-02). Never "degrade" this
+  to a warning: R1 cannot be guaranteed without it. Deletion itself needs `repository:write`.
+- **Scan, report and delete are three scripts**, and only `branch_delete.py` writes. It
+  refuses unless `--confirm N` equals the plan's deletable total, and re-reads each tip hash
+  and the open PRs right before each `DELETE`. The SKILL shows the confirmation as a red
+  ` ```diff ` block followed by `AskUserQuestion`; keep the confirmation before the delete
+  step — a packaging test asserts the order.
+- **The R3 fallback target is `develop` → `dev` before the branching model.**
+  opencell-portal's branching model still names `backlog` as its development branch. The
+  latest **merged** PR's destination wins over both when that branch still exists.
+- **Version lines are matched on the last path segment too**, so `hotfix/15.0.5-600` is a
+  protected version branch while `hotfix/INTRD-123` is not.
 
 ## MCP Servers Requiring Environment Variables
 
