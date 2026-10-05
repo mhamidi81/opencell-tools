@@ -64,7 +64,7 @@ Examples:
 ```sh
 jira get INTRD-1486                                   # read preset, ADF as text
 jira get INTRD-1486 summary,status                    # narrower allowlist
-jira get INTRD-42531 customfield_10137 --json         # true ADF of a Story field
+jira get INTRD-1486 customfield_10137 --json          # true ADF of a Story field
 jira jql 'project = INTRD AND statusCategory != Done ORDER BY updated DESC' --max=15
 jira jql 'project = INTRD AND fixVersion = "19.0.0"' --all --fields=summary,status,fixVersions --json \
   | jq -r '.issues[] | [.key, .fields.status.name] | @tsv'   # every match, no cursor juggling

@@ -87,67 +87,67 @@ In JQL, the User Story issue type is named **`Story`** (id `10001`) — not `"Us
  "customfield_10134", "customfield_10135", "customfield_10136", "customfield_10137"]
 ```
 
-## Templates
+## Template
 
-User Stories have **three** template variants. All three are Story-type and use the same
-four custom fields (`customfield_10134`–`10137`); they differ only in the pre-filled
-structure tailored to the work's discipline.
+User Stories have **one** template: **INTRD-1486**, in the light format since 2026-10-05 (§ *Story
+structure — light format*). Fetch it with `responseContentFormat: "adf"` to preserve its formatting.
+The `components` field (`Backend`, `Frontend`, both, or other) is set on every Story, independently
+of the template.
 
-| Variant       | Template key | Use when                                                        |
-|---------------|--------------|-----------------------------------------------------------------|
-| Generic       | INTRD-1486   | Default — story spans backend and frontend, or is mixed/unclear |
-| Backend-only  | INTRD-42531  | Story is clearly backend-only (API, rating, billing; no UI)     |
-| Frontend-only | INTRD-42554  | Story is clearly frontend-only (Portal UI; no backend change)   |
+The backend (INTRD-42531) and frontend (INTRD-42554) variants were **retired and deleted on
+2026-10-05**: only one author had used them, and as hand-maintained copies they kept drifting
+behind the generic template. Do not recreate them. A Story's discipline shows in its `components`
+and its content, not in a separate template.
 
-Fetch the chosen template with `responseContentFormat: "adf"` to preserve panels and layouts.
+**This skill documents the template's structure, and the documented structure is canonical.** If
+INTRD-1486 and this skill ever disagree, author to the skill and flag the gap to the user.
 
-**Selection rule.** When a story is *obviously* single-discipline — clearly only backend or
-only frontend — do **not** silently pick a template. State your read and **ask the user**
-whether to use the generic template or the matching specialized variant. When the discipline
-is mixed or unclear, default to the generic template (INTRD-1486) without asking.
+## Story structure — light format
 
-**Components vs template.** The `components` field (`Backend`, `Frontend`, both, or other)
-remains useful metadata and must still be set on every story — independently of which
-template is used. It does not *auto-select* the template; the specialized variant is offered
-by the selection rule above and confirmed with the user.
+Adopted **2026-10-05** by rewriting `INTRD-1486` in place, after POs and readers both reported the
+previous template as too heavy. Measured on the 208 Stories created since 2026-04-01: most authors
+skipped the template or left about 85% of its sections empty, and the fully filled form (median
+~8,300 characters across the PO fields) restated each rule three or four times, once per section.
+Rewriting `INTRD-44602` in this format kept every fact at half the size.
 
-### Template parity — the variants drift, this skill documents only the generic one
+**Three rules apply to the three PO fields** (Technical design keeps its own scaffold):
 
-The three variants are maintained by hand and **fall out of sync**. Everything this skill and
-`stories-acceptance.md` document about a Story's structure describes the **generic template
-(INTRD-1486)**; the specialised variants have repeatedly lagged behind it.
+- **Write each fact once, in the section that owns it.** A rule lives in *Business rules*. A
+  message's wording lives in *Messages*, keyed to its rule. A test points to the rule it verifies.
+  Never restate a rule as a journey step, a data note or a test expectation.
+- **An optional section that does not apply is deleted, not left empty.** An empty heading is noise
+  for every reader. A mandatory section that does not apply gets one line: `N/A — <reason>` for
+  *GUI*, `None` for *Impact on existing data*.
+- **Author hints are grey placeholder text, never panels.** The template carries its hints as grey
+  italic text (`em` + `textColor` `#97a0af`) where the content goes, so writing over a hint removes
+  it. Add no note or info panel to a Story field, and leave no hint text in a filled Story.
 
-**The documented structure is canonical, not the variant you happened to open.** When a specialised
-template lacks a section the skill mandates, author to the *skill*, not to the template — emit the
-full four-column *Test cases* table, the `Type` taxonomy, and the *Limits & volumes* sub-section
-regardless — then flag the template gap to the user.
+| Field | Section | Status | Content |
+|---|---|---|---|
+| *Requirement* (`10134`) | — | mandatory | *As a … I want … so that …*, then at most a few lines of context and what the Story traces to (Epic, ADR, spec, customer request). |
+| *Functional design* (`10135`) | Business rules | mandatory | Table *#* / *When* / *Then*, one row per rule, numbered `BR-1`, `BR-2`… *When* holds the condition, including who may act; *Then* holds the observable outcome. |
+| | Messages | optional | Table *Rule* / *Message (EN)* / *Message (FR)*. The trigger is the rule, never restated. |
+| | Data | optional | One list item per piece of information — § *Data — naming decided model bindings*. |
+| | GUI | mandatory | `N/A — <reason>`, or where it sits (Application › Menu › Page › Tab), the Figma link or screenshot, and the labels table — § *GUI labels — bilingual*. |
+| | Impact on existing data | mandatory | One line; `None` is valid. |
+| | User journey | optional | Only for a multi-step flow the rules do not already describe. |
+| *Acceptance* (`10136`) | Dataset | optional | Table *ID* / *Object* / *Key attributes*, when tests share data. |
+| | Test cases | mandatory | Table *Rule* / *Given* / *When* / *Then* — `stories-acceptance.md`. |
+| *Technical design* (`10137`) | API, Error dictionary, Model, Services, Migration, GUI, Non regression checks, Limits & volumes | architect lane | Unchanged by the light format. Left as the empty scaffold at creation — `SKILL.md` § *Authoring boundary — Technical design belongs to the architect lane*. |
 
-**Parity check** — one call per variant, before authoring from a specialised one for the first time in
-a session:
+**Dropped on 2026-10-05 — do not reintroduce:**
 
-```sh
-for K in INTRD-1486 INTRD-42531 INTRD-42554; do
-  jira raw GET "/issue/$K?fields=customfield_10136,customfield_10137" | jq -r --arg k "$K" '
-    $k + "  headers=" + ([.fields.customfield_10136|..|select(type=="object" and .type=="tableHeader")
-      | [..|.text? // empty]|join("")] | "(\(length)) " + join(" | "))
-    + "  limits=" + (if ([.fields.customfield_10137|..|.text? // empty]|join(" ")|test("Limits & volumes"))
-      then "yes" else "NO" end)'
-done
-```
+- the *lead summary* blockquote at the top of *Functional design*: once the *Requirement* is short,
+  it says the same thing twice;
+- *User journey* as a mandatory section: it restated the rules;
+- the *Information requirements* table (now the *Data* list) and the *Function transition* table
+  (now the one-line *Impact on existing data*);
+- the test-case `Type` column, replaced by `Rule`, which makes coverage visible;
+- every hint panel in the three PO fields.
 
-Expect four headers — `Type | Context (given) | Actions (when) | Expected outcome (then)` — and
-`limits=yes` on all three. Repair a drifted variant by grafting the missing nodes **verbatim from
-INTRD-1486**, keeping the variant's own discipline-specific hint text.
-
-> **Status 2026-08-03 — all three variants at parity.** Both specialised templates were found
-> drifted in exactly the same way (three columns, no `Type` taxonomy, no *Limits & volumes*) and were
-> grafted back from `INTRD-1486`: `INTRD-42531` (backend) and `INTRD-42554` (frontend). The graft
-> keeps each variant's own discipline-specific content — 42554 retains its *Visual & Accessibility
-> acceptance*, *Component tree*, *Design system compliance* sections and its frontend hint text.
->
-> That **both** variants drifted the same way is the reason this check exists: the specialised
-> templates are hand-maintained copies, so every addition to `INTRD-1486` has to be replayed into
-> them by hand, and it silently isn't. Re-run the check rather than assuming parity holds.
+**Reviewer expectation.** Reject a Story with a missing or blank mandatory section, an optional
+section left as an empty heading, a rule restated in another section, or template hint text left
+in place.
 
 ## Template-seeding automation — set all four fields IN the create call
 
@@ -177,6 +177,12 @@ guard fires, and the override is skipped.
 > `requirement`, a create that fills *Requirement* but leaves the other three empty still skips the
 > whole override: the remaining fields stay **empty, with no scaffold**. Supplying `10137`'s empty
 > scaffold at creation is therefore mandatory, not optional.
+
+**The automation copies the template issue's four fields live.** An edit to `INTRD-1486` reaches
+the next Story created, with no change to the rule. Verified 2026-10-05: a bare create (summary
+only), made minutes after the light format was written to `INTRD-1486`, was seeded with it within
+20 s. So **an edit to `INTRD-1486` is a change to every future Story**: back up its four fields
+first, and verify with a bare create afterwards.
 
 The fields do **not** appear in `createmeta` for a Story — they are not on its create screen — yet
 `POST /issue` accepts them. Do not conclude from `createmeta` that they must be set in a second call
@@ -236,7 +242,7 @@ Section headings are real ADF **`heading` nodes** (not styled `paragraph` nodes)
 - **Level 2** — the main sections (`User journey & Process flow`, `GUI`, `Test cases`, `Component tree`, …).
 - **Level 3 / 4** — subsections nested under a level-2 section.
 
-Mirror the template's own structure (e.g. frontend Story template **INTRD-42554**) — every section in it is a `heading` node at the level above. Reference issue with the correct full shape: **INTRD-43398** (backend Story).
+Mirror the template's own structure (**INTRD-1486**) — every section in it is a `heading` node at the level above. Reference issue with the correct full shape: **INTRD-43398** (backend Story).
 
 ```json
 {
@@ -355,94 +361,43 @@ Cross-cutting rule and strict-answering policy: see `SKILL.md` § *Limits & volu
 
 **Reviewer expectation.** A story whose technical design ends with seven `N/A — ...` lines is suspect: at minimum, latency target, data-volume horizon, and degradation behaviour are almost always applicable for any story that touches a backend flow or a non-trivial UI list.
 
-## Functional design — lead summary (non-normative)
-
-The *Functional design* field (`customfield_10135`) is the one Story field that grows into a wall of
-tables (*Business rules & Permissions*, *Information requirements*, *User-facing messages & Edge
-cases*, …). To give a human reader — the PO validating at sprint review, QA, the Tech Lead,
-stakeholders — a fast on-ramp, **open the field body with a short lead summary**.
-
-**Shape.** A single ADF **`blockquote`**, placed **immediately after the `Functional design` level-1
-heading and its `rule`, before the first section heading** — the first body node of the field.
-
-- **Length & style.** Two to four sentences of plain prose — no tables, no lists. Use `strong` (bold)
-  for the opening label and any load-bearing noun; use `em` (italic) *sparingly*, for one key nuance
-  and for the closing non-normative marker. This is the "quote with bold + italic used wisely" form,
-  not a styled paragraph.
-- **Content.** *What the Story changes and for whom*, in business terms — enough that a reader can
-  restate the intent without reading the tables. Open with a bold `In one line —` (or `What changes:`)
-  and state the **observable outcome**, not the mechanism.
-- **Non-normative — this is the load-bearing rule.** The summary is **orientation only**; the sections
-  below it are the single source of truth. It **must introduce no requirement, rule, message, or data
-  element that is not also stated in the sections below** — everything binding lives in the detail, so
-  the summary can be simplified without ever being "wrong". Close it with an italic marker to that
-  effect (e.g. *"Orientation only — the sections below are the source of truth."*). If the summary and
-  a section ever disagree, the **section wins**.
-- **Where it does NOT go.** *Only* the *Functional design* field carries a lead summary. *Requirement*
-  is already a human on-ramp (the *As a … / I want … / So that …* triplet); *Acceptance* is QA's
-  working table set; *Technical design* is the architect lane and is not authored here. Do not add a
-  summary blockquote to those fields.
-
-**ADF shape** (goes right after the field's `heading`+`rule`, before the first section `heading`):
-
-```json
-{
-  "type": "blockquote",
-  "content": [
-    {
-      "type": "paragraph",
-      "content": [
-        { "type": "text", "text": "In one line — ", "marks": [{ "type": "strong" }] },
-        { "type": "text", "text": "an admin for a GoCardless Seller installs the connector and registers their account as a SEPA Direct Debit gateway, with no Core rebuild; GoCardless then becomes a per-Seller direct-debit payment method. " },
-        { "type": "text", "text": "Orientation only — the sections below are the source of truth.", "marks": [{ "type": "em" }] }
-      ]
-    }
-  ]
-}
-```
-
-**Reviewer expectation.** Reject a *Functional design* that opens straight into a section heading or
-table with no lead summary, or whose summary states a requirement, rule, or message found **nowhere**
-in the sections below — that content must be moved into the appropriate section (the summary is a
-reader's aid, never a home for spec).
-
-## Information requirements — naming decided model bindings
+## Data — naming decided model bindings
 
 Cross-cutting principle and the bounded-exception framing: see `SKILL.md` § *Decided model bindings
 — name the conceptual home in the functional design*. This section is the Story-level mechanics.
 
-The *Information requirements* of *Functional design* (`customfield_10135`) lists the information a
-Story needs **in business terms**. **Default:** we don't directly name database/model properties —
-we list the information (e.g. "the customer's VAT regime"), and the architect decides where it
-lives. Most Stories stay here.
+The *Data* section of *Functional design* (`customfield_10135`) lists the information a Story needs
+**in business terms**, one list item each. **Default:** we don't directly name database/model
+properties — we list the information (e.g. "the customer's VAT regime"), and the architect decides
+where it lives. Most Stories stay here. The section is optional: a Story whose rules already name all
+the information it touches needs no *Data* section.
+
+**Item shape:** `**<Information>** — held on <Entity.attribute> — <constraints>`. The *held on* part
+is present only when the model home is decided; otherwise the item is `**<Information>** —
+<constraints>`.
 
 **Bounded exception — already-decided model element.** When a model decision is **already fixed**
-(e.g. settled in design) and the architect must respect it, name the conceptual entity/attribute
-here — mirror the live generic template (INTRD-1486) wording verbatim:
-
-> When a model decision is ALREADY fixed (e.g. settled in design) and the architect must respect it,
-> name the conceptual entity/attribute here (e.g. `EreportingSetting.vatRegime`). Stay conceptual —
-> the physical design (tables, JPA mappings, indexes) belongs in Technical design.
+(e.g. settled in design) and the architect must respect it, name the conceptual entity/attribute in
+the item's *held on* part (e.g. `EreportingSetting.vatRegime`), with the decided input and its
+source (ADR / spec) in the constraints. Stay conceptual — the physical design (tables, JPA mappings,
+indexes) belongs in Technical design. The template's hint says the same: *"Name its conceptual home
+only when the model decision is already made."*
 
 This is the exception for ALREADY-DECIDED elements, **not** a reversal of the default — a Story with
 no settled model decision still just lists information.
-
-**The *Held on (conceptual model)* column.** The home for the binding is the optional
-*Held on (conceptual model)* column on the *Information requirements* table. Per row, name
-`entity.attribute` + a one-line decided-input / why + the decision source (ADR / spec). Leave it
-empty for rows whose model home isn't decided yet.
 
 **Reference the Epic, don't duplicate it.** When the parent Epic carries a *Domain model & decided
 design inputs* section (`epics.md` § *Domain model & decided design inputs*), the Story names only
 **its slice** and references the Epic — the shared model is defined once on the Epic, not copied into
 every Story.
 
-**Template coverage.** The generic (INTRD-1486) and backend (INTRD-42531) Story templates carry this
-clause and the *Held on* column. The frontend template (INTRD-42554) intentionally does **not** — it
-has no *Information requirements* section and defers data-model concerns to its paired backend Story.
+**Template coverage.** The template (INTRD-1486) carries the *Data* section and its hint. Stories
+written before 2026-10-05 may carry the older *Information requirements* table, some with a *Held on
+(conceptual model)* column; when editing one that has not been converted, keep its shape unless the
+user asks for a conversion.
 
-**Reviewer expectation.** When a decided model element exists for a Story's data, reject an
-*Information requirements* section that names the user-facing information but omits its conceptual home.
+**Reviewer expectation.** When a decided model element exists for a Story's data, reject a *Data*
+section that names the information but omits its conceptual home.
 
 ## GUI labels — bilingual (EN + FR)
 
@@ -455,12 +410,12 @@ has no *Information requirements* section and defers data-model concerns to its 
 > § *Destructive edits on fields containing inline media*). `oc-fn-gui-design` produces the artifacts
 > (link + dated screenshot + grounded spec) and hands them here.
 
-When a Story has a real GUI (the *GUI* section is **not** `N/A`), every user-facing label must be given in **both English and French** — field labels, **enum / selector values**, buttons, tab and section titles, and actions. The clean form is a bilingual table under *Descriptions and mockups*:
+When a Story has a real GUI (the *GUI* section is **not** `N/A`), every user-facing label must be given in **both English and French** — field labels, **enum / selector values**, buttons, tab and section titles, and actions. The form is the *GUI* section's labels table:
 
 | Element | Label (EN) | Label (FR) |
 |---|---|---|
 
-This is already mandated by the generic Story template (INTRD-1486 — *"All labels must have both English and French translations"*) but is easy to miss at authoring time, so it is an explicit rule here. It complements the *User-facing messages & edge cases* table, which already requires EN + FR.
+The generic Story template (INTRD-1486) carries the table and asks for *"every label in EN and FR"*, but this is easy to miss at authoring time, so it is an explicit rule here. It complements the *Messages* table, which also requires EN + FR.
 
 - **Enums** — the **code stays English** (e.g. `NON_TAXABLE_PERSON`); give **both** display labels — EN "Non-taxable person" / FR "Non-assujetti". The French regulatory term belongs in the FR label, never in English prose.
 - **Proper French regulatory names** (VAT-regime names: *réel normal mensuel*, *franchise en base*, …) are identical in both columns — note that rather than inventing a translation.
@@ -486,9 +441,10 @@ write, refine, or review acceptance tests.
 
 It carries, among other things, the **hard precondition that the Functional
 design must be solid before any test is written** — when the FD has gross
-holes (missing sections, empty mandatory tables, vague rules, missing
-user-facing messages), Claude must refuse to generate tests and list the
-holes back to the PO instead of papering over them.
+holes (a missing mandatory section, an empty *Business rules* table, rules
+without a condition or an outcome, a message without both EN and FR),
+Claude must refuse to generate tests and list the holes back to the PO
+instead of papering over them.
 
 ## Workflow
 
