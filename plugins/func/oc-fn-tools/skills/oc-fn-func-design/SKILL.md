@@ -1,7 +1,7 @@
 ---
 name: oc-fn-func-design
-version: 1.34.0
-updated: 2026-10-05T11:42:43+02:00
+version: 1.35.0
+updated: 2026-10-05T12:45:07+02:00
 author: Stéphane Chambrin
 description: >
   Rules and data for Jira issues in the Opencell INTRD project and the CR (Change Requests)
@@ -311,6 +311,29 @@ the `fields` allowlist and use `responseContentFormat: "adf"`, then for each
   `attachment[].filename` to the media node's `alt` attribute.
 
 A media UUID with no matching attachment is the warning sign.
+
+### Removing an image from its field deletes the attachment
+
+**An image pasted into a field belongs to that field.** When an edit leaves the field without that
+image's `file` media node, Jira **deletes the attachment** — even when another field of the same
+issue still references the same media node. Verified 2026-10-05, when moving six legacy Stories'
+content out of `description`: resetting the description deleted all ten of their image
+attachments, and a test that put the node into *Functional design* first changed nothing.
+
+- **Nothing reports it.** The `PUT` returns success, and `renderedFields` still shows an `<img>` for
+  an `external` media node whose attachment no longer exists. **Check the attachments themselves:**
+  compare `fields=attachment` before and after the edit, and treat any missing id as data loss.
+- **Keeping the node in its own field is safe.** Rewriting a field around its existing `file` media
+  nodes, copied verbatim, keeps the attachments.
+- **To move an image to another field** (or to drop it from its field while keeping it on the
+  issue): download it, upload it again as a plain attachment (§ *Inline images* recipe in
+  `stories.md`), embed it from there with an `external` node, and only then edit the source field.
+  A plain attachment is owned by no field and survives later edits.
+- **Recovery is partial.** Writing the field's previous ADF back re-creates the attachment (with a
+  new id) — but only for files **the editing user uploaded**. Another user's upload fails with
+  `ATTACHMENT_VALIDATION_ERROR`, and the image is lost unless they, an admin or Atlassian support
+  restore it. So before any edit that removes images, back up the field's ADF and know who uploaded
+  each image.
 
 **Embedding an image inline in the first place** — the positive recipe (upload it as a real
 attachment, then a `mediaSingle` → `media` node of `type: "external"` pointing at *that same issue's*
