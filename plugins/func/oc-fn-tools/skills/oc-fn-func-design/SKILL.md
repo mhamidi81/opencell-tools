@@ -1,7 +1,7 @@
 ---
 name: oc-fn-func-design
-version: 1.33.1
-updated: 2026-09-30T11:54:26+02:00
+version: 1.36.1
+updated: 2026-10-05T14:33:30+02:00
 author: Stéphane Chambrin
 description: >
   Rules and data for Jira issues in the Opencell INTRD project and the CR (Change Requests)
@@ -200,9 +200,8 @@ architect must respect: then, and only then, name its conceptual home.
   JPA mappings, indexes, DDL — is out of lane; it belongs to the architect in *Technical design*
   (`customfield_10137`).
 - **Per-type placement.**
-  - **Story** → the *Information requirements* of *Functional design* (`customfield_10135`), via the
-    optional *Held on (conceptual model)* column — see `stories.md` § *Information requirements —
-    naming decided model bindings*.
+  - **Story** → the *Data* section of *Functional design* (`customfield_10135`), in the item's
+    *held on* part — see `stories.md` § *Data — naming decided model bindings*.
   - **Epic** → a consolidated *Domain model & decided design inputs* section in the `description`,
     **inherited** by child Stories (each names only its slice and references the Epic) — see
     `epics.md` § *Domain model & decided design inputs*.
@@ -215,9 +214,8 @@ architect must respect: then, and only then, name its conceptual home.
 the architects would have re-invented or re-litigated them. Fix: name each conceptual home in the
 functional fields, leaving physical realization to the architect lane.
 
-**Reviewer expectation.** When a decided model element exists for a Story's data, **reject** an
-*Information requirements* section that names the user-facing information but omits its conceptual
-home. (The default still stands where no decision is fixed — listing information without a model
+**Reviewer expectation.** When a decided model element exists for a Story's data, **reject** a
+*Data* section that names the user-facing information but omits its conceptual home. (The default still stands where no decision is fixed — listing information without a model
 property is correct there, not a gap.)
 
 ## Reading efficiency — field selection
@@ -275,51 +273,74 @@ When mixing formats inside a single issue creation/edit, set `contentFormat` to 
 
 ## Destructive edits on fields containing inline media
 
-Before any `editJiraIssue` that rewrites a field whose current ADF contains a
-`mediaSingle` node, check whether the `media.id` (a Media Services UUID)
-corresponds to a file present in the issue's `attachment[]` array.
+**The rule: an edit keeps every pasted image in the field it is in, copied verbatim — or moves it
+the safe way first.** An image pasted into a field belongs to that field. Once the field stops
+referencing it, Jira deletes the attachment, and nothing reports it: the `PUT` succeeds, and
+`renderedFields` still shows an `<img>` for an `external` node whose attachment no longer exists.
 
-- **If yes** → the image is a standard Jira attachment. Safe to proceed; the
-  attachment will remain available even after the field is rewritten.
-- **If no** → the image is an inline Media Services embed, orphaned from the
-  Attachments panel. The ADF media node is the **only** reference to the file.
-  Rewriting the field destroys that reference, and the Media Services token
-  **cannot be re-inserted via the REST API** — the file effectively becomes
-  unrecoverable through API means.
+*Why this is a hard rule:* on 2026-10-05, moving six legacy Stories' content out of `description`
+deleted all ten of their image attachments — including when the image node had been put into
+*Functional design* first — and three could not be brought back. An earlier version of this section
+called an image listed in `attachment[]` "safe to proceed"; it is not.
 
 This applies to all issue types and all ADF-bearing fields (`description`,
-`customfield_10134`–`10137` on Stories, comments, etc.).
+`customfield_10134`–`10137` on Stories, comments, etc.). Before any edit that rewrites one:
 
-In the second case:
+1. **Read the field as ADF, with `attachment` in the `fields` allowlist**, and list its `media` nodes
+   (`type: "file"` carries a Media Services UUID; `type: "external"` a URL) and the attachment ids.
+2. **Keep every `file` node in the same field, verbatim** — same `id`, `collection`, `alt`, sizes.
+   Rewriting the text around it is safe: 57 Stories were rewritten that way on 2026-10-05 and every
+   attachment survived (ids compared before and after).
+3. **An image that must leave its field** — moved to another field, or dropped from it while kept on
+   the issue — goes through § *Moving an image safely* **before** the source field is edited.
+4. **After the edit, compare `fields=attachment` with the list from step 1.** A missing id is data
+   loss: stop, and restore the field's previous ADF (§ *Recovery is partial*).
 
-1. Confirm explicitly with the user before proceeding.
-2. If the user still wants the edit, recover the image first — typically by
-   asking the user to download it from the current rendering and re-attach it
-   to the issue as a regular attachment, then reference it from the new ADF.
-3. As a fallback, an ADF `media` node of `type: "external"` pointing to
-   `https://<site>.atlassian.net/rest/api/3/attachment/content/<attachmentId>`
-   on a sibling issue can render the image inline for authenticated users, but
-   this is fragile (cross-issue dependency, breaks if the source attachment is
-   removed, may not render in mobile/export contexts).
+If an edit would lose an image anyway, confirm explicitly with the user before proceeding.
+
+Two kinds of pasted image, same consequence:
+
+- **Listed in `attachment[]`** (the usual case): Jira deletes the attachment when its field stops
+  referencing it, even when another field of the same issue still references the same media node.
+- **Not listed** — an inline Media Services embed orphaned from the Attachments panel: the ADF node is
+  the **only** reference, and the Media Services token **cannot be re-inserted via the REST API**.
+
+### Moving an image safely
+
+Download it, upload it again as a plain attachment, embed it from there with an `external` media node
+(the § *Inline images* recipe in `stories.md`), and only then edit the source field. A plain
+attachment is owned by no field and survives later edits.
+
+As a fallback, an `external` node pointing to
+`https://<site>.atlassian.net/rest/api/3/attachment/content/<attachmentId>` on a **sibling** issue can
+render the image for authenticated users, but this is fragile (cross-issue dependency, breaks if the
+source attachment is removed, may not render in mobile/export contexts).
+
+### Recovery is partial
+
+Writing the field's previous ADF back can re-create a deleted attachment (with a new id). On
+2026-10-05 it worked for all 7 images **the editing user had uploaded**, and failed with
+`ATTACHMENT_VALIDATION_ERROR` for all 3 uploaded by other people, the editing user being a Jira
+admin. That points to the uploader as the only one who can re-link an image (an observation, not a
+controlled test). Otherwise an image comes back only from a site backup taken before the deletion, or
+through Atlassian Support. Jira Cloud has
+no recycle bin for attachments. So before any edit that could remove images, **back up the field's
+ADF and the attachment list, and know who uploaded each image.**
 
 ### Detection helper
 
-When fetching an issue prior to editing an ADF field, include `attachment` in
-the `fields` allowlist and use `responseContentFormat: "adf"`, then for each
-`mediaSingle` node found in the field being edited:
-
-- extract `content[0].attrs.id` (the media UUID),
-- check whether any element of `attachment[]` matches — typically by comparing
-  `attachment[].filename` to the media node's `alt` attribute.
-
-A media UUID with no matching attachment is the warning sign.
+For each `mediaSingle` node in the field being edited, extract `content[0].attrs.id` (the media UUID)
+and match it to `attachment[]` — typically by comparing `attachment[].filename` to the node's `alt`
+attribute. Older nodes often have no `alt`; then match by the order images render in
+`expand=renderedFields`, whose `<img>` URLs carry the attachment ids. A media UUID with no matching
+attachment is an orphaned embed (the second kind above).
 
 **Embedding an image inline in the first place** — the positive recipe (upload it as a real
 attachment, then a `mediaSingle` → `media` node of `type: "external"` pointing at *that same issue's*
 attachment content URL; and why `type: "file"` with the attachment id fails
 `ATTACHMENT_VALIDATION_ERROR`) — is in `stories.md` § *ADF recipe → Inline images*. Because the file
 stays a real attachment, that is the **standard, non-fragile** inline-embed path (unlike the
-sibling-issue external reference in point 3 above).
+sibling-issue fallback in § *Moving an image safely*).
 
 ## Templates index
 
@@ -331,9 +352,7 @@ The INTRD project has a canonical template issue for each issue type. Use these 
 | Sub-bug               | INTRD-5340 *(the Bug template — there is no separate Sub-bug template)* | `description` | `bugs.md` |
 | Initiative            | INTRD-42501  | `description`               | `initiatives.md` |
 | Epic                  | INTRD-1949   | `description`               | `epics.md`     |
-| User Story — generic  | INTRD-1486   | `customfield_10134`–`10137` | `stories.md`   |
-| User Story — backend  | INTRD-42531  | `customfield_10134`–`10137` | `stories.md`   |
-| User Story — frontend | INTRD-42554  | `customfield_10134`–`10137` | `stories.md`   |
+| User Story            | INTRD-1486   | `customfield_10134`–`10137` | `stories.md`   |
 | Enabler               | INTRD-42939  | `description`               | `enablers.md`  |
 | Change Request        | CR-3 *(CR project)* | `description`        | `change-requests.md` |
 
@@ -365,7 +384,7 @@ which `Sub-bug` also follows, uses plain `strong` headings with *no* colour** (s
 `rule` + note panels) — do not add `#bf2600` to a Bug or a Sub-bug; see `bugs.md`.
 
 - **Coloured headings** — real ADF `heading` nodes (`attrs.level`: 1 for the field title, 2 for sections, 3–4 for subsections), their text marked `strong` + `textColor` `#bf2600` (dark red), each followed by a `rule` node. **Not** styled `paragraph` nodes — see the copy-pasteable recipe in `stories.md` § *ADF recipe*. `#bf2600` is the func/brand heading colour; other Opencell skills (e.g. `oc-ar-ai-tech-design`) may emit `#FF0000` — keep func-authored content on `#bf2600` and do not silently normalise to another value. **The Bug template is the exception** — its headings are plain `strong`, no colour.
-- **Note panels** (purple, `panelType: "note"`, `#eae6ff` background) — wrap author hints. Closing line: italic-grey "You can delete this note" (`em` + `textColor #97a0af`).
+- **Note panels** (purple, `panelType: "note"`, `#eae6ff` background) — wrap author hints. Closing line: italic-grey "You can delete this note" (`em` + `textColor #97a0af`). **Not in the Story PO fields:** since 2026-10-05 the Story template's *Requirement*, *Functional design* and *Acceptance* (INTRD-1486) carry no panels; their hints are grey placeholder text in the spot the content goes (same `em` + `#97a0af` marks) — see `stories.md` § *Story structure — light format*. *Technical design* keeps its panels.
 - **Warning panels** (yellow, `panelType: "warning"`, `#fffae6` background) — wrap rules that govern the content being filled in (REST v2 guideline, error-dictionary rules, etc.).
 - **Multi-line table cells** — built with `hardBreak` nodes. Markdown cannot encode line breaks inside table cells and breaks the table on round-trip.
 
