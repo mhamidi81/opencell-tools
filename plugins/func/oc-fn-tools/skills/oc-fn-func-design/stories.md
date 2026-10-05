@@ -336,9 +336,38 @@ To show an image **in the field body** (not just in the Attachments panel — e.
 - **Do not** use `type: "file"` with the attachment id — Jira rejects it with **`ATTACHMENT_VALIDATION_ERROR`** (a `type:"file"` media node needs a Media Services **UUID + collection**, which the attachments REST API does not expose).
 - The image **must remain a real attachment** — the external node only *renders* it; the attachment is the store. Keeping both means it survives export/mobile **and** satisfies `SKILL.md` § *Destructive edits on fields containing inline media* (nothing is orphaned). Renders inline for authenticated Jira users.
 - Verify: `expand=renderedFields` → the field HTML contains `<img … src="…/attachment/content/<id>">`. That proves the node, not the file: also check the attachment id is still in `fields=attachment`.
-- **Moving an existing image between fields** (e.g. out of a legacy `description`) goes through this recipe: re-upload, embed, then edit the source field. Removing a pasted image from its own field deletes its attachment — `SKILL.md` § *Removing an image from its field deletes the attachment*.
+- **Moving an existing image between fields** (e.g. out of a legacy `description`) goes through this recipe: re-upload, embed, then edit the source field. Removing a pasted image from its own field deletes its attachment — `SKILL.md` § *Destructive edits on fields containing inline media*.
 
 > The whole PO field set (`customfield_10134`–`10137`) is written as ADF, all four inside the create call (§ *Template-seeding automation*) — via the `jira` helper (`jira raw POST /issue @payload.json`) or `createJiraIssue`. Build the ADF (headings/rules/tables/links/media above) with a small script rather than by hand.
+
+## Converting an older Story to the light format
+
+Done for 66 Stories on 2026-10-05. Convert only on request, and only the Stories the user names (an
+older Story being edited for another reason keeps its shape — § *Data — naming decided model
+bindings*).
+
+- **Back up first** — the four fields, `description`, the attachment list and `updated` of every
+  Story — and refuse to write one whose `updated` changed since its backup.
+- **Restructure, never add.** Every fact of the original survives, and none is added: no persona,
+  value, rule, test, FR translation, `None` or `N/A` the original does not state. Where the format
+  needs something the original lacks, the template's grey hint stays as a visible to-do. A behaviour
+  stated only in a test may become a rule — it *is* in the original. Contradictions in the original
+  are kept as written and flagged to the PO, never resolved by the converter.
+- **Technical design is not touched** (architect lane).
+- **GUI is `N/A` only when the original says so.** Older templates carry a "No GUI" info panel: that
+  is the author's statement, so write `N/A — no GUI (<reason>)`. A `Backend` component alone is not
+  a statement that there is no screen — leave the grey hint.
+- **The legacy layout.** Stories older than the four custom fields keep everything in `description`,
+  under level-1 headings *Requirements* / *Functional design* / *Acceptance* / *Technical design*. Move
+  the PO parts into the three fields, the *Technical design* part verbatim into `customfield_10137`
+  when that field is empty, and reset `description` to the standard *DO NOT USE* panel — **after
+  moving each image the safe way** (`SKILL.md` § *Destructive edits on fields containing inline
+  media*). Resetting a legacy description is exactly the edit that deleted ten images on 2026-10-05.
+- **Write quietly, then verify.** `PUT /issue/<key>?notifyUsers=false` spares watchers one email per
+  Story; it needs Jira or project admin rights (it was accepted for a Jira admin). Then read the
+  fields back and compare their text, and compare `fields=attachment` with the backup.
+- **ADF that Jira rejects with `INVALID_INPUT`:** a `code` mark combined with any mark other than
+  `link` (e.g. bold code), and empty text nodes. Strip them before writing.
 
 ## Limits & volumes (story-level)
 
