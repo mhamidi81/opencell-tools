@@ -1,7 +1,7 @@
 ---
 name: oc-fn-func-design
-version: 1.33.1
-updated: 2026-09-30T11:54:26+02:00
+version: 1.34.0
+updated: 2026-10-05T11:42:43+02:00
 author: Stéphane Chambrin
 description: >
   Rules and data for Jira issues in the Opencell INTRD project and the CR (Change Requests)
@@ -200,9 +200,8 @@ architect must respect: then, and only then, name its conceptual home.
   JPA mappings, indexes, DDL — is out of lane; it belongs to the architect in *Technical design*
   (`customfield_10137`).
 - **Per-type placement.**
-  - **Story** → the *Information requirements* of *Functional design* (`customfield_10135`), via the
-    optional *Held on (conceptual model)* column — see `stories.md` § *Information requirements —
-    naming decided model bindings*.
+  - **Story** → the *Data* section of *Functional design* (`customfield_10135`), in the item's
+    *held on* part — see `stories.md` § *Data — naming decided model bindings*.
   - **Epic** → a consolidated *Domain model & decided design inputs* section in the `description`,
     **inherited** by child Stories (each names only its slice and references the Epic) — see
     `epics.md` § *Domain model & decided design inputs*.
@@ -215,9 +214,8 @@ architect must respect: then, and only then, name its conceptual home.
 the architects would have re-invented or re-litigated them. Fix: name each conceptual home in the
 functional fields, leaving physical realization to the architect lane.
 
-**Reviewer expectation.** When a decided model element exists for a Story's data, **reject** an
-*Information requirements* section that names the user-facing information but omits its conceptual
-home. (The default still stands where no decision is fixed — listing information without a model
+**Reviewer expectation.** When a decided model element exists for a Story's data, **reject** a
+*Data* section that names the user-facing information but omits its conceptual home. (The default still stands where no decision is fixed — listing information without a model
 property is correct there, not a gap.)
 
 ## Reading efficiency — field selection
@@ -331,9 +329,7 @@ The INTRD project has a canonical template issue for each issue type. Use these 
 | Sub-bug               | INTRD-5340 *(the Bug template — there is no separate Sub-bug template)* | `description` | `bugs.md` |
 | Initiative            | INTRD-42501  | `description`               | `initiatives.md` |
 | Epic                  | INTRD-1949   | `description`               | `epics.md`     |
-| User Story — generic  | INTRD-1486   | `customfield_10134`–`10137` | `stories.md`   |
-| User Story — backend  | INTRD-42531  | `customfield_10134`–`10137` | `stories.md`   |
-| User Story — frontend | INTRD-42554  | `customfield_10134`–`10137` | `stories.md`   |
+| User Story            | INTRD-1486   | `customfield_10134`–`10137` | `stories.md`   |
 | Enabler               | INTRD-42939  | `description`               | `enablers.md`  |
 | Change Request        | CR-3 *(CR project)* | `description`        | `change-requests.md` |
 
@@ -365,7 +361,7 @@ which `Sub-bug` also follows, uses plain `strong` headings with *no* colour** (s
 `rule` + note panels) — do not add `#bf2600` to a Bug or a Sub-bug; see `bugs.md`.
 
 - **Coloured headings** — real ADF `heading` nodes (`attrs.level`: 1 for the field title, 2 for sections, 3–4 for subsections), their text marked `strong` + `textColor` `#bf2600` (dark red), each followed by a `rule` node. **Not** styled `paragraph` nodes — see the copy-pasteable recipe in `stories.md` § *ADF recipe*. `#bf2600` is the func/brand heading colour; other Opencell skills (e.g. `oc-ar-ai-tech-design`) may emit `#FF0000` — keep func-authored content on `#bf2600` and do not silently normalise to another value. **The Bug template is the exception** — its headings are plain `strong`, no colour.
-- **Note panels** (purple, `panelType: "note"`, `#eae6ff` background) — wrap author hints. Closing line: italic-grey "You can delete this note" (`em` + `textColor #97a0af`).
+- **Note panels** (purple, `panelType: "note"`, `#eae6ff` background) — wrap author hints. Closing line: italic-grey "You can delete this note" (`em` + `textColor #97a0af`). **Not in the Story PO fields:** since 2026-10-05 the Story template's *Requirement*, *Functional design* and *Acceptance* (INTRD-1486) carry no panels; their hints are grey placeholder text in the spot the content goes (same `em` + `#97a0af` marks) — see `stories.md` § *Story structure — light format*. *Technical design* keeps its panels.
 - **Warning panels** (yellow, `panelType: "warning"`, `#fffae6` background) — wrap rules that govern the content being filled in (REST v2 guideline, error-dictionary rules, etc.).
 - **Multi-line table cells** — built with `hardBreak` nodes. Markdown cannot encode line breaks inside table cells and breaks the table on round-trip.
 

@@ -85,8 +85,8 @@ section with a boundary note: *the architect lane owns the physical design in ea
 design; decided inputs are not to be re-litigated; to change a constraint, update this Epic first.*
 
 **Inheritance.** Child Stories **inherit** this section the same way they inherit the *Limits &
-volumes (envelope)* — each Story names only its slice (its *Held on (conceptual model)* rows, see
-`stories.md` § *Information requirements — naming decided model bindings*) and **references** the
+volumes (envelope)* — each Story names only its slice (the *held on* part of its *Data* items, see
+`stories.md` § *Data — naming decided model bindings*) and **references** the
 Epic. The shared model is defined **once** on the Epic; children narrow or reference it, never
 duplicate it (duplication drifts).
 
