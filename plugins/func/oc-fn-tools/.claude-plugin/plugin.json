@@ -1,7 +1,7 @@
 {
   "name": "oc-fn-tools",
   "description": "Functional/product toolkit for Opencell: Jira INTRD issue authoring, Confluence docs authoring, Playwright-driven Portal navigation and screenshots, design-first phased delivery, branded deck and one-pager authoring, and GUI design against the Opencell Figma design system. Bundles a headless Playwright MCP server (oc-fn-playwright).",
-  "version": "1.3.31",
+  "version": "1.3.32",
   "author": {
     "name": "Stéphane Chambrin"
   },

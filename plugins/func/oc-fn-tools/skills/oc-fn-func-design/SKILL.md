@@ -1,7 +1,7 @@
 ---
 name: oc-fn-func-design
-version: 1.36.1
-updated: 2026-10-05T14:33:30+02:00
+version: 1.37.0
+updated: 2026-10-06T17:08:13+02:00
 author: Stéphane Chambrin
 description: >
   Rules and data for Jira issues in the Opencell INTRD project and the CR (Change Requests)
@@ -107,11 +107,11 @@ Load only the file relevant to the current task — do not pre-read all of them.
 - **Check the create screen before the first create of an issue type you have not created this session** — required fields differ per type and are not guessable. Run `jira meta <issuetypeId>` (or `getJiraIssueTypeMetaWithFields`). Notably a **`Bug`** requires *Issue location (URL)* (`customfield_10359`, a URL-typed string field — send a full URL) and *Affects versions* (`versions`) at creation, while a **`Sub-bug`** requires neither — see `bugs.md` § *Required fields at creation — Bug vs Sub-bug*.
 - Minimise token usage on every call. First pick the cheapest transport (see [Transport](#transport--rovo-mcp-baseline-vs-the-optional-jira-helper) — default to the `jira` helper when it is installed; otherwise use the Rovo MCP for every operation). Then, on whichever transport, pass an explicit `fields` allowlist (see [Reading efficiency](#reading-efficiency--field-selection)) and prefer `markdown` over ADF on MCP calls whenever possible (see [Content format policy](#content-format-policy--adf-vs-markdown)).
 
-## Product area — set the module Component
+## Product area — the module Component is mandatory
 
-INTRD carries the **product-area axis as a Jira Component** (the "module") — orthogonal to both the issue *type* and the altitude hierarchy (Initiative → Epic → Story/Enabler). Its purpose is **cost attribution**: an issue's effort must land in exactly one **primary** product module.
+INTRD carries the **product-area axis as a Jira Component** (the "module") — orthogonal to both the issue *type* and the altitude hierarchy (Initiative → Epic → Story/Enabler). Its purpose is **cost attribution**: an issue's effort must land in exactly one **primary** product module. Argos, the financial steering project, values every logged hour by module to compute the cost and ROI of each module; an issue without one is cost nobody can attribute — and Bugs carry the maintenance half of it. **Of the items worked since 2026-04-01, 132 of 189 Epics, Stories and Enablers carried no module before the 2026-10-06 backfill (22 after it: 2 templates, 13 cross-cutting, 7 left for a human decision), and 644 of 662 Bugs still carry none.** Hence § *Enforcement* below.
 
-- **Set the primary module Component on every Epic, Story, and Enabler you create** (and on a Bug, the module of the affected area). Pick the single module that best owns the work.
+- **Every Epic, Story, Enabler and Bug carries its primary module Component** — for a Bug, the module of the affected area. Pick the single module that best owns the work. A **Sub-bug** reads it from its parent Story, Enabler or Backport and needs none of its own.
 - **Cross-tag a second Component only when the work genuinely spans modules** — e.g. a business screen that also advances the shared front-end substrate → its **business module (primary) + `Portal platform`** (cross-tag). Never park business-screen work in `Portal platform`.
 - **The 30 modules:**
   - **Quote-to-Cash (13):** Catalog · CPQ · Customer & contract management · Mediation · Rating · Billing · Invoicing · Accounts Receivable · Accounting · Dunning · Payments · Revenue recognition · Reporting
@@ -124,6 +124,64 @@ INTRD carries the **product-area axis as a Jira Component** (the "module") — o
 - **`Backend` / `Frontend` are a *different* axis** (engineering layer, not product area) that coexists on the same field — an issue may carry `[Backend, Billing]`. Leave any existing `Backend`/`Frontend` in place; **add** the module Component, never replace the `components` field wholesale.
 - **Not a module:** irreducible cross-cutting tech/functional debt has **no** Component (a non-module bucket, not a label) — don't invent a "debt" Component.
 - The module is the *dimension* of work; **altitude** (Initiative/Epic/Story/Enabler) is the separate hierarchy (see `initiatives.md`). The old `Feature` type is **dissolved** — replaced by this Component axis plus the `Initiative` type.
+
+### Enforcement — no Epic, Story, Enabler or Bug leaves this skill without a module
+
+**The rule: any Epic, Story, Enabler or Bug this skill creates or edits ends the call with a module
+Component.** It holds on every transport and every path — a create, an edit for another reason, a
+Story conversion, an Epic decomposition, a Bug filed or retested.
+
+1. **Create — the module is in the create call.** Put `components` in the same `POST /issue` /
+   `createJiraIssue` call as everything else, with at least one module (plus `Backend` / `Frontend`
+   where the layer applies). Never plan to add it afterwards.
+   - REST: `"components": [{"name": "Billing"}, {"name": "Backend"}]` inside `fields`.
+   - Rovo MCP: the same array under `additional_fields` (`{"components": [{"name": "Billing"}]}`).
+2. **Choose it, don't leave it.**
+   - **A Story or an Enabler** takes its parent Epic's primary module by default. Change it only
+     when the work clearly belongs to another module.
+   - **An Epic** takes the module that owns most of its scope.
+   - **A Bug** takes the module whose behaviour is wrong — not the module where the fix happens to
+     land, nor the screen that merely displays it.
+   - **When the module is not evident, ask the user** before creating. Never create without one,
+     and never guess silently.
+   - **Name the module you set** in the confirmation you give the user.
+3. **Edit — fix a missing module in the same write.** Before any write to an existing Epic, Story,
+   Enabler or Bug, include `components` in the read. If it carries no module, add one in that same edit,
+   chosen as in step 2, and say so.
+   - **REST adds without touching the rest:** `jira raw PUT /issue/KEY
+     '{"update":{"components":[{"add":{"name":"Billing"}}]}}'`.
+   - **The Rovo MCP `editJiraIssue` has no `update` verb:** its `fields.components` *replaces* the
+     list. Send the existing components plus the module. Sending the module alone wipes `Backend` /
+     `Frontend`.
+4. **Verify after creating.** The post-create re-read (`stories.md` § *Verify after creating*) also
+   asserts a module is present:
+   ```sh
+   jira raw GET "/issue/$K?fields=components" | jq -e '[.fields.components[].name]
+     | any(. != "Backend" and . != "Frontend")' >/dev/null || echo "NO MODULE: $K"
+   ```
+5. **Review — a missing module is a finding.** Report it whenever you read an Epic, Story, Enabler
+   or Bug for a judgement: a PO review or a Bug retest (`po-review.md`), an Epic's validation or
+   decomposition, a version's scope, a triage. Do not fix it silently inside a read-only task; propose the module.
+6. **Sweep — list what lacks one.** Validated 2026-10-06 against a recount of the same set:
+   ```
+   project = INTRD AND issuetype in (Epic, Story, Enabler, Bug) AND statusCategory != Done
+     AND (component is EMPTY OR component not in ("Accounting", "Accounts Receivable", "Billing",
+     "Catalog", "Core", "CPQ", "Customer & contract management", "Dunning",
+     "Energy market communications", "Energy vertical", "Extensibility", "GoCardless", "HubSpot",
+     "Ingenico", "Invoicing", "Marketing manager", "Marketplace", "Mediation", "Opencell AI",
+     "Partner care", "Payments", "Portal platform", "Rating", "Reporting", "Revenue recognition",
+     "Salesforce", "Selfcare", "SIPS", "Slimpay", "Stripe"))
+     AND key not in (INTRD-1486, INTRD-1949, INTRD-5340, INTRD-42501, INTRD-42939)
+   ```
+   The last line keeps the **template issues** (§ *Templates index*) out: they are not work, so they
+   carry no module, and a sweep must never write one on them. Both component branches are needed:
+   `component not in (…)` alone skips issues with **no** component at all. An issue carrying a module
+   plus `Backend` / `Frontend` is correctly left out. Scope it (a
+   version, an Epic, a period of work) before acting: **a backfill is a write; show the list and the
+   proposed modules, and get the user's go-ahead first.**
+7. **The one exception is explicit.** Irreducible cross-cutting debt (above) has no module, and
+   that is a decision: state it to the user at creation. It then counts as unattributed cost, never
+   as a forgotten field.
 
 ## Authoring boundary — User Stories are functional, never technical
 

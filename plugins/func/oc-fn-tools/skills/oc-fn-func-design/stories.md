@@ -91,8 +91,8 @@ In JQL, the User Story issue type is named **`Story`** (id `10001`) — not `"Us
 
 User Stories have **one** template: **INTRD-1486**, in the light format since 2026-10-05 (§ *Story
 structure — light format*). Fetch it with `responseContentFormat: "adf"` to preserve its formatting.
-The `components` field (`Backend`, `Frontend`, both, or other) is set on every Story, independently
-of the template.
+The `components` field carries the Story's **module**, which is mandatory (`SKILL.md` § *Product area — the module Component is mandatory*), plus its
+layer (`Backend`, `Frontend` or both). It is set in the create call, independently of the template.
 
 The backend (INTRD-42531) and frontend (INTRD-42554) variants were **retired and deleted on
 2026-10-05**: only one author had used them, and as hand-maintained copies they kept drifting
@@ -172,6 +172,7 @@ guard fires, and the override is skipped.
   `oc-ar-tech-design` skill, where available) — see `SKILL.md` § *Authoring boundary — Technical
   design belongs to the architect lane*. Fill it here only when the user explicitly asked you to
   write the technical design; otherwise defer to `oc-ar-tech-design`.
+- **`components`** — the module plus the layer, in this same call (`SKILL.md` § *Product area — the module Component is mandatory*, § *Enforcement*).
 
 > **Send all four, always — the guard is all-or-nothing.** Because the Story guard tests only
 > `requirement`, a create that fills *Requirement* but leaves the other three empty still skips the
@@ -228,6 +229,8 @@ own headings and hint panels — so "is the field non-empty" passes. Two checks 
      | jq -r --arg k "$K" '[$k] + [.fields|to_entries[]|(.value|tostring|length)|tostring] | join(" ")'; done
    ```
    Identical rows mean identical content — i.e. the template, not your Stories.
+3. **Module check.** Assert that each Story carries a module Component — the one-liner is in
+   `SKILL.md` § *Product area — the module Component is mandatory*, § *Enforcement*, step 4.
 
 If a Story was clobbered, a plain re-`PUT` of the same payload repairs it — nothing about the payload
 is wrong, only its timing. Wait past the window first.
@@ -354,6 +357,9 @@ bindings*).
   stated only in a test may become a rule — it *is* in the original. Contradictions in the original
   are kept as written and flagged to the PO, never resolved by the converter.
 - **Technical design is not touched** (architect lane).
+- **A missing module is added in the same write.** It is a field, not content, so *never add* does
+  not apply. Take the Epic's module; when none is evident, list the Story for the user rather than
+  guess (`SKILL.md` § *Product area — the module Component is mandatory*, § *Enforcement*, step 3).
 - **GUI is `N/A` only when the original says so.** Older templates carry a "No GUI" info panel: that
   is the author's statement, so write `N/A — no GUI (<reason>)`. A `Backend` component alone is not
   a statement that there is no screen — leave the grey hint.
