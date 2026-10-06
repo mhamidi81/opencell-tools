@@ -221,6 +221,10 @@ with a `400` a **`Sub-bug`** create never hits. The recognisable body:
 
 Both create screens expose the same thirteen fields — only the required/optional split differs.
 
+**`components` is optional for Jira, not for this skill.** A Bug is created with the module of the
+affected area, plus its layer (`Backend` / `Frontend`) when known; a Sub-bug reads the module from its
+parent. See `SKILL.md` § *Product area — the module Component is mandatory*.
+
 The error body above names only two of the Bug's four extra requirements, because `priority` and
 `fixVersions` happened to be set on that call. Read the table, not the error.
 
@@ -252,7 +256,8 @@ Follow the template's sections. A well-formed Bug makes the defect reproducible 
   a GUI defect and an API defect go to different teams and different repos — and it exposes the case
   where one defect needs **two** issues (a Core fix plus an additive Portal fix). It is *not* a
   duplicate of `customfield_10359` (*Issue location (URL)* — one pointer to one page) or of
-  `components` (`Backend`/`Frontend` — the engineering layer, set at triage).
+  `components` (the module, set at creation, and `Backend`/`Frontend` — the engineering layer, set at
+  triage).
 - **Reproduction** — exact, numbered steps a reader can follow **without reading code**; **expected
   vs. actual** result; frequency (always / intermittent). A screenshot may *illustrate* a step; it may
   never *be* the step. INTRD-45655 is the counter-example — twelve words and three PNGs, with no page,

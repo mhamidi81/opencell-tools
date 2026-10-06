@@ -198,3 +198,7 @@ live.
    verdict. On a pass, two lines instead (above).
 7. **Then transition** — resolve the id live, and pick it by transition *name*.
 8. **Reassign on a rejection** — to the developer who wrote the fix, not the reviewer (above).
+9. **Check the module.** A Story or a retested Bug with no module Component is a finding, though not
+   a verdict. Propose
+   the module in the comment, or add it with the user's go-ahead (`SKILL.md` § *Product area — the module Component is mandatory*,
+   § *Enforcement*, step 5).

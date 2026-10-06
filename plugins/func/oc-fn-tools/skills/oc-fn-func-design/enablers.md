@@ -53,7 +53,8 @@ it stood at *trigger* time. A `description` written in a follow-up call is invis
 overwritten.
 
 **So: create the Enabler with its `description` already populated, in the single `createJiraIssue` /
-`POST /issue` call.** The content is then in the trigger snapshot, the guard fires, and the override
+`POST /issue` call** — together with its `components`: the module (mandatory, `SKILL.md` § *Product area — the module Component is mandatory*)
+and its layer, `Backend` or `Frontend`. The content is then in the trigger snapshot, the guard fires, and the override
 is skipped. Do **not** create bare and edit afterwards — that is exactly what loses the content.
 
 The mechanism, the measured timings, and the post-create verification recipe are documented once in

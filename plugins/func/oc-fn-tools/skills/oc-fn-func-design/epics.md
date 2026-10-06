@@ -23,6 +23,9 @@ Although the `description` field also accepts Markdown, new Epics authored from 
 
 Epics use the standard **`description`** field — not the custom fields used by User Stories.
 
+**Module.** Every Epic carries its primary module Component, set in the create call, and its Stories
+and Enablers take it by default. See `SKILL.md` § *Product area — the module Component is mandatory*.
+
 Field preset for full read:
 
 ```
@@ -50,6 +53,9 @@ Every Story that belongs to an Epic **must** follow this naming pattern:
 **Example:** `[e-reporting] (1) Generate e-reporting XML`
 
 The suffix must be identical across all Stories of the same Epic — any variation (casing, spelling, spacing) breaks the visual grouping in the Jira backlog. When creating a batch of Stories, define the suffix on the Epic first and copy it verbatim to each child.
+
+Copy the Epic's **module** to each child the same way, unless a Story clearly belongs to another
+module (`SKILL.md` § *Product area — the module Component is mandatory*).
 
 **Every child Story must be functional *and* demonstrable.** When decomposing an Epic, each Story
 must pass the functional litmus (`SKILL.md` § *Authoring boundary — User Stories are functional,
