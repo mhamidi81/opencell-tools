@@ -84,6 +84,7 @@ In JQL, the User Story issue type is named **`Story`** (id `10001`) — not `"Us
 
 ```
 ["summary", "status", "issuetype", "priority", "assignee", "parent", "labels", "components",
+ "fixVersions", "customfield_10260", "customfield_10103",
  "customfield_10134", "customfield_10135", "customfield_10136", "customfield_10137"]
 ```
 
@@ -91,6 +92,12 @@ In JQL, the User Story issue type is named **`Story`** (id `10001`) — not `"Us
 
 User Stories have **one** template: **INTRD-1486**, in the light format since 2026-10-05 (§ *Story
 structure — light format*). Fetch it with `responseContentFormat: "adf"` to preserve its formatting.
+
+**Fix versions: at most one** — one once the Story is scheduled, never two. Older versions it must
+also reach go into *Backport versions* (`customfield_10260`), each with its own Backport issue
+(`SKILL.md` § *Cost per version — the Fix version field*, `backports.md`). *Business value (MoSCoW)* `Must have` means the version
+cannot ship without it (`SKILL.md` § *Version scope — MoSCoW on Epics, Stories and change requests*).
+
 The `components` field carries the Story's **module**, which is mandatory (`SKILL.md` § *Product area — the module Component is mandatory*), plus its
 layer (`Backend`, `Frontend` or both). It is set in the create call, independently of the template.
 

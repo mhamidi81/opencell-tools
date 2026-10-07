@@ -36,10 +36,14 @@ The template carries two parallel *Technical contract* sub-sections — **Backen
 
 Enablers use the standard **`description`** field — not the custom fields `customfield_10134`–`10137` used by User Stories.
 
+**Fix versions: at most one,** as for a Story — one once scheduled, never two. Backports go into *Backport versions*
+(`customfield_10260`) and their own Backport issues (`SKILL.md` § *Cost per version — the Fix version field*, `backports.md`).
+
 Field preset for full read:
 
 ```
-["summary", "status", "issuetype", "priority", "assignee", "parent", "labels", "components", "description"]
+["summary", "status", "issuetype", "priority", "assignee", "parent", "labels", "components",
+ "fixVersions", "customfield_10260", "description"]
 ```
 
 ## Creation pattern — set `description` IN the create call

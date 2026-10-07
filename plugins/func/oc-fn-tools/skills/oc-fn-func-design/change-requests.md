@@ -115,7 +115,8 @@ plain string for structured content).
 |---|---|---|---|
 | **Product response** | `customfield_10153` | ADF text | Official Product ruling (see above). |
 | **Expected by** | `customfield_10095` | labels (array) | **The customer/driver(s)** behind the CR (e.g. `Fnac-Darty`, `Docaposte`, `Vialis`). *This* is the customer field — **not** `labels`. Can hold several. |
-| **Business value (MoSCoW)** | `customfield_10103` | select | `Must have` · `Should have` · `Could have` · `Won't have`. |
+| **Business value (MoSCoW)** | `customfield_10103` | select | `Must have` · `Should have` · `Could have` · `Won't have`. On a CR, `Must have` is read as "the customer's go-live depends on it" — the CPO Obeya's blocked-revenue register counts it that way. On the delivering Epics and Stories, `Must have` means the version cannot ship without them. |
+| **Due date** | `duedate` | date | The earliest date any of the CR's customers wishes for — a wish, set on Accept, revisable once *Scheduled*. On the edit screen since 2026-10-07, not on the create or transition screens: set it by an edit. |
 | **Change rejection reason** | `customfield_10139` | select | Set when rejecting. One of: `Not in product scope` · `Not in product strategy` · `Too specific` · `Workaround exists` · `Already in Product` · `Duplicate` · `This is a bug`. |
 | **Epic Link** | `customfield_10014` | epic link | Links a scheduled CR to its delivery Epic. |
 | **Delivery status** | `customfield_10401` | select | Delivery-side progress once scheduled. |
@@ -174,11 +175,34 @@ is **triage → study → respond** on existing CRs, not creation.
 4. **Decide:** write/finalise the **Product response** (filled when Accepting/Rejecting), then
    transition — **Accept change**, or **Reject request** (always set a *Change rejection reason* —
    the *basic* reason; the *Product response* carries the detailed one).
+   **On Accept, the due date (`duedate`) is the earliest date any of its customers (*Expected by*)
+   wishes for.** It is a wish, not a commitment, and may be revised once the CR is scheduled (step 5).
+   **Set it by an edit.** *Due date* was added to the CR edit screen on 2026-10-07 (screen 10129, used
+   by the CR project only). It is still on neither the create screen nor the *Accept change* /
+   *Scheduled* transition screens, so write it with a plain edit, before or after the transition.
 5. **Accepted ≠ scheduled.** *Accepted* means "has value"; scheduling is a separate decision. When
    the **Roadmap committee** picks a candidate version, move to **Scheduled**, set **Fix versions**,
    and **create the INTRD Epics/Stories** (authored per the rest of this skill) **linked back** to
    the CR — reference them from the Product response. (Or park it in **Backlog** if it's valuable but
    unschedulable for now.)
+   When scheduling:
+   - **The due date may be updated** to the date now committed.
+   - **The delivering Epic carries the CR's customer in Prime Customer** (`customfield_10547`).
+     Argos charges product cost to that customer's P&L from it. Write the generic-or-specific
+     decision in the Product response.
+     - **It is a single-select with a fixed option list,** so map the *Expected by* label to the
+       exact option name: `LaPoste` → `La Poste`, `Fnac-Darty` → `FnacDarty`, `Mediapost` →
+       `Mediaposte`, `Energied'ici` → `Energie d'ici`.
+     - **When the CR names several customers, or one with no option, ask the user.** Never invent
+       or create an option. On 2026-10-07 OHM, Maileva, CanalPlus, BGPN and OuestFrance had none.
+     - **Payload:** REST `{"fields": {"customfield_10547": {"value": "La Poste"}}}`, or the
+       same object under Rovo `editJiraIssue` `fields`. The field is on the Epic create screen, so
+       it can go in the create call.
+   - **The delivering Epics and Stories get their own MoSCoW.** There, `Must have` means the version
+     cannot be delivered without them (`SKILL.md` § *Version scope — MoSCoW on Epics, Stories and change
+     requests*).
+   - **Fix versions** follow `SKILL.md` § *Cost per version*: one per Story or Enabler, with
+     backports in *Backport versions* and their own Backport issues.
 
 ## Limits & volumes
 
