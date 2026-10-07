@@ -26,16 +26,23 @@ Epics use the standard **`description`** field — not the custom fields used by
 **Module.** Every Epic carries its primary module Component, set in the create call, and its Stories
 and Enablers take it by default. See `SKILL.md` § *Product area — the module Component is mandatory*.
 
+**Fix version and MoSCoW.** An Epic carries the version it is planned in once it is scheduled — not
+before, and not because time was logged on it. *Business value (MoSCoW)* `Must have` means the
+version cannot ship without it. See `SKILL.md` § *Cost per version — the Fix version field* and
+`SKILL.md` § *Version scope — MoSCoW on Epics, Stories and change requests*.
+
 Field preset for full read:
 
 ```
-["summary", "status", "issuetype", "priority", "assignee", "parent", "labels", "components", "description"]
+["summary", "status", "issuetype", "priority", "assignee", "parent", "labels", "components",
+ "fixVersions", "customfield_10103", "description"]
 ```
 
-For hierarchy inspection (Stories and Enablers under the Epic):
+For hierarchy inspection (Stories and Enablers under the Epic), `subtasks` returns nothing: an Epic's
+children are not sub-tasks. Use `jira children KEY` (JQL `parent = KEY`) with:
 
 ```
-["summary", "status", "issuetype", "subtasks", "issuelinks"]
+["summary", "status", "issuetype", "components", "fixVersions", "issuelinks"]
 ```
 
 ## Child Story naming
