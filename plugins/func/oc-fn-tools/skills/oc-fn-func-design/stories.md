@@ -490,6 +490,40 @@ without a condition or an outcome, a message without both EN and FR),
 Claude must refuse to generate tests and list the holes back to the PO
 instead of papering over them.
 
+## Status after writing — In Design - Func
+
+**A Story this lane writes is left in `In Design - Func`.** Creation lands it in `Ready For Design`.
+Once its three PO fields are written and § *Verify after creating* passes, move it on and report the
+status with the key. Set by Stéphane on 2026-10-07.
+
+- **Never further, to `Review Design - Func`.** A Story is often written on behalf of someone else, a
+  PO, who checks it before sending it to Stéphane for review. That move is theirs, not this lane's.
+- **The same applies when this lane writes the PO fields of an existing Story** that sits in
+  `Ready For Design` or `To Design - Func`. A Story already in `In Design - Func` or further keeps its
+  status: this lane never moves a Story backwards.
+- **Transitions**, read from the INTRD workflow on 2026-10-07 (not yet exercised by this lane):
+
+  | From | Transition | id | To |
+  |---|---|---|---|
+  | `Ready For Design` | *Start design (builder)* — **Product builders only** | `4` | `In Design - Func` |
+  | `Ready For Design` | *Schedule for design* | `301` | `To Design - Func` |
+  | `To Design - Func` | *Start design* | `11` | `In Design - Func` |
+
+- **Not every user may take the direct route.** *Start design (builder)* is restricted to Product
+  builders (Stéphane, 2026-10-07). Anyone else goes in two steps: `Ready For Design` → `To Design -
+  Func` → `In Design - Func`. Jira lists only the transitions the caller may take, so let the list
+  decide rather than a remembered id:
+
+  ```sh
+  jira transitions "$K"           # does one lead straight to In Design - Func?
+  jira transition "$K" 4          # yes (Product builder): Ready For Design → In Design - Func
+  jira transition "$K" 301        # no: Ready For Design → To Design - Func …
+  jira transition "$K" 11         # … → In Design - Func
+  jira raw GET "/issue/$K?fields=status" | jq -r .fields.status.name
+  ```
+
+  If an id is refused, pick from `jira transitions "$K"` by **target status**, not by id.
+
 ## Workflow
 
 User Stories on INTRD follow a 9-phase workflow. Each phase groups one or several
@@ -519,6 +553,7 @@ Jira statuses and has a single accountable role. Roles in use: **PO**, **Tech Le
 
 ### Notes on the workflow
 
+- **Where this lane leaves a Story it wrote:** `In Design - Func` — § *Status after writing*.
 - **Phase 2 (Functional Design)** does *not* include `To Review by PO`. That status lives at the end of QA, as a pre-validation before the sprint review.
 - **Phase 4 (Sprint Ready)** is owned by Dev — concretely, Dev Leads evaluate the load on each US before sprint planning.
 - **Phase 6 (QA)** ends with `To Review by PO`, a pre-validation of the delivered work before the sprint review.
