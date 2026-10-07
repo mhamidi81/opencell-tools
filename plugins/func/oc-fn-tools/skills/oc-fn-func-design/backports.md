@@ -4,6 +4,21 @@ A **Backport** (issue type id `10087`) carries the work of bringing a Story's or
 an older version. Read together with `SKILL.md` § *Cost per version — the Fix version field*: a
 Backport exists so that the cost of maintaining an older version lands on that version.
 
+## Ownership — architect-created
+
+**Backport issues are created by the architect lane, not by the PO** (Stéphane, 2026-10-07). In
+practice, 60 of the 106 Backports created in 2026 came from the product architect and 29 from the
+Scrum master. The product side records the *need*: the version goes into the Story's or Enabler's
+*Backport versions*, which both the PO and the architect already fill in.
+
+- **The func/PO lane does not create Backport issues by default.** It sets *Backport versions* and
+  **flags the Backport for the architect lane**: tell the user which Story, which version, and that
+  the architect creates the issue.
+- **It creates one only on explicit user request,** the same exception used for Enablers and the
+  Story *Technical design* field. Then build it as below.
+- **Everything else here applies whoever creates it:** the construction rules, the checks after
+  creation, and the review and sweep.
+
 ## When one is needed
 
 - **A Story or an Enabler carries at most one Fix version** — one once it is scheduled, never two.

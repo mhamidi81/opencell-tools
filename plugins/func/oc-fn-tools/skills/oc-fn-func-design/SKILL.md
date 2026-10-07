@@ -1,7 +1,7 @@
 ---
 name: oc-fn-func-design
-version: 1.38.0
-updated: 2026-10-07T10:46:16+02:00
+version: 1.39.0
+updated: 2026-10-07T10:51:32+02:00
 author: Stéphane Chambrin
 description: >
   Rules and data for Jira issues in the Opencell INTRD project and the CR (Change Requests)
@@ -208,7 +208,7 @@ Argos, the financial steering project, costs every logged hour by version from *
   since April did.
 - **A Story or an Enabler carries at most one: one once it is scheduled, never two.** Each older
   version it must also reach goes into its **Backport versions** field (`customfield_10260`) **and**
-  gets its own Backport issue — `backports.md`.
+  gets its own Backport issue, which the architect lane creates — `backports.md`.
 
 **When it is set.**
 
@@ -228,8 +228,9 @@ and `backports.md` carry them.
 ### Enforcement — a Story or Enabler never gains a second Fix version through this skill
 
 1. **Create.** A Story or Enabler is created with at most one Fix version. A request for "this, and
-   also in 18.3" becomes one Fix version, the older one in *Backport versions*, and a Backport issue
-   (`backports.md` § *How to build one*).
+   also in 18.3" becomes one Fix version and the older one in *Backport versions*. The Backport issue
+   itself is created by the architect lane: flag it, don't create it, unless the user explicitly asks
+   (`backports.md` § *Ownership — architect-created*).
 2. **Edit.** A request to add a version to a Story or Enabler takes the same route; the Fix version
    stays single.
    - **REST:** `{"update": {"customfield_10260": [{"add": {"name": "18.3.0"}}]}}`.

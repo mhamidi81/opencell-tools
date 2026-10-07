@@ -94,7 +94,8 @@ User Stories have **one** template: **INTRD-1486**, in the light format since 20
 structure — light format*). Fetch it with `responseContentFormat: "adf"` to preserve its formatting.
 
 **Fix versions: at most one** — one once the Story is scheduled, never two. Older versions it must
-also reach go into *Backport versions* (`customfield_10260`), each with its own Backport issue
+also reach go into *Backport versions* (`customfield_10260`), each with its own Backport issue,
+created by the architect lane
 (`SKILL.md` § *Cost per version — the Fix version field*, `backports.md`). *Business value (MoSCoW)* `Must have` means the version
 cannot ship without it (`SKILL.md` § *Version scope — MoSCoW on Epics, Stories and change requests*).
 
