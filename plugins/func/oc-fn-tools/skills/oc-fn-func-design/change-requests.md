@@ -28,6 +28,36 @@ actual work is authored as INTRD issues and linked back.
 - **Not an INTRD issue type.** Do not set INTRD module Components on a CR, do not treat it in the
   Initiative→Epic→Story hierarchy, and do not look for the Story custom fields on it.
 
+## From a support ticket to a CR — Product takes no SUPS
+
+**Product works on CRs, not on support tickets: a SUPS ticket is not assigned to Product.** When a
+SUPS asks to change the product, **Support** turns it into a CR. Ruled by the CPO on 2026-10-08 and
+written into the Confluence page (v13, section *From a support ticket to a change request*).
+
+| Step | Who | What |
+|---|---|---|
+| Qualify | Support | A SUPS that asks to change, extend or add a feature becomes a CR. **When in doubt, create the CR**: if it turns out to be a bug, already in the product, or covered by a workaround, Product rejects it with the matching *Change rejection reason*. |
+| Create | Support | Create the CR (§ *Template — CR-3*), link it to the SUPS, *Send to Product*. The SUPS stays with Support. |
+| Study and decide | Product | Product answers **on the CR**. It may read the linked SUPS for context (customer files, attachments) but does not take it over. |
+| Relay | Support | When the CR changes status, Support relays the *Product response* to the customer on the SUPS, then closes it or keeps it open as agreed with the customer. |
+| Bug after all | Support | A CR rejected as *This is a bug* → Support handles the SUPS through the bug process. |
+
+**Ready for Product — the minimum bar** before *Send to Product*:
+- the description says what is asked and why (the CR-3 template sections);
+- ***Expected by*** names the customer(s), reusing existing labels;
+- the originating SUPS is linked.
+
+A CR that misses one goes back to its reporter as *Need Information*. **Product does not pick up
+Draft CRs** — a Draft stays with its reporter until it is sent; if the reporter is no longer
+available, Support takes the CR over.
+
+**How a session applies this:**
+- **A SUPS assigned to the CPO is not triaged as his.** Point to the rule: Support creates the CR,
+  links the SUPS, sends it. Don't analyse the SUPS in its place.
+- **Reading a SUPS linked from a CR is fine** — that is context for the CR, not ownership of the SUPS.
+- **Don't author the CR for Support**, and don't relay the answer on the SUPS — both are Support's
+  steps. Product's output is the *Product response* on the CR.
+
 ## Querying the CR project
 
 The `jira` helper defaults to `JIRA_PROJECT=INTRD`, so target CR with **raw JQL** (or
@@ -53,7 +83,7 @@ Each status has an **actor** — *Reporter* (raises / answers), **Product** (tri
 
 | Status | Category | Actor | Meaning |
 |---|---|---|---|
-| **Draft** | new | Reporter | Logged but not ready — reporter is still filling it in. |
+| **Draft** | new | Reporter | Logged but not ready — reporter is still filling it in. **Product does not pick it up.** |
 | **To Study** | new | Product | Submitted (*Send to Product*); queued for the **Discovery Committee** / Product triage. |
 | **In Study** | indeterminate | Product | Product is actively studying it. |
 | **Need Information** | indeterminate | Reporter | Product has asked the reporter for more information. |
@@ -132,7 +162,8 @@ plain string for structured content).
 CRs link **cross-project** via ordinary issue links (same Jira Cloud instance, so links span
 projects freely). Typical shape:
 
-- **SUPS → CR** — the originating support ticket *Relates* to the CR.
+- **SUPS → CR** — the originating support ticket is linked to the CR (*Relates*; Support also uses
+  *Problem/Incident*). **Mandatory** when the CR comes from a SUPS — the reporter links it.
 - **CR → CR** — related change requests *Relate* to each other (e.g. a shared theme or a superseding
   CR).
 - **CR → INTRD** — at **scheduling**, the CR is linked to the **Initiative / Epic** that delivers it
@@ -161,13 +192,16 @@ the create form. A Jira automation then prefills the template a few seconds late
 not visible), the reporter fills *Description / Use cases / Customer value* (saving each section), and
 uses the **Send to Product** transition to move Draft → To Study.
 
-Note: authoring new CRs is usually the requester's/Support's job — the Product-team lane's day-to-day
-is **triage → study → respond** on existing CRs, not creation.
+Note: authoring new CRs is the requester's/Support's job — for a customer ask raised in SUPS, always
+Support's (§ *From a support ticket to a CR*). The Product-team lane's day-to-day is **triage →
+study → respond** on existing CRs, not creation.
 
 ## The Product-team job on a CR
 
 1. **Triage** (*To Study*): read it; identify the customer (*Expected by*), the ask, MoSCoW value;
    spot bundled/duplicate concerns, missing info, and links (SUPS origin, related CRs/INTRD work).
+   A CR below the *Ready for Product* bar (no *Expected by*, no SUPS link when it came from one) goes
+   back as *Need Information* rather than being completed by Product.
 2. **Study** (→ *In Study* via *Request is being studied*): assess scope, feasibility, layer
    (backend/frontend — the teams are strictly separated), effort, and dependencies. A shallow first
    pass sizes and clarifies; a deep pass produces the decision.

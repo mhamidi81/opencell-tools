@@ -1,21 +1,21 @@
 ---
 name: oc-fn-func-design
-version: 1.41.0
-updated: 2026-10-07T23:12:14+02:00
+version: 1.42.1
+updated: 2026-10-08T14:15:40+02:00
 author: Stéphane Chambrin
 description: >
-  Rules and data for Jira issues in the Opencell INTRD project and the CR (Change Requests)
-  project. Use whenever the user mentions Jira, INTRD, User Story, Epic, Bug, Backport, Feature,
-  Initiative or a Change Request / CR — creating, reading, updating or writing any issue type
-  — or asks about custom fields, acceptance criteria, functional design, requirements,
-  Components (modules), issue templates, or triaging / responding to Change Requests (Product
-  response field, To Study / In Study). Technical Design (customfield_10137):
-  scaffold/read/review only; authoring is the architect lane — defer to oc-ar-tech-design.
-  Also the PO review lane: reviewing, validating or rejecting a delivered Story (To Review /
-  Validated / Rejected by PO, PO can't test yet), INTRD workflow transitions, the Sub-bug
-  type, and retesting a Bug fix ("test this ticket for me", In Test, Test failed) with its
-  Case / Expected / Actual report. Always load before any Atlassian Rovo Jira tool call or
-  direct Jira REST call on INTRD or CR.
+  Rules and data for Jira issues in the Opencell INTRD and CR (Change Requests) projects. Use
+  whenever the user mentions Jira, INTRD, User Story, Epic, Bug, Backport, Feature, Initiative
+  or a Change Request / CR — creating, reading or editing any issue type — or asks about
+  custom fields, acceptance criteria, functional design, requirements, Components (modules),
+  issue templates, or triaging / responding to Change Requests (Product response field, To
+  Study / In Study), or a SUPS routed to Product (Support makes it a CR). Technical Design
+  (customfield_10137): scaffold/read/review only; authoring is the architect lane — defer to
+  oc-ar-tech-design. Also the PO review lane: reviewing, validating or rejecting a delivered
+  Story (To Review / Validated / Rejected by PO, PO can't test yet), INTRD workflow
+  transitions, the Sub-bug type, and retesting a Bug fix ("test this ticket for me", In Test,
+  Test failed) with its Case / Expected / Actual report. Always load before any Rovo or REST
+  Jira call on INTRD or CR.
 ---
 
 # Jira — INTRD & CR projects
@@ -100,7 +100,8 @@ Load only the file relevant to the current task — do not pre-read all of them.
 > **Change Request** issues live in the **separate `CR` project** (not INTRD). `change-requests.md`
 > covers the CR workflow (To Study / In Study → Accepted / Rejected), the **Product response**
 > decision field, its custom fields (e.g. *Expected by* = the customer), and the **SUPS → CR →
-> INTRD** lifecycle. The INTRD module-Component and altitude-hierarchy rules do **not** apply to CRs.
+> INTRD** lifecycle — **Product takes no SUPS**: Support qualifies the ticket, creates the CR and
+> relays the answer. The INTRD module-Component and altitude-hierarchy rules do **not** apply to CRs.
 
 ## General Rules
 
