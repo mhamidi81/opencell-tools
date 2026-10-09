@@ -1,21 +1,21 @@
 ---
 name: oc-fn-func-design
-version: 1.36.1
-updated: 2026-10-05T14:33:30+02:00
+version: 1.42.1
+updated: 2026-10-08T14:15:40+02:00
 author: Stéphane Chambrin
 description: >
-  Rules and data for Jira issues in the Opencell INTRD project and the CR (Change Requests)
-  project. Use whenever the user mentions Jira, INTRD, User Story, Epic, Bug, Feature,
-  Initiative or a Change Request / CR — creating, reading, updating or writing any issue type
-  — or asks about custom fields, acceptance criteria, functional design, requirements,
-  Components (modules), issue templates, or triaging / responding to Change Requests (Product
-  response field, To Study / In Study). Technical Design (customfield_10137):
-  scaffold/read/review only; authoring is the architect lane — defer to oc-ar-tech-design.
-  Also the PO review lane: reviewing, validating or rejecting a delivered Story (To Review /
-  Validated / Rejected by PO, PO can't test yet), INTRD workflow transitions, the Sub-bug
-  type, and retesting a Bug fix ("test this ticket for me", In Test, Test failed) with its
-  Case / Expected / Actual report. Always load before any Atlassian Rovo Jira tool call or
-  direct Jira REST call on INTRD or CR.
+  Rules and data for Jira issues in the Opencell INTRD and CR (Change Requests) projects. Use
+  whenever the user mentions Jira, INTRD, User Story, Epic, Bug, Backport, Feature, Initiative
+  or a Change Request / CR — creating, reading or editing any issue type — or asks about
+  custom fields, acceptance criteria, functional design, requirements, Components (modules),
+  issue templates, or triaging / responding to Change Requests (Product response field, To
+  Study / In Study), or a SUPS routed to Product (Support makes it a CR). Technical Design
+  (customfield_10137): scaffold/read/review only; authoring is the architect lane — defer to
+  oc-ar-tech-design. Also the PO review lane: reviewing, validating or rejecting a delivered
+  Story (To Review / Validated / Rejected by PO, PO can't test yet), INTRD workflow
+  transitions, the Sub-bug type, and retesting a Bug fix ("test this ticket for me", In Test,
+  Test failed) with its Case / Expected / Actual report. Always load before any Rovo or REST
+  Jira call on INTRD or CR.
 ---
 
 # Jira — INTRD & CR projects
@@ -91,6 +91,7 @@ The rules below cover **all issue types**. For type-specific conventions (custom
 | Sub-bug       | `bugs.md`                              |
 | Initiative    | `initiatives.md`                       |
 | Change Request | `change-requests.md`                  |
+| Backport      | `backports.md`                         |
 | Reviewing a delivered Story (PO verdict) | `po-review.md`      |
 | Retesting a delivered Bug fix (`In Test`) | `po-review.md` + `bugs.md` |
 
@@ -99,7 +100,8 @@ Load only the file relevant to the current task — do not pre-read all of them.
 > **Change Request** issues live in the **separate `CR` project** (not INTRD). `change-requests.md`
 > covers the CR workflow (To Study / In Study → Accepted / Rejected), the **Product response**
 > decision field, its custom fields (e.g. *Expected by* = the customer), and the **SUPS → CR →
-> INTRD** lifecycle. The INTRD module-Component and altitude-hierarchy rules do **not** apply to CRs.
+> INTRD** lifecycle — **Product takes no SUPS**: Support qualifies the ticket, creates the CR and
+> relays the answer. The INTRD module-Component and altitude-hierarchy rules do **not** apply to CRs.
 
 ## General Rules
 
@@ -107,11 +109,11 @@ Load only the file relevant to the current task — do not pre-read all of them.
 - **Check the create screen before the first create of an issue type you have not created this session** — required fields differ per type and are not guessable. Run `jira meta <issuetypeId>` (or `getJiraIssueTypeMetaWithFields`). Notably a **`Bug`** requires *Issue location (URL)* (`customfield_10359`, a URL-typed string field — send a full URL) and *Affects versions* (`versions`) at creation, while a **`Sub-bug`** requires neither — see `bugs.md` § *Required fields at creation — Bug vs Sub-bug*.
 - Minimise token usage on every call. First pick the cheapest transport (see [Transport](#transport--rovo-mcp-baseline-vs-the-optional-jira-helper) — default to the `jira` helper when it is installed; otherwise use the Rovo MCP for every operation). Then, on whichever transport, pass an explicit `fields` allowlist (see [Reading efficiency](#reading-efficiency--field-selection)) and prefer `markdown` over ADF on MCP calls whenever possible (see [Content format policy](#content-format-policy--adf-vs-markdown)).
 
-## Product area — set the module Component
+## Product area — the module Component is mandatory
 
-INTRD carries the **product-area axis as a Jira Component** (the "module") — orthogonal to both the issue *type* and the altitude hierarchy (Initiative → Epic → Story/Enabler). Its purpose is **cost attribution**: an issue's effort must land in exactly one **primary** product module.
+INTRD carries the **product-area axis as a Jira Component** (the "module") — orthogonal to both the issue *type* and the altitude hierarchy (Initiative → Epic → Story/Enabler). Its purpose is **cost attribution**: an issue's effort must land in exactly one **primary** product module. Argos, the financial steering project, values every logged hour by module to compute the cost and ROI of each module; an issue without one is cost nobody can attribute — and Bugs carry the maintenance half of it. **Of the items worked since 2026-04-01, 132 of 189 Epics, Stories and Enablers carried no module before the 2026-10-06 backfill (22 after it: 2 templates, 13 cross-cutting, 7 left for a human decision), and 644 of 662 Bugs carried none before their own backfill the same day (100 of 663 after it, left for a human decision). Backports were backfilled on 2026-10-07: 104 of the 108 created or worked in 2026 carry one.** Hence § *Enforcement* below.
 
-- **Set the primary module Component on every Epic, Story, and Enabler you create** (and on a Bug, the module of the affected area). Pick the single module that best owns the work.
+- **Every Epic, Story, Enabler, Bug and Backport carries its primary module Component** — for a Bug, the module of the affected area; for a Backport, the original's (`backports.md`). Pick the single module that best owns the work. A **Sub-bug** reads it from its parent Story, Enabler or Backport and needs none of its own.
 - **Cross-tag a second Component only when the work genuinely spans modules** — e.g. a business screen that also advances the shared front-end substrate → its **business module (primary) + `Portal platform`** (cross-tag). Never park business-screen work in `Portal platform`.
 - **The 30 modules:**
   - **Quote-to-Cash (13):** Catalog · CPQ · Customer & contract management · Mediation · Rating · Billing · Invoicing · Accounts Receivable · Accounting · Dunning · Payments · Revenue recognition · Reporting
@@ -124,6 +126,143 @@ INTRD carries the **product-area axis as a Jira Component** (the "module") — o
 - **`Backend` / `Frontend` are a *different* axis** (engineering layer, not product area) that coexists on the same field — an issue may carry `[Backend, Billing]`. Leave any existing `Backend`/`Frontend` in place; **add** the module Component, never replace the `components` field wholesale.
 - **Not a module:** irreducible cross-cutting tech/functional debt has **no** Component (a non-module bucket, not a label) — don't invent a "debt" Component.
 - The module is the *dimension* of work; **altitude** (Initiative/Epic/Story/Enabler) is the separate hierarchy (see `initiatives.md`). The old `Feature` type is **dissolved** — replaced by this Component axis plus the `Initiative` type.
+
+### Enforcement — no Epic, Story, Enabler, Bug or Backport leaves this skill without a module
+
+**The rule: any Epic, Story, Enabler, Bug or Backport this skill creates or edits ends the call with
+a module Component.** It holds on every transport and every path — a create, an edit for another reason, a
+Story conversion, an Epic decomposition, a Bug filed or retested.
+
+1. **Create — the module is in the create call.** Put `components` in the same `POST /issue` /
+   `createJiraIssue` call as everything else, with at least one module (plus `Backend` / `Frontend`
+   where the layer applies). Never plan to add it afterwards.
+   - REST: `"components": [{"name": "Billing"}, {"name": "Backend"}]` inside `fields`.
+   - Rovo MCP: the same array under `additional_fields` (`{"components": [{"name": "Billing"}]}`).
+2. **Choose it, don't leave it.**
+   - **A Story or an Enabler** takes its parent Epic's primary module by default. Change it only
+     when the work clearly belongs to another module.
+   - **An Epic** takes the module that owns most of its scope.
+   - **A Backport** takes the original's module (`backports.md`).
+   - **A Bug** takes the module whose behaviour is wrong — not the module where the fix happens to
+     land, nor the screen that merely displays it.
+   - **When the module is not evident, ask the user** before creating. Never create without one,
+     and never guess silently.
+   - **Name the module you set** in the confirmation you give the user.
+3. **Edit — fix a missing module in the same write.** Before any write to an existing Epic, Story,
+   Enabler, Bug or Backport, include `components` in the read. If it carries no module, add one in
+   that same edit, chosen as in step 2, and say so.
+   - **REST adds without touching the rest:**
+     ```sh
+     jira raw PUT /issue/KEY '{"update":{"components":[{"add":{"name":"Billing"}}]}}'
+     ```
+   - **The Rovo MCP `editJiraIssue` has no `update` verb:** its `fields.components` *replaces* the
+     list. Send the existing components plus the module. Sending the module alone wipes `Backend` /
+     `Frontend`.
+4. **Verify after creating.** The post-create re-read (`stories.md` § *Verify after creating*) also
+   asserts a module is present:
+   ```sh
+   jira raw GET "/issue/$K?fields=components" | jq -e '[.fields.components[].name]
+     | any(. != "Backend" and . != "Frontend")' >/dev/null || echo "NO MODULE: $K"
+   ```
+5. **Review — a missing module is a finding.** Report it whenever you read an Epic, Story, Enabler,
+   Bug or Backport for a judgement: a PO review or a Bug retest (`po-review.md`), an Epic's validation or
+   decomposition, a version's scope, a triage. Do not fix it silently inside a read-only task; propose the module.
+6. **Sweep — list what lacks one.** Validated 2026-10-06 against a recount of the same set; `Backport`
+   added 2026-10-07 (the query runs). Done Backports are swept separately (`backports.md`):
+   ```
+   project = INTRD AND issuetype in (Epic, Story, Enabler, Bug, Backport) AND statusCategory != Done
+     AND (component is EMPTY OR component not in ("Accounting", "Accounts Receivable", "Billing",
+     "Catalog", "Core", "CPQ", "Customer & contract management", "Dunning",
+     "Energy market communications", "Energy vertical", "Extensibility", "GoCardless", "HubSpot",
+     "Ingenico", "Invoicing", "Marketing manager", "Marketplace", "Mediation", "Opencell AI",
+     "Partner care", "Payments", "Portal platform", "Rating", "Reporting", "Revenue recognition",
+     "Salesforce", "Selfcare", "SIPS", "Slimpay", "Stripe"))
+     AND key not in (INTRD-1486, INTRD-1949, INTRD-5340, INTRD-42501, INTRD-42939)
+   ```
+   The last line keeps the **template issues** (§ *Templates index*) out: they are not work, so they
+   carry no module, and a sweep must never write one on them. Both component branches are needed:
+   `component not in (…)` alone skips issues with **no** component at all. An issue carrying a module
+   plus `Backend` / `Frontend` is correctly left out. Scope it (a
+   version, an Epic, a period of work) before acting: **a backfill is a write; show the list and the
+   proposed modules, and get the user's go-ahead first.**
+7. **The one exception is explicit.** Irreducible cross-cutting debt (above) has no module, and
+   that is a decision: state it to the user at creation. It then counts as unattributed cost, never
+   as a forgotten field.
+
+## Cost per version — the Fix version field
+
+Argos, the financial steering project, costs every logged hour by version from **Fix versions**
+(`fixVersions`), and the CPO block of the CODIR Obeya reads it. These rules were set by Stéphane on
+2026-10-07.
+
+**The counting rule.**
+
+- An issue's hours go to the versions in its **Fix versions**. Several versions split the cost
+  evenly between them.
+- A **Sub-task** or **Sub-bug** follows the same rule on its own Fix versions. With none of its own,
+  it counts under its parent's.
+- A **Backport**'s hours go to its single version, whatever Epic it sits under (`backports.md`).
+
+**Who may carry several versions.**
+
+- **Bug, Sub-bug, Sub-task and Task** may carry several. On 2026-10-07, 153 of the 664 Bugs worked
+  since April did.
+- **A Story or an Enabler carries at most one: one once it is scheduled, never two.** Each older
+  version it must also reach goes into its **Backport versions** field (`customfield_10260`) **and**
+  gets its own Backport issue, which the architect lane creates — `backports.md`.
+
+**When it is set.**
+
+- **An Epic, Story or Enabler gets its Fix version when it is scheduled into a version, not before.**
+  Time logged is not a trigger, because study work is logged before an item is scheduled. Don't flag
+  a worked item for a missing version on that ground alone.
+- **A Bug is created with its Fix version(s),** which Jira requires (`bugs.md` § *Required fields at
+  creation*).
+- **A Sub-bug or Sub-task** takes one when scheduled, or counts under its parent's meanwhile.
+- **A Task** takes one when scheduled. A Task is not a sub-item and inherits nothing; until it has a
+  version, its hours have none.
+
+**Read before you write.** Include `fixVersions` and, on a Story or Enabler, `customfield_10260` in
+the read before any edit. The field presets in `stories.md`, `enablers.md`, `epics.md`, `bugs.md`
+and `backports.md` carry them.
+
+### Enforcement — a Story or Enabler never gains a second Fix version through this skill
+
+1. **Create.** A Story or Enabler is created with at most one Fix version. A request for "this, and
+   also in 18.3" becomes one Fix version and the older one in *Backport versions*. The Backport issue
+   itself is created by the architect lane: flag it, don't create it, unless the user explicitly asks
+   (`backports.md` § *Ownership — architect-created*).
+2. **Edit.** A request to add a version to a Story or Enabler takes the same route; the Fix version
+   stays single.
+   - **REST:** `{"update": {"customfield_10260": [{"add": {"name": "18.3.0"}}]}}`.
+   - **Rovo MCP `editJiraIssue`:** `fields.fixVersions` and `fields.customfield_10260` *replace* the
+     list, so send the full list you mean to keep.
+   - **An existing Story or Enabler that already carries several Fix versions keeps them** when it is
+     edited for another reason. Report it; do not split it.
+3. **Review.** Report these, as findings rather than verdicts (`backports.md` § *Review and sweep*):
+   - an open Story or Enabler with several Fix versions
+   - a Backport version with no linked Backport issue carrying it
+   - a Backport whose version is missing from its original's *Backport versions*
+   - a Backport with no Fix version, or with several
+4. **History stays as it is, except missing Backport data.**
+   - Never create Backport issues retroactively for work already done under several versions.
+   - Never split an old multi-version Story or Enabler.
+   - **Backfilled, with the user's go-ahead on the list:** a Backport missing its version or its
+     module, and an original whose *Backport versions* lacks the version of a linked Backport. Neither
+     moves cost already logged.
+   - **Report only:** a Backport carrying several versions. Removing one would move cost already
+     logged, and no decision covers that.
+
+## Version scope — MoSCoW on Epics, Stories and change requests
+
+**Business value (MoSCoW)** (`customfield_10103`) is set on Epics, Stories and change requests, not
+on Enablers. It reads differently depending on where it is set:
+
+- **On an Epic or a Story, `Must have` means the version cannot be delivered without it.** Set it
+  with that meaning when scheduling, and read it that way when judging a version's scope.
+- **On a change request, `Must have` is read as "the customer's go-live depends on it".** That is how
+  the CPO Obeya's blocked-revenue register counts it, and Stéphane kept that use on 2026-10-07
+  (`change-requests.md`).
 
 ## Authoring boundary — User Stories are functional, never technical
 
@@ -229,9 +368,9 @@ When the next operation is a destructive edit of an ADF field, also include atta
 | Use case | Recommended `fields` |
 |---|---|
 | Triage / JQL list view | `["summary", "status", "issuetype", "priority", "assignee", "updated"]` |
-| Epic / Initiative / Bug — full read | `["summary", "status", "issuetype", "priority", "assignee", "parent", "labels", "description"]` |
+| Epic / Initiative / Bug — full read | `["summary", "status", "issuetype", "priority", "assignee", "parent", "labels", "components", "fixVersions", "description"]` — the per-type files add their own fields |
 | Workflow / status inspection | `["summary", "status", "issuetype", "assignee"]` |
-| Relations / hierarchy | `["summary", "issuetype", "parent", "subtasks", "issuelinks"]` |
+| Relations / hierarchy | `["summary", "issuetype", "parent", "subtasks", "issuelinks"]` — `subtasks` lists only sub-task types; an Epic's or Initiative's children come from `jira children KEY` (JQL `parent = KEY`) |
 | Comments review | base preset + `["comment"]` |
 
 For issue-type-specific presets (e.g. User Story custom fields), see the corresponding reference file.

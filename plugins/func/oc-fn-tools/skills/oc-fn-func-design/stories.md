@@ -84,6 +84,7 @@ In JQL, the User Story issue type is named **`Story`** (id `10001`) — not `"Us
 
 ```
 ["summary", "status", "issuetype", "priority", "assignee", "parent", "labels", "components",
+ "fixVersions", "customfield_10260", "customfield_10103",
  "customfield_10134", "customfield_10135", "customfield_10136", "customfield_10137"]
 ```
 
@@ -91,8 +92,15 @@ In JQL, the User Story issue type is named **`Story`** (id `10001`) — not `"Us
 
 User Stories have **one** template: **INTRD-1486**, in the light format since 2026-10-05 (§ *Story
 structure — light format*). Fetch it with `responseContentFormat: "adf"` to preserve its formatting.
-The `components` field (`Backend`, `Frontend`, both, or other) is set on every Story, independently
-of the template.
+
+**Fix versions: at most one** — one once the Story is scheduled, never two. Older versions it must
+also reach go into *Backport versions* (`customfield_10260`), each with its own Backport issue,
+created by the architect lane
+(`SKILL.md` § *Cost per version — the Fix version field*, `backports.md`). *Business value (MoSCoW)* `Must have` means the version
+cannot ship without it (`SKILL.md` § *Version scope — MoSCoW on Epics, Stories and change requests*).
+
+The `components` field carries the Story's **module**, which is mandatory (`SKILL.md` § *Product area — the module Component is mandatory*), plus its
+layer (`Backend`, `Frontend` or both). It is set in the create call, independently of the template.
 
 The backend (INTRD-42531) and frontend (INTRD-42554) variants were **retired and deleted on
 2026-10-05**: only one author had used them, and as hand-maintained copies they kept drifting
@@ -172,6 +180,7 @@ guard fires, and the override is skipped.
   `oc-ar-tech-design` skill, where available) — see `SKILL.md` § *Authoring boundary — Technical
   design belongs to the architect lane*. Fill it here only when the user explicitly asked you to
   write the technical design; otherwise defer to `oc-ar-tech-design`.
+- **`components`** — the module plus the layer, in this same call (`SKILL.md` § *Product area — the module Component is mandatory*, § *Enforcement*).
 
 > **Send all four, always — the guard is all-or-nothing.** Because the Story guard tests only
 > `requirement`, a create that fills *Requirement* but leaves the other three empty still skips the
@@ -228,6 +237,8 @@ own headings and hint panels — so "is the field non-empty" passes. Two checks 
      | jq -r --arg k "$K" '[$k] + [.fields|to_entries[]|(.value|tostring|length)|tostring] | join(" ")'; done
    ```
    Identical rows mean identical content — i.e. the template, not your Stories.
+3. **Module check.** Assert that each Story carries a module Component — the one-liner is in
+   `SKILL.md` § *Product area — the module Component is mandatory*, § *Enforcement*, step 4.
 
 If a Story was clobbered, a plain re-`PUT` of the same payload repairs it — nothing about the payload
 is wrong, only its timing. Wait past the window first.
@@ -354,6 +365,9 @@ bindings*).
   stated only in a test may become a rule — it *is* in the original. Contradictions in the original
   are kept as written and flagged to the PO, never resolved by the converter.
 - **Technical design is not touched** (architect lane).
+- **A missing module is added in the same write.** It is a field, not content, so *never add* does
+  not apply. Take the Epic's module; when none is evident, list the Story for the user rather than
+  guess (`SKILL.md` § *Product area — the module Component is mandatory*, § *Enforcement*, step 3).
 - **GUI is `N/A` only when the original says so.** Older templates carry a "No GUI" info panel: that
   is the author's statement, so write `N/A — no GUI (<reason>)`. A `Backend` component alone is not
   a statement that there is no screen — leave the grey hint.
@@ -476,6 +490,40 @@ without a condition or an outcome, a message without both EN and FR),
 Claude must refuse to generate tests and list the holes back to the PO
 instead of papering over them.
 
+## Status after writing — In Design - Func
+
+**A Story this lane writes is left in `In Design - Func`.** Creation lands it in `Ready For Design`.
+Once its three PO fields are written and § *Verify after creating* passes, move it on and report the
+status with the key. Set by Stéphane on 2026-10-07.
+
+- **Never further, to `Review Design - Func`.** A Story is often written on behalf of someone else, a
+  PO, who checks it before sending it to Stéphane for review. That move is theirs, not this lane's.
+- **The same applies when this lane writes the PO fields of an existing Story** that sits in
+  `Ready For Design` or `To Design - Func`. A Story already in `In Design - Func` or further keeps its
+  status: this lane never moves a Story backwards.
+- **Transitions**, read from the INTRD workflow on 2026-10-07 (not yet exercised by this lane):
+
+  | From | Transition | id | To |
+  |---|---|---|---|
+  | `Ready For Design` | *Start design (builder)* — **Product builders only** | `4` | `In Design - Func` |
+  | `Ready For Design` | *Schedule for design* | `301` | `To Design - Func` |
+  | `To Design - Func` | *Start design* | `11` | `In Design - Func` |
+
+- **Not every user may take the direct route.** *Start design (builder)* is restricted to Product
+  builders (Stéphane, 2026-10-07). Anyone else goes in two steps: `Ready For Design` → `To Design -
+  Func` → `In Design - Func`. Jira lists only the transitions the caller may take, so let the list
+  decide rather than a remembered id:
+
+  ```sh
+  jira transitions "$K"           # does one lead straight to In Design - Func?
+  jira transition "$K" 4          # yes (Product builder): Ready For Design → In Design - Func
+  jira transition "$K" 301        # no: Ready For Design → To Design - Func …
+  jira transition "$K" 11         # … → In Design - Func
+  jira raw GET "/issue/$K?fields=status" | jq -r .fields.status.name
+  ```
+
+  If an id is refused, pick from `jira transitions "$K"` by **target status**, not by id.
+
 ## Workflow
 
 User Stories on INTRD follow a 9-phase workflow. Each phase groups one or several
@@ -505,6 +553,7 @@ Jira statuses and has a single accountable role. Roles in use: **PO**, **Tech Le
 
 ### Notes on the workflow
 
+- **Where this lane leaves a Story it wrote:** `In Design - Func` — § *Status after writing*.
 - **Phase 2 (Functional Design)** does *not* include `To Review by PO`. That status lives at the end of QA, as a pre-validation before the sprint review.
 - **Phase 4 (Sprint Ready)** is owned by Dev — concretely, Dev Leads evaluate the load on each US before sprint planning.
 - **Phase 6 (QA)** ends with `To Review by PO`, a pre-validation of the delivered work before the sprint review.

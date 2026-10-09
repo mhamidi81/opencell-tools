@@ -23,16 +23,26 @@ Although the `description` field also accepts Markdown, new Epics authored from 
 
 Epics use the standard **`description`** field — not the custom fields used by User Stories.
 
+**Module.** Every Epic carries its primary module Component, set in the create call, and its Stories
+and Enablers take it by default. See `SKILL.md` § *Product area — the module Component is mandatory*.
+
+**Fix version and MoSCoW.** An Epic carries the version it is planned in once it is scheduled — not
+before, and not because time was logged on it. *Business value (MoSCoW)* `Must have` means the
+version cannot ship without it. See `SKILL.md` § *Cost per version — the Fix version field* and
+`SKILL.md` § *Version scope — MoSCoW on Epics, Stories and change requests*.
+
 Field preset for full read:
 
 ```
-["summary", "status", "issuetype", "priority", "assignee", "parent", "labels", "components", "description"]
+["summary", "status", "issuetype", "priority", "assignee", "parent", "labels", "components",
+ "fixVersions", "customfield_10103", "description"]
 ```
 
-For hierarchy inspection (Stories and Enablers under the Epic):
+For hierarchy inspection (Stories and Enablers under the Epic), `subtasks` returns nothing: an Epic's
+children are not sub-tasks. Use `jira children KEY` (JQL `parent = KEY`) with:
 
 ```
-["summary", "status", "issuetype", "subtasks", "issuelinks"]
+["summary", "status", "issuetype", "components", "fixVersions", "issuelinks"]
 ```
 
 ## Child Story naming
@@ -50,6 +60,9 @@ Every Story that belongs to an Epic **must** follow this naming pattern:
 **Example:** `[e-reporting] (1) Generate e-reporting XML`
 
 The suffix must be identical across all Stories of the same Epic — any variation (casing, spelling, spacing) breaks the visual grouping in the Jira backlog. When creating a batch of Stories, define the suffix on the Epic first and copy it verbatim to each child.
+
+Copy the Epic's **module** to each child the same way, unless a Story clearly belongs to another
+module (`SKILL.md` § *Product area — the module Component is mandatory*).
 
 **Every child Story must be functional *and* demonstrable.** When decomposing an Epic, each Story
 must pass the functional litmus (`SKILL.md` § *Authoring boundary — User Stories are functional,

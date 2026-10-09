@@ -7,7 +7,7 @@ framing.
 
 > **`Initiative` replaced `Feature` — migration complete 2026-07-09.** `Initiative` is the
 > above-Epic container, and it is the **altitude** axis *only*: the product area is captured
-> orthogonally by the **Module**, a Jira Component set on Epics/Stories/Enablers — never by the
+> orthogonally by the **Module**, a Jira Component set on Epics/Stories/Enablers/Bugs/Backports — never by the
 > Initiative.
 >
 > **The `Feature` type no longer exists.** All 80 `Feature` issues were deleted and the work type
@@ -53,10 +53,11 @@ Initiatives use the standard **`description`** field. Full-read preset:
 ["summary", "status", "issuetype", "priority", "assignee", "labels", "components", "description"]
 ```
 
-For hierarchy inspection (child Epics under the Initiative):
+For hierarchy inspection (child Epics under the Initiative), `subtasks` returns nothing: use
+`jira children KEY` (JQL `parent = KEY`) with:
 
 ```
-["summary", "issuetype", "subtasks", "issuelinks"]
+["summary", "issuetype", "components", "fixVersions", "issuelinks"]
 ```
 
 ## Authoring notes

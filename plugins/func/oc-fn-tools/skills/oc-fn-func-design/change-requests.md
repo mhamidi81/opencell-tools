@@ -28,6 +28,36 @@ actual work is authored as INTRD issues and linked back.
 - **Not an INTRD issue type.** Do not set INTRD module Components on a CR, do not treat it in the
   Initiative→Epic→Story hierarchy, and do not look for the Story custom fields on it.
 
+## From a support ticket to a CR — Product takes no SUPS
+
+**Product works on CRs, not on support tickets: a SUPS ticket is not assigned to Product.** When a
+SUPS asks to change the product, **Support** turns it into a CR. Ruled by the CPO on 2026-10-08 and
+written into the Confluence page (v13, section *From a support ticket to a change request*).
+
+| Step | Who | What |
+|---|---|---|
+| Qualify | Support | A SUPS that asks to change, extend or add a feature becomes a CR. **When in doubt, create the CR**: if it turns out to be a bug, already in the product, or covered by a workaround, Product rejects it with the matching *Change rejection reason*. |
+| Create | Support | Create the CR (§ *Template — CR-3*), link it to the SUPS, *Send to Product*. The SUPS stays with Support. |
+| Study and decide | Product | Product answers **on the CR**. It may read the linked SUPS for context (customer files, attachments) but does not take it over. |
+| Relay | Support | When the CR changes status, Support relays the *Product response* to the customer on the SUPS, then closes it or keeps it open as agreed with the customer. |
+| Bug after all | Support | A CR rejected as *This is a bug* → Support handles the SUPS through the bug process. |
+
+**Ready for Product — the minimum bar** before *Send to Product*:
+- the description says what is asked and why (the CR-3 template sections);
+- ***Expected by*** names the customer(s), reusing existing labels;
+- the originating SUPS is linked.
+
+A CR that misses one goes back to its reporter as *Need Information*. **Product does not pick up
+Draft CRs** — a Draft stays with its reporter until it is sent; if the reporter is no longer
+available, Support takes the CR over.
+
+**How a session applies this:**
+- **A SUPS assigned to the CPO is not triaged as his.** Point to the rule: Support creates the CR,
+  links the SUPS, sends it. Don't analyse the SUPS in its place.
+- **Reading a SUPS linked from a CR is fine** — that is context for the CR, not ownership of the SUPS.
+- **Don't author the CR for Support**, and don't relay the answer on the SUPS — both are Support's
+  steps. Product's output is the *Product response* on the CR.
+
 ## Querying the CR project
 
 The `jira` helper defaults to `JIRA_PROJECT=INTRD`, so target CR with **raw JQL** (or
@@ -53,7 +83,7 @@ Each status has an **actor** — *Reporter* (raises / answers), **Product** (tri
 
 | Status | Category | Actor | Meaning |
 |---|---|---|---|
-| **Draft** | new | Reporter | Logged but not ready — reporter is still filling it in. |
+| **Draft** | new | Reporter | Logged but not ready — reporter is still filling it in. **Product does not pick it up.** |
 | **To Study** | new | Product | Submitted (*Send to Product*); queued for the **Discovery Committee** / Product triage. |
 | **In Study** | indeterminate | Product | Product is actively studying it. |
 | **Need Information** | indeterminate | Reporter | Product has asked the reporter for more information. |
@@ -115,7 +145,8 @@ plain string for structured content).
 |---|---|---|---|
 | **Product response** | `customfield_10153` | ADF text | Official Product ruling (see above). |
 | **Expected by** | `customfield_10095` | labels (array) | **The customer/driver(s)** behind the CR (e.g. `Fnac-Darty`, `Docaposte`, `Vialis`). *This* is the customer field — **not** `labels`. Can hold several. |
-| **Business value (MoSCoW)** | `customfield_10103` | select | `Must have` · `Should have` · `Could have` · `Won't have`. |
+| **Business value (MoSCoW)** | `customfield_10103` | select | `Must have` · `Should have` · `Could have` · `Won't have`. On a CR, `Must have` is read as "the customer's go-live depends on it" — the CPO Obeya's blocked-revenue register counts it that way. On the delivering Epics and Stories, `Must have` means the version cannot ship without them. |
+| **Due date** | `duedate` | date | The earliest date any of the CR's customers wishes for — a wish, set on Accept, revisable once *Scheduled*. On the edit screen since 2026-10-07, not on the create or transition screens: set it by an edit. |
 | **Change rejection reason** | `customfield_10139` | select | Set when rejecting. One of: `Not in product scope` · `Not in product strategy` · `Too specific` · `Workaround exists` · `Already in Product` · `Duplicate` · `This is a bug`. |
 | **Epic Link** | `customfield_10014` | epic link | Links a scheduled CR to its delivery Epic. |
 | **Delivery status** | `customfield_10401` | select | Delivery-side progress once scheduled. |
@@ -131,7 +162,8 @@ plain string for structured content).
 CRs link **cross-project** via ordinary issue links (same Jira Cloud instance, so links span
 projects freely). Typical shape:
 
-- **SUPS → CR** — the originating support ticket *Relates* to the CR.
+- **SUPS → CR** — the originating support ticket is linked to the CR (*Relates*; Support also uses
+  *Problem/Incident*). **Mandatory** when the CR comes from a SUPS — the reporter links it.
 - **CR → CR** — related change requests *Relate* to each other (e.g. a shared theme or a superseding
   CR).
 - **CR → INTRD** — at **scheduling**, the CR is linked to the **Initiative / Epic** that delivers it
@@ -160,13 +192,16 @@ the create form. A Jira automation then prefills the template a few seconds late
 not visible), the reporter fills *Description / Use cases / Customer value* (saving each section), and
 uses the **Send to Product** transition to move Draft → To Study.
 
-Note: authoring new CRs is usually the requester's/Support's job — the Product-team lane's day-to-day
-is **triage → study → respond** on existing CRs, not creation.
+Note: authoring new CRs is the requester's/Support's job — for a customer ask raised in SUPS, always
+Support's (§ *From a support ticket to a CR*). The Product-team lane's day-to-day is **triage →
+study → respond** on existing CRs, not creation.
 
 ## The Product-team job on a CR
 
 1. **Triage** (*To Study*): read it; identify the customer (*Expected by*), the ask, MoSCoW value;
    spot bundled/duplicate concerns, missing info, and links (SUPS origin, related CRs/INTRD work).
+   A CR below the *Ready for Product* bar (no *Expected by*, no SUPS link when it came from one) goes
+   back as *Need Information* rather than being completed by Product.
 2. **Study** (→ *In Study* via *Request is being studied*): assess scope, feasibility, layer
    (backend/frontend — the teams are strictly separated), effort, and dependencies. A shallow first
    pass sizes and clarifies; a deep pass produces the decision.
@@ -174,11 +209,34 @@ is **triage → study → respond** on existing CRs, not creation.
 4. **Decide:** write/finalise the **Product response** (filled when Accepting/Rejecting), then
    transition — **Accept change**, or **Reject request** (always set a *Change rejection reason* —
    the *basic* reason; the *Product response* carries the detailed one).
+   **On Accept, the due date (`duedate`) is the earliest date any of its customers (*Expected by*)
+   wishes for.** It is a wish, not a commitment, and may be revised once the CR is scheduled (step 5).
+   **Set it by an edit.** *Due date* was added to the CR edit screen on 2026-10-07 (screen 10129, used
+   by the CR project only). It is still on neither the create screen nor the *Accept change* /
+   *Scheduled* transition screens, so write it with a plain edit, before or after the transition.
 5. **Accepted ≠ scheduled.** *Accepted* means "has value"; scheduling is a separate decision. When
    the **Roadmap committee** picks a candidate version, move to **Scheduled**, set **Fix versions**,
    and **create the INTRD Epics/Stories** (authored per the rest of this skill) **linked back** to
    the CR — reference them from the Product response. (Or park it in **Backlog** if it's valuable but
    unschedulable for now.)
+   When scheduling:
+   - **The due date may be updated** to the date now committed.
+   - **The delivering Epic carries the CR's customer in Prime Customer** (`customfield_10547`).
+     Argos charges product cost to that customer's P&L from it. Write the generic-or-specific
+     decision in the Product response.
+     - **It is a single-select with a fixed option list,** so map the *Expected by* label to the
+       exact option name: `LaPoste` → `La Poste`, `Fnac-Darty` → `FnacDarty`, `Mediapost` →
+       `Mediaposte`, `Energied'ici` → `Energie d'ici`.
+     - **When the CR names several customers, or one with no option, ask the user.** Never invent
+       or create an option. On 2026-10-07 OHM, Maileva, CanalPlus, BGPN and OuestFrance had none.
+     - **Payload:** REST `{"fields": {"customfield_10547": {"value": "La Poste"}}}`, or the
+       same object under Rovo `editJiraIssue` `fields`. The field is on the Epic create screen, so
+       it can go in the create call.
+   - **The delivering Epics and Stories get their own MoSCoW.** There, `Must have` means the version
+     cannot be delivered without them (`SKILL.md` § *Version scope — MoSCoW on Epics, Stories and change
+     requests*).
+   - **Fix versions** follow `SKILL.md` § *Cost per version*: one per Story or Enabler, with
+     backports in *Backport versions* and their own Backport issues.
 
 ## Limits & volumes
 
