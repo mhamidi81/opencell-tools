@@ -119,6 +119,11 @@
       "description": "Estimation-vs-logged-hours report over a period (independent of the AI-usage JSON) — Tempo-worklog driven, one row per ticket with a PER-AREA column group (Backend/Frontend/QA): area main developer, Architect & Dev-lead estimates, logged/sub-bug hours each split into AI and non-AI streams (a worklog is AI-assisted when its author holds an AI-metrics record covering that issue; a US's record also covers its non-bug sub-tasks, a sub-bug uses its own record — no per-area AI flag), two gains (with/without sub-bugs) and sub-bug count, plus an Arch/PR/management logged column and total. Date per ticket + month grouping, five HTML tabs, and a second finished-US per-developer summary. Date-stamped HTML + CSV to ./docs/. Jira via direct REST + Tempo per-user, both mandatory tokens; no MCP"
     },
     {
+      "name": "oc-noai-report",
+      "source": "./plugins/common/oc-noai-report",
+      "description": "Companion to oc-time-report that surfaces work reaching test/review/done WITHOUT AI. Same Tempo-worklog data, Project + grouped Fix-version filters and five tabs. Scope: tickets in status In Test / Need sync (after dev) / Ready for Test / Ready for Sprint Review / Done with ticket-date on/after a cutoff (default 2026-09-01). Unit = one ticket x dev area (backend/frontend/qa; overhead excluded) — sub-tasks roll into their parent US, sub-bugs are their own rows. A unit has AI when it has AI-classified logged time (US record propagates to non-bug sub-tasks; a sub-bug uses its own). Totals by area and by month (tickets, AI tickets, % AI tickets, logged d, AI logged d, % AI logged) plus a Details list of the no-AI units (Ticket, date, Type, Fix version, title, status, Logged d, area, main dev) grouped by area then month. All in days. Date-stamped HTML to ./docs/. Shares scripts + roster + Tempo cache with oc-time-report; Jira via direct REST + Tempo per-user, mandatory tokens; no MCP"
+    },
+    {
       "name": "oc-bug-clusters",
       "source": "./plugins/common/oc-bug-clusters",
       "description": "Period-scoped bug clustering: classify the bugs created in a window onto a subject taxonomy, group subjects carrying at least 5 bugs, and optionally create one Jira Enabler per area with a Sub-task per cluster"
