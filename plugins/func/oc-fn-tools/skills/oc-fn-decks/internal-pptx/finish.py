@@ -7,15 +7,28 @@ Called by render-internal-pptx.sh; not meant to be run by hand.
 1. **One <a:pPr> per paragraph.** pptxgenjs writes paragraph properties once per text run,
    so a paragraph mixing bold and plain runs carries several. That is invalid OOXML, and
    LibreOffice applies the last one (no bullet). The first one, written for the paragraph's
-   first run, is kept. A bullet also gets the text's font (pptxgenjs sets none, and a symbol
-   font draws it small and raised).
-2. **Hyperlink colour.** PowerPoint draws links in the theme's hlink colour, so the theme takes
+   first run, is kept. A bullet gets a font (pptxgenjs sets none, and a symbol font draws it
+   small and raised) at 125 %, like a CSS marker: a disc takes the text's font; a circle or a
+   square takes Arial, because the brand fonts lack those glyphs and a renderer's fallback can be
+   an emoji font about twice as wide. measure.js measures the markers in the same fonts.
+   (A marker takes its size, weight and colour from the first run: build.js opens an item whose
+   first run is not in the item's font — an inline box, bold text — on a zero-width space that is.)
+   A marker that is a no-break space is no marker: build.js writes one for text that continues an
+   item after its nested list, to get the item's left margin; it becomes <a:buNone/> with no
+   hanging indent, so the text starts at that margin.
+2. **Nested list items hang their marker like the top level.** pptxgenjs ties a paragraph's
+   hanging indent to its left margin (marL = indent × (level + 1)), so build.js picks each nested
+   item's indent to put marL where Chromium starts its text; here every bulleted paragraph with
+   a level gets back the hanging indent of the first top-level bulleted paragraph of its text
+   body — the list's hang.
+3. **Hyperlink colour.** PowerPoint draws links in the theme's hlink colour, so the theme takes
    the colour the deck gives its links.
-3. **Embed the fonts the deck uses** when fonts_dir holds them, as
+4. **Embed the fonts the deck uses** when fonts_dir holds them, as
    <Family without spaces>-{Regular,Bold,Italic,BoldItalic}.ttf. PowerPoint reads a raw TTF
    as .fntdata. The entry slots follow the schema order (regular, bold, italic, boldItalic):
    validate.py rejects any other order.
 """
+import html
 import os
 import re
 import shutil
@@ -25,6 +38,9 @@ import zipfile
 
 FONT_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font"
 SLOTS = [("regular", "Regular"), ("bold", "Bold"), ("italic", "Italic"), ("boldItalic", "BoldItalic")]
+
+
+NBSP_BULLET = re.compile(r'<a:buSzPct val="100000"/><a:buChar char="&#x00A0;"/>')
 
 
 def one_ppr(xml):
@@ -37,14 +53,39 @@ def one_ppr(xml):
             seen.append(1)
             return p.group(0)
         p = re.sub(r"<a:pPr\b[^>]*?(?:/>|>.*?</a:pPr>)", keep, m.group(0), flags=re.S)
-        # A bullet without a font is drawn in a symbol font (small and raised in LibreOffice):
-        # give it the font of the paragraph's text, a little larger, like a CSS disc.
+        if NBSP_BULLET.search(p):
+            p = NBSP_BULLET.sub("<a:buNone/>", p, count=1)
+            p = re.sub(r'(<a:pPr\b[^>]*?) indent="-\d+"', r'\1 indent="0"', p, count=1)
         face = re.search(r'<a:latin typeface="([^"]+)"', p)
-        if face and "<a:buChar" in p and "<a:buFont" not in p:
+        bu = re.search(r'<a:buChar char="([^"]*)"', p)
+        if face and bu and "<a:buFont" not in p:
+            disc = html.unescape(bu.group(1)) == "\u2022"
             p = re.sub(r'<a:buSzPct val="100000"/>(<a:buChar )',
-                       rf'<a:buSzPct val="125000"/><a:buFont typeface="{face.group(1)}"/>\1', p, count=1)
+                       rf'<a:buSzPct val="125000"/><a:buFont typeface="{face.group(1) if disc else "Arial"}"/>\1', p, count=1)
         return p
     return re.sub(r"<a:p>.*?</a:p>", para, xml, flags=re.S)
+
+
+PPR = re.compile(r"<a:pPr\b([^>]*?)(?<!/)>(.*?)</a:pPr>", flags=re.S)
+BULLET = re.compile(r"<a:bu(?:Char|AutoNum)\b")
+
+
+def nested_hang(xml):
+    def body(m):
+        b = m.group(0)
+        hang = next((ind.group(1) for pp in PPR.finditer(b)
+                     if ' lvl="' not in pp.group(1) and BULLET.search(pp.group(2))
+                     for ind in [re.search(r' indent="-(\d+)"', pp.group(1))] if ind), None)
+        if hang is None:
+            return b
+
+        def fix(pp):
+            attrs = pp.group(1)
+            if ' lvl="' in attrs and BULLET.search(pp.group(2)):
+                attrs = re.sub(r' indent="-\d+"', f' indent="-{hang}"', attrs)
+            return f"<a:pPr{attrs}>{pp.group(2)}</a:pPr>"
+        return PPR.sub(fix, b)
+    return re.sub(r"<p:txBody>.*?</p:txBody>", body, xml, flags=re.S)
 
 
 def embed(root, fonts_dir):
@@ -130,7 +171,7 @@ def main():
                 if f.endswith(".xml"):
                     p = os.path.join(base, f)
                     xml = open(p, encoding="utf-8").read()
-                    open(p, "w", encoding="utf-8").write(one_ppr(xml))
+                    open(p, "w", encoding="utf-8").write(nested_hang(one_ppr(xml)))
         done = embed(tmp, fonts_dir)
         link = link_colour(tmp)
         with zipfile.ZipFile(deck, "w", zipfile.ZIP_DEFLATED) as z:
