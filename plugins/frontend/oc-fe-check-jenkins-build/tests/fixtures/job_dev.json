@@ -1,0 +1,14 @@
+{
+  "_class": "org.jenkinsci.plugins.workflow.job.WorkflowJob",
+  "name": "dev",
+  "lastBuild": {"_class": "org.jenkinsci.plugins.workflow.job.WorkflowRun", "number": 4970, "building": false, "result": "SUCCESS", "url": "https://jenkins.opencell.eu/job/dev/4970/"},
+  "property": [
+    {"_class": "jenkins.model.BuildDiscarderProperty"},
+    {"_class": "org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty"},
+    {"_class": "hudson.model.ParametersDefinitionProperty", "parameterDefinitions": [
+      {"name": "version"}, {"name": "build_core"}, {"name": "build_front"}, {"name": "build_storybook"},
+      {"name": "action"}, {"name": "sandboxType"}, {"name": "runCollectionSuites"}, {"name": "SERVER_URL"},
+      {"name": "force_kc"}, {"name": "to_mail"}, {"name": "cc_mail"}
+    ]}
+  ]
+}

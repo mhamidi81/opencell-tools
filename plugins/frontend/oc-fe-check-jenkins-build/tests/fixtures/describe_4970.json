@@ -1,0 +1,18 @@
+{
+  "id": "4970", "name": "#4970", "status": "SUCCESS",
+  "stages": [
+    {"id": "9", "name": "Declarative: Checkout SCM", "status": "SUCCESS"},
+    {"id": "20", "name": "Init", "status": "SUCCESS"},
+    {"id": "58", "name": "Checkout Meveo", "status": "SUCCESS"},
+    {"id": "72", "name": "Import-SQL Build", "status": "SUCCESS"},
+    {"id": "95", "name": "Build Meveo", "status": "SUCCESS"},
+    {"id": "122", "name": "Checkout Front", "status": "SUCCESS"},
+    {"id": "132", "name": "Build Front", "status": "SUCCESS"},
+    {"id": "155", "name": "kc config", "status": "NOT_EXECUTED"},
+    {"id": "160", "name": "Run liquibase (updating environment)", "status": "SUCCESS"},
+    {"id": "182", "name": "Restart Replicas (udpate)", "status": "SUCCESS"},
+    {"id": "204", "name": "Run baseconf postman", "status": "NOT_EXECUTED"},
+    {"id": "209", "name": "Run collection suite", "status": "NOT_EXECUTED"},
+    {"id": "214", "name": "Declarative: Post Actions", "status": "SUCCESS"}
+  ]
+}
