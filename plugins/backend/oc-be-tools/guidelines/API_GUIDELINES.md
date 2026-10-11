@@ -47,6 +47,30 @@ Before implementing any REST API:
 
 **The ticket specification always takes precedence over general patterns.**
 
+### API Versioning and Deprecation
+
+**Introducing a new API version does NOT deprecate the older ones.** v0/v1/v2 remain first-class and
+supported — do **not** add `@Deprecated` to a v0/v1/v2 resource, service, or DTO merely because a newer
+version (e.g. v3) exists.
+
+**Prefer routing older versions onto the newest implementation.** As much as reasonably possible:
+- A v0/v1/v2 **endpoint** should delegate to the corresponding **v3 endpoint**.
+- A v0/v1/v2 **apiService** method should delegate to the corresponding **v3 apiService** method.
+
+The single exception is when **return types differ and cannot be reasonably converted** — e.g. the older
+method returns a JPA **entity** while v3 returns a **DTO** (a DTO is a projection and usually cannot be
+cleanly turned back into a managed entity). In that case keep the older implementation rather than forcing a
+lossy round-trip. A passthrough whose return type already matches v3 should still be re-pointed to v3, even
+if it is a thin one.
+
+**Contract stays frozen.** When you re-point a v0/v1/v2 body to v3, its contract (URL, params, request /
+response shape, HTTP status codes) must stay intact, and v0/v1/v2 public method **signatures** must not
+change (see API signature stability). Map the old request DTO onto the v3 input and preserve the old return
+shape (e.g. wrap the v3 result back into the old `Optional<...>`).
+
+**Reserve `@Deprecated`** for a specific endpoint replaced by a RESTful sibling **within the same version**
+(the duplicate + deprecate + delegate pattern) — never for whole-version supersession.
+
 ### Postman Collection URL Verification
 
 **CRITICAL: When creating or updating Postman collection tests, always verify URLs against the actual `@Path` annotations in the REST resource interfaces.**
@@ -180,11 +204,19 @@ REST resource methods must **not** use try-catch blocks. Let exceptions propagat
 | Exception | ExceptionMapper | HTTP Status |
 |---|---|---|
 | `EntityDoesNotExistsException` | `EntityDoesNotExistsExceptionMapper` | 404 Not Found |
+| `jakarta.ws.rs.NotFoundException` | `NotFoundExceptionMapper` | 404 Not Found |
 | `BusinessException` | `BusinessExceptionMapper` | 400 Bad Request |
 | `ValidationException` | `ValidationExceptionMapper` | 400 Bad Request |
+| `ElementNotFoundException` (extends `ValidationException` → `BusinessException`) | `BusinessExceptionMapper` | 400 Bad Request |
 | `MeveoApiException` | `MeveoExceptionMapper` | 400 Bad Request |
 | `InvalidParameterException` | `MeveoExceptionMapper` | 400 Bad Request |
 | Unhandled exceptions | `UnhandledExceptionMapper` | 500 Internal Server Error |
+
+**Pick the exception for the status you want:**
+- **404 Not Found** — throw `EntityDoesNotExistsException(entityClass, code/id)` or `jakarta.ws.rs.NotFoundException`.
+- **400 Bad Request** — `BusinessException` / `ValidationException` / `MeveoApiException` / `InvalidParameterException`.
+- ⚠️ **`ElementNotFoundException` maps to 400, NOT 404**, despite its name (it extends `ValidationException` → `BusinessException`). For a missing-entity 404, use `EntityDoesNotExistsException` instead.
+- ⚠️ Do not throw raw `jakarta.ws.rs.*` (other than `NotFoundException`) or `java.security.*` from a `@Stateless` service bean — they get wrapped and surface as **500**. Convert to the `BusinessException` family for a clean 400.
 
 ```java
 // ✅ CORRECT - No try-catch, let exceptions propagate to ExceptionMapper
@@ -307,6 +339,13 @@ public interface EntityDto extends Resource {
     boolean getEnabled(); // Always has a value (true or false)
 }
 ```
+
+**Immutables builder setter names for boxed `Boolean` accessors:** a boxed `Boolean` accessor (the wrapper
+type you use per above, e.g. `@Nullable Boolean isGeneratePDF()`) does **NOT** get its `is`/`get` prefix
+stripped — the generated builder setter is `isGeneratePDF(...)`, **not** `generatePDF(...)`. A primitive
+`boolean isX()` *does* strip to `x(...)`. When hand-building an immutable DTO (mapping, tests), check the
+generated `Immutable<Name>` source for the exact setter names rather than guessing, and remember only
+non-`@Nullable` attributes are mandatory in `.build()`.
 
 ### Resource Interface Fields
 

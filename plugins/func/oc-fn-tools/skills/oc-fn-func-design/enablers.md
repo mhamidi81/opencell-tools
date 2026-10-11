@@ -36,10 +36,14 @@ The template carries two parallel *Technical contract* sub-sections — **Backen
 
 Enablers use the standard **`description`** field — not the custom fields `customfield_10134`–`10137` used by User Stories.
 
+**Fix versions: at most one,** as for a Story — one once scheduled, never two. Backports go into *Backport versions*
+(`customfield_10260`) and their own Backport issues, created by the architect lane (`SKILL.md` § *Cost per version — the Fix version field*, `backports.md`).
+
 Field preset for full read:
 
 ```
-["summary", "status", "issuetype", "priority", "assignee", "parent", "labels", "components", "description"]
+["summary", "status", "issuetype", "priority", "assignee", "parent", "labels", "components",
+ "fixVersions", "customfield_10260", "description"]
 ```
 
 ## Creation pattern — set `description` IN the create call
@@ -53,7 +57,8 @@ it stood at *trigger* time. A `description` written in a follow-up call is invis
 overwritten.
 
 **So: create the Enabler with its `description` already populated, in the single `createJiraIssue` /
-`POST /issue` call.** The content is then in the trigger snapshot, the guard fires, and the override
+`POST /issue` call** — together with its `components`: the module (mandatory, `SKILL.md` § *Product area — the module Component is mandatory*)
+and its layer, `Backend` or `Frontend`. The content is then in the trigger snapshot, the guard fires, and the override
 is skipped. Do **not** create bare and edit afterwards — that is exactly what loses the content.
 
 The mechanism, the measured timings, and the post-create verification recipe are documented once in

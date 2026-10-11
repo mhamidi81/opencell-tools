@@ -33,8 +33,8 @@ field whose only allowed value is `Regression`, i.e. a flag. Establish that it *
 archaeology below before setting it.
 
 > **There is no Sub-bug template.** Verified on Jira: `jira jql 'project = INTRD AND summary ~
-> "TEMPLATE" AND (summary ~ "COPY" OR summary ~ "CLONE")'` returns INTRD's seven template issues
-> (Story ×3, Epic, Initiative, Enabler, Bug) — no Sub-bug among them. A Sub-bug follows the
+> "TEMPLATE" AND (summary ~ "COPY" OR summary ~ "CLONE")'` returns INTRD's five template issues
+> (Story, Epic, Initiative, Enabler, Bug — the two extra Story templates were deleted on 2026-10-05) — no Sub-bug among them. A Sub-bug follows the
 > **Bug template INTRD-5340** — same eight sections (listed in § *Template* below, with the
 > three-block structure they form) and the same heading rule: plain `strong`, **no `#bf2600`**.
 
@@ -119,7 +119,8 @@ sections above it.
 Bugs use the standard **`description`** field (not the Story custom fields). Full-read preset:
 
 ```
-["summary", "status", "issuetype", "priority", "assignee", "parent", "labels", "components", "description", "environment"]
+["summary", "status", "issuetype", "priority", "assignee", "parent", "labels", "components", "fixVersions",
+ "description", "environment"]
 ```
 
 ## The `environment` field — environment URI + versions tested
@@ -221,6 +222,10 @@ with a `400` a **`Sub-bug`** create never hits. The recognisable body:
 
 Both create screens expose the same thirteen fields — only the required/optional split differs.
 
+**`components` is optional for Jira, not for this skill.** A Bug is created with the module of the
+affected area, plus its layer (`Backend` / `Frontend`) when known; a Sub-bug reads the module from its
+parent. See `SKILL.md` § *Product area — the module Component is mandatory*.
+
 The error body above names only two of the Bug's four extra requirements, because `priority` and
 `fixVersions` happened to be set on that call. Read the table, not the error.
 
@@ -228,7 +233,8 @@ The two Bug-only fields worth naming:
 
 - **`versions` — *Affects versions*.** The version(s) where the defect is observed. **Distinct from
   `fixVersions`** (*Fix versions* — where it will be fixed); a Bug requires both, and they are not
-  interchangeable.
+  interchangeable. A Bug **may carry several Fix versions**, one per version it is fixed in; its
+  cost is then split evenly between them (`SKILL.md` § *Cost per version — the Fix version field*).
 - **`customfield_10359` — *Issue location (URL)***. The page or endpoint where the defect shows — a
   **URL-typed** string field (`schema.custom` …`customfieldtypes:url`), so **send a full URL**; a
   bare page name is rejected.
@@ -252,7 +258,8 @@ Follow the template's sections. A well-formed Bug makes the defect reproducible 
   a GUI defect and an API defect go to different teams and different repos — and it exposes the case
   where one defect needs **two** issues (a Core fix plus an additive Portal fix). It is *not* a
   duplicate of `customfield_10359` (*Issue location (URL)* — one pointer to one page) or of
-  `components` (`Backend`/`Frontend` — the engineering layer, set at triage).
+  `components` (the module, set at creation, and `Backend`/`Frontend` — the engineering layer, set at
+  triage).
 - **Reproduction** — exact, numbered steps a reader can follow **without reading code**; **expected
   vs. actual** result; frequency (always / intermittent). A screenshot may *illustrate* a step; it may
   never *be* the step. INTRD-45655 is the counter-example — twelve words and three PNGs, with no page,
