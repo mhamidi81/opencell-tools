@@ -8,6 +8,9 @@ Prints one JSON object. `action` is what the skill branches on:
   not_failed    ABORTED / UNSTABLE / NOT_BUILT — a person's call, not a build break
   out_of_scope  FAILURE outside the frontend stages (or no failed stage at all)
   fix           FAILURE in `Checkout Front` or `Build Front`
+  needs_human   a frontend FAILURE of a build started by JENKINS_USER — i.e. this
+                skill's own rebuild after a fix. A second automatic fix would chain
+                unreviewed AI commits into a deployed branch, so it stops here.
 
 `params` are the failed build's actual values (replayed by jenkins_rebuild.py).
 `timer_extras` are key=value pairs that only exist in a timer cause's text: the
@@ -24,7 +27,7 @@ FRONT_STAGES = ("checkout front", "build front")
 PORTAL_REPO = "opencell-portal"
 JOB_TREE = "lastBuild[number,building,result,url],property[parameterDefinitions[name]]"
 BUILD_TREE = ("number,result,building,url,actions[parameters[name,value],"
-              "causes[shortDescription],remoteUrls,lastBuiltRevision[SHA1]]")
+              "causes[shortDescription,userId],remoteUrls,lastBuiltRevision[SHA1]]")
 TIMER_PREFIX = "Started by timer with parameters:"
 KEY_SPLIT = re.compile(r",\s*(?=[A-Za-z_][A-Za-z0-9_]*=)")
 
@@ -71,10 +74,18 @@ def timer_extras(build, declared):
     return {}
 
 
-def decide(branch, job, build=None, describe=None):
+def triggered_by(build):
+    for action in _actions(build):
+        for cause in action.get("causes") or []:
+            if cause.get("userId"):
+                return cause["userId"]
+    return None
+
+
+def decide(branch, job, build=None, describe=None, me=None):
     out = {"branch": branch, "action": None, "build": None, "url": None, "result": None,
            "failed_stage": None, "failed_stage_id": None, "is_front": False,
-           "params": {}, "portal_sha": None, "timer_extras": {}}
+           "params": {}, "portal_sha": None, "timer_extras": {}, "triggered_by": None}
     last = job.get("lastBuild")
     if not last:
         out["action"] = "no_builds"
@@ -92,11 +103,13 @@ def decide(branch, job, build=None, describe=None):
                timer_extras=timer_extras(build, declared_params(job)),
                failed_stage=stage["name"] if stage else None,
                failed_stage_id=stage["id"] if stage else None,
-               is_front=is_front(stage))
+               is_front=is_front(stage), triggered_by=triggered_by(build))
     if last.get("result") != "FAILURE":
         out["action"] = "not_failed"
     else:
         out["action"] = "fix" if out["is_front"] else "out_of_scope"
+        if out["action"] == "fix" and me and out["triggered_by"] == me:
+            out["action"] = "needs_human"
     return out
 
 
@@ -115,7 +128,7 @@ def main(argv=None, client=None):
             describe = client.get_json(f"{path}/{last['number']}/wfapi/describe")
     except JenkinsError as e:
         return fail(e)
-    print(json.dumps(decide(args.branch, job, build, describe), indent=2))
+    print(json.dumps(decide(args.branch, job, build, describe, getattr(client, "user", None)), indent=2))
     return 0
 
 

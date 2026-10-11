@@ -83,3 +83,33 @@ def test_ticket_jira_field_and_auth_conventions():
     assert "customfield_10613" in t and "ai_Dev_Front" in t
     assert "ATCTT" in t and "ATATT" in t and "Bearer" in t
     assert "Co-Authored-By" not in t
+
+
+def section(t, start, end):
+    return t[t.index(start):t.index(end)]
+
+
+def test_step1_stops_on_own_rebuild():
+    s1 = section(text(), "## Step 1", "## Step 2")
+    assert "`needs_human`" in s1
+
+
+def test_steps_3_and_8_map_script_exit_codes():
+    t = text()
+    for start, end in (("## Step 3", "## Step 4"), ("## Step 8", "## Step 9")):
+        s = section(t, start, end)
+        assert "Exit `2`" in s and "Exit `4`" in s, start
+
+
+def test_step8_says_what_a_failed_trigger_means():
+    assert "rebuild not triggered" in section(text(), "## Step 8", "## Step 9")
+
+
+def test_merge_requires_a_verified_merged_state():
+    s7 = section(text(), "## Step 7", "## Step 8")
+    merge = s7.index("pullrequests/[PR_ID]/merge")
+    jira = s7.index("**7f")
+    between = s7[merge:jira]
+    assert "task_status" in between and "timeout" in between.lower()
+    assert '"state": "MERGED"' in between or "`MERGED`" in between
+    assert "no rebuild" in between.lower() and "no jira" in between.lower()

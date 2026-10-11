@@ -76,6 +76,7 @@ Keep the JSON as `[STATUS]`; `[N]` = `build`, `[PORTAL_SHA]` = `portal_sha`. Bra
 | `green` | Report "✅ #[N] passed — [url]", stop |
 | `not_failed` | Report "#[N] ended `[result]` — not a build break, not acted on", stop |
 | `out_of_scope` | If `failed_stage` is set, run Step 3's command for that stage and print `classification` + the first 20 `error_lines`. Report "#[N] failed in `[failed_stage]` — outside the frontend stages, not fixed — [url]", stop |
+| `needs_human` | The failed build was started by `JENKINS_USER` — normally this skill's own rebuild after a fix. Report "#[N] (started by `[triggered_by]`) failed again in `[failed_stage]` — needs a human; no second automatic fix" with the Step 3 error lines, and stop. This is what keeps **one fix attempt per run** true across `/loop` and scheduled runs |
 | `fix` | Continue |
 
 ## Step 2 — Already handled?
@@ -102,7 +103,11 @@ curl -s "${BB_AUTH[@]}" -G "$BB/pullrequests" \
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/oc-fe-check-jenkins-build/scripts/jenkins_log.py" --branch "[BRANCH]" --build [N] --stage "[failed_stage]" --stage-id [failed_stage_id]
 ```
 
-Keep the JSON as `[LOG]`. Show `classification` and the `error_lines`.
+Exit `2` → auth (show stderr, stop). Exit `3` → the build was rotated out (stop, give the
+URL). Exit `4` → show stderr, stop — never diagnose without the log.
+
+Keep the JSON as `[LOG]`. Show `classification` and the `error_lines`. A `Checkout Front`
+failure is always `infra`: a git checkout cannot be code-fixed.
 
 - `infra` → the failure is network / disk / agent / ssh. **No code change.** Go to **Step 8**
   and label the run "infra — rebuild only" in the report.
@@ -262,9 +267,13 @@ curl -s "${BB_AUTH[@]}" -X POST -H 'Content-Type: application/json' -D - \
 
 - `200` with `"state": "MERGED"` → merged.
 - `202` → the merge runs asynchronously: poll the `Location` header URL every 5 s (max 2 min)
-  until its `task_status` is `SUCCESS`.
+  until its `task_status` is `SUCCESS`. Any other final `task_status`, or a timeout, is a
+  refused merge (next bullet).
 - Anything else (merge checks, required approvals, conflicts) → **stop**: the PR stays open,
-  **no rebuild**, print Bitbucket's error and `[PR_URL]`.
+  **no rebuild**, **no Jira write**, print Bitbucket's error and `[PR_URL]`.
+
+Then confirm before going on: `curl -s "${BB_AUTH[@]}" "$BB/pullrequests/[PR_ID]"` must show
+`"state": "MERGED"`. Otherwise treat it as a refused merge: stop, no Jira write, no rebuild.
 
 **7f — Jira** (cloudId `opencellsoft.atlassian.net`):
 
@@ -284,6 +293,12 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/oc-fe-check-jenkins-build/scripts/jenkins_
 ```
 
 Run it with `run_in_background: true` and wait for the completion notification — do not poll.
+
+| Exit | stdout | Meaning |
+|---|---|---|
+| `0` | JSON | Read `front_status` below |
+| Exit `2` (auth), `3` or Exit `4` | empty | The fix (if any) is merged but the rebuild not triggered. Report it with stderr; tell the user to run the skill again or trigger `https://jenkins.opencell.eu/job/[BRANCH]/` by hand |
+| `2` or `4` | JSON | The build was triggered but watching failed: report `build`, `url` and `error` (`front_status` is `ERROR`) |
 If `[STATUS].timer_extras` is not empty, tell the user those values
 (e.g. `ASSETS_URL`, `VITE_APP_BASE_URL`) exist only in the timer trigger and could not be
 replayed.
@@ -294,6 +309,7 @@ replayed.
 | `FAILED` / `ABORTED` / `UNSTABLE` | Re-run Step 1's status command, then Step 3's log command on the new build, and show the error lines. **Do not fix** — one fix attempt per run. Step 9 |
 | `NOT_EXECUTED` | The run ended without building the front (an earlier stage failed, or `build_front` is false). Re-run Step 1's status command to show where. Step 9 |
 | `TIMEOUT` | Still running — give the URL. Step 9 |
+| `ERROR` | Watching failed (see `error`) — give the URL. Step 9 |
 | `build` null | Still queued — show `queue_why`. Step 9 |
 
 ## Step 9 — Report

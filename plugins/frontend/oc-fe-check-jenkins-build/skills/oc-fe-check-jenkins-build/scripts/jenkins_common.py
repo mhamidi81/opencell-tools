@@ -88,6 +88,7 @@ def api(path, tree=None):
 class JenkinsClient:
     def __init__(self, user, token, base=BASE, opener=None):
         self.base = base.rstrip("/")
+        self.user = user
         self.opener = opener or urllib.request.urlopen
         self.auth = "Basic " + base64.b64encode(f"{user}:{token}".encode()).decode()
 

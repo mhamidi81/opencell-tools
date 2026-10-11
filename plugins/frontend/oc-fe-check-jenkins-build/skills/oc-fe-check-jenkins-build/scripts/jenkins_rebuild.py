@@ -9,7 +9,12 @@ VITE_APP_BASE_URL) are not declared by the job and cannot be replayed.
 Concurrent builds are disabled on these jobs, so a queue item may wait for a running
 build. That is reported as `queue_why`, never treated as an error.
 
-front_status: SUCCESS | FAILED | ABORTED | UNSTABLE | NOT_EXECUTED | TIMEOUT | null
+Once the build is triggered its number must never be lost: transient errors while
+polling (502, connection reset, a short 404 right after the build starts) are retried
+until the deadline, and a hard error (401/403) still prints the JSON — with `error`
+set and front_status ERROR — before the non-zero exit.
+
+front_status: SUCCESS | FAILED | ABORTED | UNSTABLE | NOT_EXECUTED | TIMEOUT | ERROR | null
 """
 import argparse
 import json
@@ -21,6 +26,20 @@ from jenkins_status import BUILD_TREE, build_params
 
 FRONT_BAD = ("FAILED", "ABORTED", "UNSTABLE")
 RUN_FINISHED = ("SUCCESS", "FAILED", "ABORTED", "UNSTABLE", "NOT_EXECUTED")
+HARD_STATUS = (401, 403)
+
+
+def _poll(client, url, deadline, sleep, clock, poll):
+    """GET url as JSON, retrying transient errors until the deadline (then None)."""
+    while True:
+        try:
+            return client.get_json(url)
+        except JenkinsError as e:
+            if e.status in HARD_STATUS:
+                raise
+            if clock() >= deadline:
+                return None
+            sleep(poll)
 
 
 def form_from_params(params):
@@ -44,7 +63,9 @@ def trigger(client, branch, params):
 
 def wait_for_start(client, queue_url, deadline, sleep=time.sleep, clock=time.monotonic, poll=10):
     while True:
-        item = client.get_json(queue_url.rstrip("/") + "/api/json")
+        item = _poll(client, queue_url.rstrip("/") + "/api/json", deadline, sleep, clock, poll)
+        if item is None:
+            return None, "queue item unreadable until the deadline"
         if item.get("cancelled"):
             raise JenkinsError(f"queue item was cancelled: {queue_url}")
         executable = item.get("executable") or {}
@@ -70,7 +91,10 @@ def front_status(describe):
 def watch(client, branch, number, deadline, sleep=time.sleep, clock=time.monotonic, poll=30):
     path = f"{job_path(branch)}/{number}/wfapi/describe"
     while True:
-        status = front_status(client.get_json(path))
+        describe = _poll(client, path, deadline, sleep, clock, poll)
+        if describe is None:
+            return "TIMEOUT"
+        status = front_status(describe)
         if status:
             return status
         if clock() >= deadline:
@@ -100,13 +124,18 @@ def main(argv=None, client=None, sleep=time.sleep, clock=time.monotonic):
         number, why = wait_for_start(client, queue_url, deadline if args.watch else clock() + 60,
                                      sleep, clock)
         out.update(build=number, queue_why=why)
-        if number:
-            out["url"] = f"{client.base}{path}/{number}/"
-            if args.watch:
-                out["front_status"] = watch(client, args.branch, number, deadline,
-                                            sleep, clock, args.poll)
     except JenkinsError as e:
         return fail(e)
+    if number:
+        out["url"] = f"{client.base}{path}/{number}/"
+        if args.watch:
+            try:
+                out["front_status"] = watch(client, args.branch, number, deadline,
+                                            sleep, clock, args.poll)
+            except JenkinsError as e:
+                out.update(front_status="ERROR", error=str(e))
+                print(json.dumps(out, indent=2))
+                return fail(e)
     print(json.dumps(out, indent=2))
     return 0
 

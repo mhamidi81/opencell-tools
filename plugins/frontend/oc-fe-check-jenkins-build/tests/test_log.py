@@ -60,9 +60,40 @@ def test_clean_unescapes_html():
     assert lg.clean('<span class="x">Type &lt;string&gt; &amp; more</span>') == "Type <string> & more"
 
 
-def test_clean_leaves_plain_generics():
-    plain = "error TS2322: Type 'Array<string>' is not assignable to type 'number'."
-    assert lg.clean(plain) == plain
+def test_console_text_is_never_cleaned():
+    console = ("[Pipeline] { (Build Front)\n"
+               "error TS2322: Type 'Array<string>' is not assignable.\n"
+               "  3 | <span className=\"x\">{a}</span>\n"
+               "x => y && a < b\nmore text > here\n")
+    text, source = lg.stage_log(FakeClient({"/job/dev/4970/consoleText": console}),
+                                "dev", 4970, None, "Build Front")
+    assert source == "console" and text == console
+
+
+def test_step_log_text_is_always_unescaped():
+    client = FakeClient({
+        "/job/dev/4970/execution/node/132/wfapi/describe": describe_node(("140", "FAILED")),
+        "/job/dev/4970/execution/node/140/wfapi/log": {"text": "Type &#39;Array&lt;string&gt;&#39;\n"},
+    })
+    text, _ = lg.stage_log(client, "dev", 4970, "132", "Build Front")
+    assert text.strip() == "Type 'Array<string>'"
+
+
+def test_checkout_front_is_never_code():
+    assert lg.classify("error TS2304: x", stage="Checkout Front") == "infra"
+
+
+def test_ssh_resolve_hostname_is_infra():
+    assert lg.classify("ssh: Could not resolve hostname bitbucket.org\n"
+                       "fatal: Could not read from remote repository.") == "infra"
+
+
+def test_bundler_could_not_resolve_is_code():
+    assert lg.classify('✘ [ERROR] Could not resolve "lodash-es"') == "code"
+
+
+def test_gateway_error_beats_syntax_error():
+    assert lg.classify("npm ERR! SyntaxError: Unexpected token < in JSON (502 Bad Gateway)") == "infra"
 
 
 def test_tail():

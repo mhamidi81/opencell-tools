@@ -123,3 +123,33 @@ def test_main_missing_job_exits_3(capsys):
 def test_main_auth_exits_2(capsys):
     client = FakeClient({"/job/dev/api/json": jc.JenkinsError("HTTP 401", status=401)})
     assert st.main([], client=client) == jc.EXIT_AUTH
+
+
+def with_cause(build, cause):
+    build = dict(build)
+    build["actions"] = [{"causes": [cause]}] + [a for a in build["actions"] if "causes" not in (a or {})]
+    return build
+
+
+def test_front_failure_of_own_rebuild_needs_human(capsys):
+    routes = failed_routes(**{"Build Front": "FAILED"})
+    routes["/job/dev/4970/api/json"] = with_cause(load("build_4970.json"),
+        {"_class": "hudson.model.Cause$UserIdCause", "userId": "bot", "shortDescription": "Started by user Bot"})
+    client = FakeClient(routes)
+    client.user = "bot"
+    _, out = run(capsys, client)
+    assert out["action"] == "needs_human" and out["triggered_by"] == "bot"
+
+
+def test_front_failure_started_by_someone_else_is_fix(capsys):
+    routes = failed_routes(**{"Build Front": "FAILED"})
+    routes["/job/dev/4970/api/json"] = with_cause(load("build_4970.json"),
+        {"userId": "someone-else", "shortDescription": "Started by user Someone"})
+    client = FakeClient(routes)
+    client.user = "bot"
+    _, out = run(capsys, client)
+    assert out["action"] == "fix" and out["triggered_by"] == "someone-else"
+
+
+def test_build_tree_requests_cause_user():
+    assert "causes[shortDescription,userId]" in st.BUILD_TREE

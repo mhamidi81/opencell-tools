@@ -320,7 +320,8 @@ Five things are not obvious from the code:
 
 - **It is fully automatic, so the guards are mechanical.** No prompt before the merge; in
   exchange a local `yarn|npm run build` must pass before any PR, there is **one fix attempt
-  per run** (a second front failure is reported, never re-fixed), and every step fails closed —
+  per run** (a second front failure is reported, never re-fixed — also across runs: a failed
+  build started by `JENKINS_USER` yields `needs_human`), and every step fails closed —
   no rebuild after a refused merge. A packaging test pins that order.
 - **The job is one pipeline for core and portal.** Only the two front stages are in scope;
   any other failing stage is reported, not fixed. Infra failures (network, disk, agent,

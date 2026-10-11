@@ -7,10 +7,16 @@ Source order (both verified on the live `dev` job):
             A stage node's own wfapi/log is empty, so the steps must be walked.
   console   `consoleText` sliced from `[Pipeline] { (<stage>)` to the next stage marker.
 
-Classification (code wins over infra when both match):
+Classification, first match wins:
+  infra    a `Checkout Front` failure (a git checkout cannot be code-fixed), or a
+           hard infra signal (gateway 50x, disk full, agent lost) — even when a
+           code-looking line such as a JSON SyntaxError from an HTML 502 page is present
   code     a compiler / bundler / linter error a source change can fix
-  infra    network, disk, agent, ssh/scp — rebuild only, never a code change
-  unknown  neither; the skill reproduces locally before touching anything
+  infra    softer network / ssh signals (timeouts, resets, auth) with no code error
+  unknown  none of these; the skill reproduces locally before touching anything
+
+Only step-log text is HTML (escaped, with console-note spans) and is unescaped;
+consoleText is plain and is never touched, so `Array<string>` and JSX code frames survive.
 """
 import argparse
 import html
@@ -28,9 +34,14 @@ ERROR_PATTERNS = [
     r"script returned exit code [1-9]", r"^\s*\d+:\d+\s+error\s",
 ]
 CODE_PATTERNS = [
-    r"error TS\d+", r"Could not resolve", r"is not exported by", r"Module not found",
+    r"error TS\d+", r'Could not resolve "', r"is not exported by", r"Module not found",
     r"SyntaxError", r"\[vite\]", r"\[plugin:", r"Transform failed", r"Rollup failed",
     r"^\s*\d+:\d+\s+error\s", r"✖ \d+ problems?",
+]
+HARD_INFRA_PATTERNS = [
+    r"ENOSPC", r"No space left on device", r"ChannelClosedException", r"RemovedNodeListener",
+    r"[Aa]gent .* (went offline|disconnected)",
+    r"\b50[234] (Bad Gateway|Service Unavailable|Gateway Time-?out)",
 ]
 INFRA_PATTERNS = [
     r"ETIMEDOUT", r"ECONNRESET", r"ECONNREFUSED", r"ENOTFOUND", r"EAI_AGAIN", r"ENOSPC",
@@ -43,14 +54,11 @@ INFRA_PATTERNS = [
 ERROR_RE = [re.compile(p, re.M) for p in ERROR_PATTERNS]
 CODE_RE = [re.compile(p, re.M) for p in CODE_PATTERNS]
 INFRA_RE = [re.compile(p, re.M) for p in INFRA_PATTERNS]
-HTML_HINTS = ("&lt;", "&gt;", "&amp;", "&quot;", "&#39;", "<span", "<a ")
+HARD_INFRA_RE = [re.compile(p, re.M) for p in HARD_INFRA_PATTERNS]
 
 
 def clean(text):
-    """wfapi can return HTML-escaped text with console-note spans. Only text that
-    looks escaped is touched, so a plain `Array<string>` is never mangled."""
-    if not any(h in text for h in HTML_HINTS):
-        return text
+    """Strip console-note tags from wfapi/log HTML and unescape it. Step-log text only."""
     return html.unescape(re.sub(r"<[^>]+>", "", text))
 
 
@@ -74,7 +82,11 @@ def error_lines(text, limit=60):
     return out
 
 
-def classify(text):
+def classify(text, stage=None):
+    if (stage or "").strip().lower() == "checkout front":
+        return "infra"
+    if any(p.search(text) for p in HARD_INFRA_RE):
+        return "infra"
     if any(p.search(text) for p in CODE_RE):
         return "code"
     if any(p.search(text) for p in INFRA_RE):
@@ -99,7 +111,7 @@ def stage_log(client, branch, build, stage_id, stage_name):
                 parts.append(clean(text))
         if parts:
             return "\n".join(parts), "step-log"
-    return slice_console(clean(client.get_text(f"{base}/consoleText")), stage_name), "console"
+    return slice_console(client.get_text(f"{base}/consoleText"), stage_name), "console"
 
 
 def main(argv=None, client=None):
@@ -115,7 +127,7 @@ def main(argv=None, client=None):
         text, source = stage_log(client, args.branch, args.build, args.stage_id, args.stage)
     except JenkinsError as e:
         return fail(e)
-    print(json.dumps({"classification": classify(text), "source": source,
+    print(json.dumps({"classification": classify(text, args.stage), "source": source,
                       "error_lines": error_lines(text), "excerpt": tail(text, args.tail)}, indent=2))
     return 0
 
