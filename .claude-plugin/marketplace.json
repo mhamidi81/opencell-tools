@@ -116,7 +116,12 @@
     {
       "name": "oc-time-report",
       "source": "./plugins/common/oc-time-report",
-      "description": "Estimation-vs-logged-hours report over a period (independent of the AI-usage JSON) — Tempo-worklog driven, one row per ticket with a PER-AREA column group (Backend/Frontend/QA): area main developer, Architect & Dev-lead estimates, logged/sub-bug hours, AI flag, two gains (with/without sub-bugs) and sub-bug count, plus an Arch/PR/management logged column and total. Date per ticket + month grouping, five HTML tabs, and a second finished-US per-developer summary. Date-stamped HTML + CSV to ./docs/. Jira via direct REST + Tempo per-user, both mandatory tokens; no MCP"
+      "description": "Estimation-vs-logged-hours report over a period (independent of the AI-usage JSON) — Tempo-worklog driven, one row per ticket with a PER-AREA column group (Backend/Frontend/QA): area main developer, Architect & Dev-lead estimates, logged/sub-bug hours each split into AI and non-AI streams (a worklog is AI-assisted when its author holds an AI-metrics record covering that issue; a US's record also covers its non-bug sub-tasks, a sub-bug uses its own record — no per-area AI flag), two gains (with/without sub-bugs) and sub-bug count, plus an Arch/PR/management logged column and total. Date per ticket + month grouping, five HTML tabs, and a second finished-US per-developer summary. Date-stamped HTML + CSV to ./docs/. Jira via direct REST + Tempo per-user, both mandatory tokens; no MCP"
+    },
+    {
+      "name": "oc-noai-report",
+      "source": "./plugins/common/oc-noai-report",
+      "description": "Companion to oc-time-report that surfaces work reaching test/review/done WITHOUT AI. Same Tempo-worklog data, Project + grouped Fix-version filters and five tabs. Scope: tickets in status In Test / Need sync (after dev) / Ready for Test / Ready for Sprint Review / Done with ticket-date on/after a cutoff (default 2026-09-01). Unit = one ticket x dev area (backend/frontend/qa; overhead excluded) — sub-tasks roll into their parent US, sub-bugs are their own rows. A unit has AI when it has AI-classified logged time (US record propagates to non-bug sub-tasks; a sub-bug uses its own). Totals by area and by month (tickets, AI tickets, % AI tickets, logged d, AI logged d, % AI logged) plus a Details list of the no-AI units (Ticket, date, Type, Fix version, title, status, Logged d, area, main dev) grouped by area then month. All in days. Date-stamped HTML to ./docs/. Shares scripts + roster + Tempo cache with oc-time-report; Jira via direct REST + Tempo per-user, mandatory tokens; no MCP"
     },
     {
       "name": "oc-bug-clusters",
@@ -132,6 +137,11 @@
       "name": "oc-pr-rejection-rate",
       "source": "./plugins/common/oc-pr-rejection-rate",
       "description": "Report the share of rejected pull requests on opencell-portal and opencell-core over a period, defaulting to the last seven days. A PR counts as rejected if it was declined, had changes requested at any point, or was pushed back from ready to draft - read from the Bitbucket activity feed, so a rejection that was later resolved is still counted. Prints Markdown and writes a date-stamped HTML + CSV to ./docs/. Read-only; reads Bitbucket via direct REST with BITBUCKET_EMAIL + BITBUCKET_ACCESS_TOKEN - no MCP."
+    },
+    {
+      "name": "oc-clean-branches",
+      "source": "./plugins/common/oc-clean-branches",
+      "description": "Delete stale Bitbucket branches whose last commit is older than a given date, behind five fail-safe guards: protected/structural branches (master/develop/dev, release/*, 19.0.x, branch restrictions), branches with an open PR, branches not fully merged into their target (commits?include&exclude), branches with a recent commit, and branches not tied to a Bug / Sub-bug / Task / Sub-task ticket are kept. Writes a Markdown + HTML + CSV report to ./docs/ and asks for an explicit confirmation shown in red before deleting; logs every deleted tip hash for restoration. Bitbucket and Jira via direct REST (BITBUCKET_ACCESS_TOKEN, JIRA_API_TOKEN) - no MCP."
     },
     {
       "name": "oc-figma-mcp",
@@ -161,7 +171,7 @@
     {
       "name": "oc-fn-tools",
       "source": "./plugins/func/oc-fn-tools",
-      "description": "Functional/product toolkit for Opencell — Jira INTRD issue authoring (oc-fn-func-design), Confluence docs-space authoring (oc-fn-documentation), Playwright-driven Opencell Portal navigation & screenshots (oc-fn-portal), the design-first phased delivery methodology (oc-fn-project-management), branded slide-deck authoring & rendering with the Opencell Marp theme (oc-fn-decks), branded one-pager / note / brief authoring & PDF rendering (oc-fn-briefs), and GUI/screen design against the Opencell Figma design system (oc-fn-gui-design). Bundles a headless Playwright MCP server (oc-fn-playwright)."
+      "description": "Functional/product toolkit for Opencell: Jira INTRD issue authoring, Confluence docs authoring, Playwright-driven Portal navigation and screenshots, design-first phased delivery, branded deck and one-pager authoring, and GUI design against the Opencell Figma design system. Bundles a headless Playwright MCP server (oc-fn-playwright)."
     }
   ]
 }

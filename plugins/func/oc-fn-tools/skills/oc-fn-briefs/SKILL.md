@@ -1,31 +1,20 @@
 ---
 name: oc-fn-briefs
-version: 1.6.0
-updated: 2026-09-23T17:00:00+02:00
+version: 1.6.1
+updated: 2026-09-30T11:54:26+02:00
 author: Stéphane Chambrin
 description: >
-  Author and render branded Opencell DOCUMENTS — one-pagers, analysis notes,
-  briefs, memos, short reports — styled with the Charte Graphique 2023 and
-  rendered to a print-ready A4 HTML/PDF via headless Chromium — or, from the same
-  source, to a branded claude.ai Artifact page (how Opencell shares internal reports
-  as a link: screen/phone layout, light by default with a light/dark switch, reproducible from git). Two authoring
-  tiers: markdown-first (a `.md` source rendered through Pandoc — the default,
-  the "Marp for documents" workflow) and hand-authored self-contained HTML (the
-  escape hatch for bespoke layouts). Load this skill whenever the user wants a
-  branded one-pager, note, brief, memo, fact-sheet, summary sheet, or short
-  standalone document (not slides), or asks to render Markdown/HTML content to a
-  branded PDF — and whenever the user wants to publish, share or send an internal
-  report, note or analysis as an Artifact / artefact / claude.ai page / a link, or to
-  republish or update one. Carries the document brand theme (`theme/brand.css` + shared
-  logos + `theme/oc-brief.lua`), a markdown source template
-  (`templates/one-pager.md`) with its Pandoc HTML template, a ready-to-fill
-  hand-authored `templates/one-pager.html`, the Artifact lane
-  (`render-artifact.sh` + `templates/artifact.pandoc.html` + `theme/artifact.css`
-  + `theme/oc-artifact.lua`, with its git-reproducibility guard), the `YYYYMMDD_`
-  dated-filename rule, the render commands, and the screenshot verification step. NOT for
-  slide decks (that is `oc-fn-decks`), NOT for Confluence pages (that is
-  `oc-fn-documentation`), and NOT for Jira functional designs / requirement
-  briefs (that is `oc-fn-func-design`).
+  Author and render branded Opencell DOCUMENTS — one-pagers, analysis notes, briefs, memos,
+  short reports — styled with the Charte Graphique 2023 and rendered to a print-ready A4
+  HTML/PDF via headless Chromium, or from the same source to a branded claude.ai Artifact page
+  (how Opencell shares internal reports as a link; light by default, reproducible from git).
+  Two tiers: markdown-first (`.md` through Pandoc) and hand-authored HTML for bespoke layouts.
+  Load whenever the user wants a branded one-pager, note, brief, memo, fact-sheet, summary
+  sheet or short standalone document (not slides), asks to render Markdown/HTML to a branded
+  PDF, or wants to publish, share or send an internal report, note or analysis as an Artifact
+  / artefact / claude.ai page / a link, or to republish or update one. NOT for slide decks
+  (that is `oc-fn-decks`), NOT for Confluence pages (that is `oc-fn-documentation`), NOT for
+  Jira functional designs / requirement briefs (that is `oc-fn-func-design`).
 ---
 
 # Opencell documents — branded one-pagers, notes & briefs (Markdown/HTML → PDF)

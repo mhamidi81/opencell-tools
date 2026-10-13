@@ -46,7 +46,7 @@ skill/agent name (e.g. plugin `oc-fe-engineer` holds agent `oc-fe-engineer`).
 
 There are three kinds of plugins:
 
-1. **Skills & commands** — Slash commands users invoke directly: `/oc-cache-jira`, `/oc-commit`, `/oc-pull-request`, `/oc-review-pr`, `/oc-bug-clusters`, `/oc-bug-root-causes`, `/oc-pr-rejection-rate`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr`, `/oc-fe-create-ui`, `/oc-fe-write-tests`, `/oc-fe-create-e2e-test`, `/oc-fe-regression-test`, `/oc-fe-calculate-ai-use`, `/oc-ar-tech-design`, `/oc-be-implement`, `/oc-be-review`, the backend guide skills (`/oc-be-api-guide`, `/oc-be-db-guide`, `/oc-be-entity-guide`, `/oc-be-service-guide`), and the MCP skills (`/oc-figma`, `/oc-playwright`, `/oc-opencell`). Defined in `SKILL.md` files (or `commands/*.md` for `oc-be-tools`).
+1. **Skills & commands** — Slash commands users invoke directly: `/oc-cache-jira`, `/oc-commit`, `/oc-pull-request`, `/oc-review-pr`, `/oc-bug-clusters`, `/oc-bug-root-causes`, `/oc-pr-rejection-rate`, `/oc-clean-branches`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr`, `/oc-fe-create-ui`, `/oc-fe-write-tests`, `/oc-fe-create-e2e-test`, `/oc-fe-regression-test`, `/oc-fe-calculate-ai-use`, `/oc-ar-tech-design`, `/oc-be-implement`, `/oc-be-review`, the backend guide skills (`/oc-be-api-guide`, `/oc-be-db-guide`, `/oc-be-entity-guide`, `/oc-be-service-guide`), and the MCP skills (`/oc-figma`, `/oc-playwright`, `/oc-opencell`). Defined in `SKILL.md` files (or `commands/*.md` for `oc-be-tools`).
 2. **Sub-agents** — Specialized AI personas spawned by skills or the main agent: `oc-fe-engineer`, `oc-fe-reviewer`, `oc-fe-designer`, `oc-fe-test-writer`, `oc-fe-cypress-expert`, `oc-fe-e2e-expert`, and the backend agents `oc-be-entity-builder`, `oc-be-service-builder`, `oc-be-api-builder`, `oc-be-test-generator`, `oc-be-postman-generator`, `oc-be-pr-reviewer`. Defined in `.md` files under `agents/` with YAML frontmatter (`name`, `color`, `model`).
 3. **MCP Servers** — External service integrations configured in `plugin.json` under `mcpServers` (Figma, Playwright, Opencell, SonarQube, PostgreSQL), all under `plugins/mcp/`. **Atlassian is not one of them** — Jira/Confluence come from the official `atlassian` plugin in Anthropic's `claude-plugins-official` marketplace, which this repo does not vendor.
 
@@ -273,6 +273,36 @@ It is **read-only** — no Bitbucket writes, no Jira writes — and uses the sam
 `BITBUCKET_EMAIL` + `BITBUCKET_ACCESS_TOKEN` Basic auth as `/oc-review-pr`; see
 **Atlassian and Bitbucket Access**.
 
+## Branch clean-up (`/oc-clean-branches`)
+
+`plugins/common/oc-clean-branches` deletes Bitbucket branches whose tip commit is older than
+`--before`, behind five guards (R1 protected/structural or branch-restricted, R2 open PR as
+source **or** destination, R3 commits not in the target, R4 recent commit, R5 ticket not a
+Bug / Sub-bug / Task / Sub-task). Same shape as `oc-pr-rejection-rate`: real Python under
+`skills/oc-clean-branches/scripts/` and a pytest suite:
+
+```bash
+python3 -m pytest plugins/common/oc-clean-branches/tests -q
+```
+
+It is the **only plugin in this repo that deletes on Bitbucket**, so four things matter:
+
+- **Every guard fails safe.** An unreadable ticket, a failed merge check or a branch with no
+  Jira key is *kept*. A repository whose `branch-restrictions` cannot be read is **skipped
+  whole** — that endpoint needs `repository:admin`, and the `pullrequest:write` tokens used
+  elsewhere in this repo get a `403` there (verified live 2026-10-02). Never "degrade" this
+  to a warning: R1 cannot be guaranteed without it. Deletion itself needs `repository:write`.
+- **Scan, report and delete are three scripts**, and only `branch_delete.py` writes. It
+  refuses unless `--confirm N` equals the plan's deletable total, and re-reads each tip hash
+  and the open PRs right before each `DELETE`. The SKILL shows the confirmation as a red
+  ` ```diff ` block followed by `AskUserQuestion`; keep the confirmation before the delete
+  step — a packaging test asserts the order.
+- **The R3 fallback target is `develop` → `dev` before the branching model.**
+  opencell-portal's branching model still names `backlog` as its development branch. The
+  latest **merged** PR's destination wins over both when that branch still exists.
+- **Version lines are matched on the last path segment too**, so `hotfix/15.0.5-600` is a
+  protected version branch while `hotfix/INTRD-123` is not.
+
 ## Development root causes (`/oc-bug-root-causes`)
 
 `plugins/common/oc-bug-root-causes` takes a period's bugs whose Jira **`Root cause`**
@@ -390,6 +420,8 @@ plugin, or the claude.ai connector (`mcp__…Atlassian_Rovo__<tool>`).
 - **`customfield_10613` (the Jira "AI" field) is a multi-value labels field — never overwrite it.** Several commands tag the same field (`ai_code_review_Front`, `ai_code_review_back`, `ai_Dev_back`, `ai_test_back_dev`, `ai_Dev_Front`, `ai_test_front_dev`, …) and they must coexist. Any skill writing it must `getJiraIssue` the current array first, then `editJiraIssue` with **all** existing values plus its own — never a bare string, never a single-select `{ "value": … }` object, never a one-element array, all of which replace the whole field. If the read fails, skip the write rather than clobbering it. Verified live: the field returns e.g. `["ai_Dev_Front","ai_test_front_dev"]`. **Reuse the exact casing already in use** — `ai_Dev_Front` (capital D and F) and `ai_test_front_dev` (all lowercase); a differently-cased variant creates a second, useless label.
 - **`customfield_10745` (the Jira "AI metrics" field) holds one JSON document per ticket, shared by every team.** It must be a **multi-line** Text Field (a single-line field caps at 255 chars) and may use the **rich-text (ADF) renderer**, which rejects a raw string — write a plain string first and fall back to a minimal ADF `codeBlock` wrapper, and accept either form on read. Never replace the document: read it, delete the caller's own `<domain>/<accountId>/` key, re-add the caller's record, and keep every other key (other developers, other domains).
 - Never add an Atlassian/Bitbucket MCP server to this repo. Jira comes from the official `atlassian` plugin (see **Atlassian and Bitbucket Access**), and Bitbucket has no usable MCP path — keep it on REST `curl`.
+- **No AI attribution in git.** Do **not** add any `Co-Authored-By: Claude ...` line (or other Claude/AI attribution) to commit messages or PR descriptions. (This overrides any default attribution instruction.)
+- **Edit the checked-out repo, never the install clone.** Plugin source is edited and committed in the **checked-out `ccode-marketplace` working copy** — NOT the install/download clone at `~/.claude/plugins/marketplaces/opencell-tools`, which is overwritten on update and must never be edited. When that checkout is not already the working directory, **ask the user for its path** instead of assuming. A new or changed plugin only goes live after it is **committed and pushed to the git remote** (`origin` is SSH `git@bitbucket.org:opencellsoft/ccode-marketplace.git`; a sandboxed session usually lacks the key, so the **user pushes**), then `/plugin` to sync the install clone and — for a brand-new plugin — install it (new plugins are not auto-installed). Bump the plugin's `version` on every change so the update is picked up. When committing, stage only the paths you changed — never a blanket `git add -A` that could sweep in unrelated in-flight work.
 
 ## Name Migration (old → new)
 

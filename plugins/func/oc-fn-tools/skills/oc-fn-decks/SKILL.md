@@ -1,25 +1,21 @@
 ---
 name: oc-fn-decks
-version: 1.6.0
-updated: 2026-09-28T11:36:12+02:00
+version: 1.8.0
+updated: 2026-10-09T15:13:23+02:00
 author: Stéphane Chambrin
 description: >
-  Author and render branded slide decks with the Opencell Marp theme (Charte
-  Graphique 2023) and/or as editable PowerPoint files on the OFFICIAL Opencell
-  PPT template. Load this skill whenever the user mentions a slide deck, a
-  presentation, slides, a pitch deck, a SteerCo deck, Marp, `.pptx` /
-  PowerPoint, the official template, or rendering a Markdown deck to
-  HTML/PDF/PPTX — or asks to build, style, or render an Opencell-branded deck,
-  or to publish, share or present a deck as an Artifact / artefact / claude.ai
-  page / a link. Carries the theme master (`theme/`), the official-template
-  PPTX lane (`pptx/` + `pptx.md`: curated pandoc reference, embedded fonts,
-  deck2pptx pipeline), the Artifact lane (`render-artifact.sh` + `artifact/` +
-  `artifact.md`: the same `.md` as a claude.ai page, light by default with a
-  light/dark switch, reproducible from git), the authoring conventions (lead slides, front-matter, one-way
-  mirror), the `YYYYMMDD_` dated-filename rule, the `marp-cli` render command,
-  the overflow check, and the 24h-time / ISO-date locale non-negotiable. Used
-  for the **Phase-2 approval deck** in `oc-fn-project-management` and for
-  standalone strategy / SteerCo decks.
+  Author and render branded slide decks with the Opencell Marp theme (Charte Graphique 2023)
+  and/or as editable PowerPoint files on the OFFICIAL Opencell PPT template. Load whenever the
+  user mentions a slide deck, a presentation, slides, a pitch deck, a SteerCo deck, Marp,
+  `.pptx` / PowerPoint, the official template, or rendering a Markdown deck to HTML/PDF/PPTX —
+  or asks to build, style or render an Opencell-branded deck, or to publish, share or present
+  a deck as an Artifact / artefact / claude.ai page / a link. Carries the Marp theme, the
+  official-template PPTX lane (deck2pptx pipeline), the internal-look PPTX lane (the Marp look,
+  editable), the Artifact lane (the same
+  `.md` as a claude.ai page, light by default, reproducible from git), the authoring conventions, the
+  `YYYYMMDD_` dated-filename rule, the `marp-cli` render command, the overflow check, and the
+  24h-time / ISO-date locale rule. Used for the **Phase-2 approval deck** in
+  `oc-fn-project-management` and for standalone strategy / SteerCo decks.
 ---
 
 # Opencell slide decks — authoring & rendering with the Marp theme
@@ -49,9 +45,9 @@ must quantify*), or a standalone strategy / SteerCo deck.
   technical design vs. product value); `audience` fixes *tone* (formal SteerCo vs. informal team)
   and *depth* (headline-level for execs; detailed for practitioners).
 
-## Three deliverables — the audience also picks the lane
+## Four deliverables — the audience also picks the lane
 
-One `.md` source, three renders:
+One `.md` source, four renders:
 
 - **Marp HTML** (this file) — the presentation aid: self-contained, presenter view, 24h clock.
   Sufficient on its own for working sessions and internal product-team decks.
@@ -59,6 +55,12 @@ One `.md` source, three renders:
   template. **Mandatory deliverable for SteerCo, customers, partners — any deck leaving the
   product team** (company-wide template mandate; the CEO checks). Rendered from the *same*
   `.md` via `pptx/deck2pptx.py`.
+- **Internal-look PPTX** (`internal-pptx.md`) — an editable PowerPoint that **keeps the deck's
+  own Marp look** (this theme, custom HTML blocks included), for when an internal deck has to
+  travel as a `.pptx`: pasted into a colleague's PowerPoint, edited by someone without Marp.
+  Same scope as the Marp HTML — internal; anything leaving the product team stays on the
+  official template. Rendered from the *same* `.md` by `render-internal-pptx.sh`, which lays the
+  deck out in Chromium and rebuilds every slide as native PowerPoint objects.
 - **claude.ai Artifact** (`artifact.md`) — the same deck as a link any Openceller can open: Marp's
   viewer on a claude.ai page, **light by default with a light/dark switch**, a dark slide variant
   derived from the Charte only. **Internal scope** (product talks, all-hands, team decks) — how
@@ -70,7 +72,9 @@ The conventions below keep the source valid for every lane; the PPTX-side deltas
 metadata, `<!-- note: … -->`, no fenced divs) live in `pptx.md` — read it before authoring a
 deck that will ship as PPTX. The Artifact-side deltas (`pagetitle:` / `artifact:` keys, a dark
 variant for any colour a deck's own `<style>` sets, no local images, speaker notes are public)
-live in `artifact.md`.
+live in `artifact.md`. The internal-look PPTX needs nothing extra from the source — it renders
+what Marp renders; its procedure, its few deliberate differences and its QA step live in
+`internal-pptx.md`.
 
 ## Where the theme lives (and why it's in two places)
 
@@ -228,7 +232,10 @@ npx -y @marp-team/marp-cli <path>/<deck>.md \
 - Swap `-o ….pdf` or `--pptx` for other formats — **both need a local Chromium** (the HTML render does not).
   Marp's `--pptx` produces image-slides (not editable) and ignores the official template — for the
   **official editable PPTX deliverable**, use the pandoc lane instead: `python3
-  assets/pptx/deck2pptx.py <deck>.md` (see `pptx.md`).
+  assets/pptx/deck2pptx.py <deck>.md` (see `pptx.md`); for an **editable PPTX in the deck's own
+  look**, `render-internal-pptx.sh <deck>.md` (see `internal-pptx.md`). Marp's
+  `--pptx-editable` is not a substitute: it round-trips through LibreOffice's PDF import and loses
+  bold, symbols and layout.
 - `marp-cli` is invoked via `npx -y` (not usually installed globally).
 
 ## Overflow — always check before sharing
@@ -259,3 +266,5 @@ unavoidable density.
   theme, same conventions; there is no Phase-2 estimate content to worry about.
 - **Internal decks shared as a link** — product talks, all-hands, team updates: the Artifact lane
   (`artifact.md`), from the same `.md`.
+- **Internal decks that must travel as a file** — a slide block for someone else's PowerPoint, a
+  deck a colleague will edit: the internal-look PPTX (`internal-pptx.md`), from the same `.md`.

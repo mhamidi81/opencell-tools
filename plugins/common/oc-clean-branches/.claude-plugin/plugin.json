@@ -1,0 +1,5 @@
+{
+  "name": "oc-clean-branches",
+  "description": "Delete stale Bitbucket branches whose last commit is older than a given date, behind five fail-safe guards: protected/structural branches (master/develop/dev, release/*, 19.0.x, branch restrictions), branches with an open PR, branches not fully merged into their target (commits?include&exclude), branches with a recent commit, and branches not tied to a Bug / Sub-bug / Task / Sub-task ticket are kept. Writes a Markdown + HTML + CSV report to ./docs/ and asks for an explicit confirmation shown in red before deleting; logs every deleted tip hash for restoration. Bitbucket and Jira via direct REST (BITBUCKET_ACCESS_TOKEN, JIRA_API_TOKEN) - no MCP.",
+  "version": "1.0.0"
+}
