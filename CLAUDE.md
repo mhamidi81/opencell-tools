@@ -46,7 +46,7 @@ skill/agent name (e.g. plugin `oc-fe-engineer` holds agent `oc-fe-engineer`).
 
 There are three kinds of plugins:
 
-1. **Skills & commands** — Slash commands users invoke directly: `/oc-cache-jira`, `/oc-commit`, `/oc-pull-request`, `/oc-review-pr`, `/oc-bug-clusters`, `/oc-bug-root-causes`, `/oc-pr-rejection-rate`, `/oc-clean-branches`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr`, `/oc-fe-create-ui`, `/oc-fe-write-tests`, `/oc-fe-create-e2e-test`, `/oc-fe-regression-test`, `/oc-fe-calculate-ai-use`, `/oc-ar-tech-design`, `/oc-be-implement`, `/oc-be-review`, the backend guide skills (`/oc-be-api-guide`, `/oc-be-db-guide`, `/oc-be-entity-guide`, `/oc-be-service-guide`), and the MCP skills (`/oc-figma`, `/oc-playwright`, `/oc-opencell`). Defined in `SKILL.md` files (or `commands/*.md` for `oc-be-tools`).
+1. **Skills & commands** — Slash commands users invoke directly: `/oc-cache-jira`, `/oc-commit`, `/oc-pull-request`, `/oc-review-pr`, `/oc-bug-clusters`, `/oc-bug-root-causes`, `/oc-pr-rejection-rate`, `/oc-clean-branches`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr`, `/oc-fe-create-ui`, `/oc-fe-write-tests`, `/oc-fe-create-e2e-test`, `/oc-fe-regression-test`, `/oc-fe-calculate-ai-use`, `/oc-fe-check-jenkins-build`, `/oc-ar-tech-design`, `/oc-be-implement`, `/oc-be-review`, the backend guide skills (`/oc-be-api-guide`, `/oc-be-db-guide`, `/oc-be-entity-guide`, `/oc-be-service-guide`), and the MCP skills (`/oc-figma`, `/oc-playwright`, `/oc-opencell`). Defined in `SKILL.md` files (or `commands/*.md` for `oc-be-tools`).
 2. **Sub-agents** — Specialized AI personas spawned by skills or the main agent: `oc-fe-engineer`, `oc-fe-reviewer`, `oc-fe-designer`, `oc-fe-test-writer`, `oc-fe-cypress-expert`, `oc-fe-e2e-expert`, and the backend agents `oc-be-entity-builder`, `oc-be-service-builder`, `oc-be-api-builder`, `oc-be-test-generator`, `oc-be-postman-generator`, `oc-be-pr-reviewer`. Defined in `.md` files under `agents/` with YAML frontmatter (`name`, `color`, `model`).
 3. **MCP Servers** — External service integrations configured in `plugin.json` under `mcpServers` (Figma, Playwright, Opencell, SonarQube, PostgreSQL), all under `plugins/mcp/`. **Atlassian is not one of them** — Jira/Confluence come from the official `atlassian` plugin in Anthropic's `claude-plugins-official` marketplace, which this repo does not vendor.
 
@@ -303,6 +303,40 @@ It is the **only plugin in this repo that deletes on Bitbucket**, so four things
 - **Version lines are matched on the last path segment too**, so `hotfix/15.0.5-600` is a
   protected version branch while `hotfix/INTRD-123` is not.
 
+## Jenkins build check (`/oc-fe-check-jenkins-build`)
+
+`plugins/frontend/oc-fe-check-jenkins-build` checks the latest build of
+`https://jenkins.opencell.eu/job/<branch>/` (default `dev`) and, when it failed in
+`Checkout Front` / `Build Front`, fixes opencell-portal under the standing ticket
+**INTRD-22890**, merges the PR and re-runs the job with the failed build's parameters.
+Same shape as `oc-clean-branches`: real Python under `skills/oc-fe-check-jenkins-build/scripts/`
+and a pytest suite:
+
+```bash
+python3 -m pytest plugins/frontend/oc-fe-check-jenkins-build/tests -q
+```
+
+Five things are not obvious from the code:
+
+- **It is fully automatic, so the guards are mechanical.** No prompt before the merge; in
+  exchange a local `yarn|npm run build` must pass before any PR, there is **one fix attempt
+  per run** (a second front failure is reported, never re-fixed — also across runs: a failed
+  build started by `JENKINS_USER` yields `needs_human`), and every step fails closed —
+  no rebuild after a refused merge. A packaging test pins that order.
+- **The job is one pipeline for core and portal.** Only the two front stages are in scope;
+  any other failing stage is reported, not fixed. Infra failures (network, disk, agent,
+  ssh/scp to `dl.opencellsoft.com`) are rebuilt without a code change.
+- **A stage node's own `wfapi/log` is empty.** The text lives on its step nodes (each returns
+  the last ~10 KB); the script walks the FAILED steps and falls back to slicing `consoleText`
+  between `[Pipeline] { (<stage>)` markers. Verified live 2026-10-10.
+- **"Same parameters" means the build's `ParametersAction`.** Timer-started builds also carry
+  `ASSETS_URL` / `VITE_APP_BASE_URL`, but only in the timer cause text — the job does not
+  declare them, so they cannot be replayed and the skill says so.
+- **Auth is `JENKINS_USER` + `JENKINS_API_TOKEN` (Basic).** Anonymous access is `403`. The
+  scripts fall back to parsing the `export` lines of `~/.bashrc` (never sourcing it), because
+  those exports do not reach non-interactive shells. API-token requests need no CSRF crumb;
+  a crumb is fetched only on a `403` that asks for one.
+
 ## Development root causes (`/oc-bug-root-causes`)
 
 `plugins/common/oc-bug-root-causes` takes a period's bugs whose Jira **`Root cause`**
@@ -345,6 +379,7 @@ All MCP plugins bundled here live under `plugins/mcp/`.
 | Figma | Uses HTTP MCP (auth handled by Figma) |
 | Playwright | No env vars needed |
 | Atlassian (not bundled) | None — `atlassian@claude-plugins-official`, OAuth via `/mcp` |
+| Jenkins (not MCP — REST, `/oc-fe-check-jenkins-build`) | `JENKINS_USER`, `JENKINS_API_TOKEN` |
 
 ## Atlassian and Bitbucket Access
 
