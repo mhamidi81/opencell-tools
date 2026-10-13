@@ -46,7 +46,7 @@ skill/agent name (e.g. plugin `oc-fe-engineer` holds agent `oc-fe-engineer`).
 
 There are three kinds of plugins:
 
-1. **Skills & commands** — Slash commands users invoke directly: `/oc-cache-jira`, `/oc-commit`, `/oc-pull-request`, `/oc-review-pr`, `/oc-bug-clusters`, `/oc-pr-rejection-rate`, `/oc-clean-branches`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr`, `/oc-fe-create-ui`, `/oc-fe-write-tests`, `/oc-fe-create-e2e-test`, `/oc-fe-regression-test`, `/oc-fe-calculate-ai-use`, `/oc-fe-check-jenkins-build`, `/oc-ar-tech-design`, `/oc-be-implement`, `/oc-be-review`, the backend guide skills (`/oc-be-api-guide`, `/oc-be-db-guide`, `/oc-be-entity-guide`, `/oc-be-service-guide`), and the MCP skills (`/oc-figma`, `/oc-playwright`, `/oc-opencell`). Defined in `SKILL.md` files (or `commands/*.md` for `oc-be-tools`).
+1. **Skills & commands** — Slash commands users invoke directly: `/oc-cache-jira`, `/oc-commit`, `/oc-pull-request`, `/oc-review-pr`, `/oc-bug-clusters`, `/oc-bug-root-causes`, `/oc-pr-rejection-rate`, `/oc-clean-branches`, `/oc-fe-fix-bug`, `/oc-fe-fix-pr`, `/oc-fe-create-ui`, `/oc-fe-write-tests`, `/oc-fe-create-e2e-test`, `/oc-fe-regression-test`, `/oc-fe-calculate-ai-use`, `/oc-fe-check-jenkins-build`, `/oc-ar-tech-design`, `/oc-be-implement`, `/oc-be-review`, the backend guide skills (`/oc-be-api-guide`, `/oc-be-db-guide`, `/oc-be-entity-guide`, `/oc-be-service-guide`), and the MCP skills (`/oc-figma`, `/oc-playwright`, `/oc-opencell`). Defined in `SKILL.md` files (or `commands/*.md` for `oc-be-tools`).
 2. **Sub-agents** — Specialized AI personas spawned by skills or the main agent: `oc-fe-engineer`, `oc-fe-reviewer`, `oc-fe-designer`, `oc-fe-test-writer`, `oc-fe-cypress-expert`, `oc-fe-e2e-expert`, and the backend agents `oc-be-entity-builder`, `oc-be-service-builder`, `oc-be-api-builder`, `oc-be-test-generator`, `oc-be-postman-generator`, `oc-be-pr-reviewer`. Defined in `.md` files under `agents/` with YAML frontmatter (`name`, `color`, `model`).
 3. **MCP Servers** — External service integrations configured in `plugin.json` under `mcpServers` (Figma, Playwright, Opencell, SonarQube, PostgreSQL), all under `plugins/mcp/`. **Atlassian is not one of them** — Jira/Confluence come from the official `atlassian` plugin in Anthropic's `claude-plugins-official` marketplace, which this repo does not vendor.
 
@@ -336,6 +336,36 @@ Five things are not obvious from the code:
   scripts fall back to parsing the `export` lines of `~/.bashrc` (never sourcing it), because
   those exports do not reach non-interactive shells. API-token requests need no CSRF crumb;
   a crumb is fetched only on a `403` that asks for one.
+
+## Development root causes (`/oc-bug-root-causes`)
+
+`plugins/common/oc-bug-root-causes` takes a period's bugs whose Jira **`Root cause`**
+(`customfield_10111`) is **"Development issue"** and reclassifies each onto a granular
+developer-mistake taxonomy (`references/dev-root-causes.md`), judged from the Jira text
+and the diff of the PR that fixed the bug. It is **read-only** and ships real Python files
+with a pytest suite:
+
+```bash
+python3 -m pytest plugins/common/oc-bug-root-causes/tests -q
+```
+
+Five things are not obvious from the code:
+
+- **Three scripts are copies, not imports.** `jira_client.py` and `bug_fetch.py` come from
+  `oc-bug-clusters`, `bitbucket_client.py` from `oc-pr-rejection-rate`, because
+  `${CLAUDE_PLUGIN_ROOT}` cannot reach a sibling plugin in an install. A test asserts they
+  are byte-identical: change the original, then re-copy.
+- **One taxonomy for both areas, and regression is a flag.** The point is to compare
+  Frontend and Backend on the same axis, and a regression can be any kind of mistake.
+- **The diff redirect is followed by hand.** `…/diff` answers 302 to a signed URL on another
+  host; `urllib` would forward `Authorization` there, so `rc_pr.py` drops it on a host
+  change. The per-file list is computed from the diff, not a `…/diffstat` call, to keep a
+  month near 600 requests.
+- **Classification is fanned out to sub-agents, one per 30-bug batch file.** A month of
+  diffs does not fit one context. `rc_report.py` merges the parts and refuses a missing
+  key, a key outside the run, a key classified twice, or a coined category under 5 bugs.
+- **`insufficient-evidence` is counted and listed, never hidden** — it is the list of
+  tickets whose description or PR should be improved.
 
 ## MCP Servers Requiring Environment Variables
 
