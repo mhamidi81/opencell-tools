@@ -144,6 +144,32 @@ documentation, not an entity dump. Conversely, if a test row references an
 ID that is not in the *Dataset*, that is a defect in the acceptance section —
 add the row, do not delete the test.
 
+## Rows added after QA has generated its tests
+
+QA generates the Story's Xray Tests from the whole Story, once, when it enters test — on INTRD-44601,
+43 Tests on a single day, from about seven rows here. A row added or changed afterwards reaches Xray
+only if QA picks it up, so make every late row easy to spot. A row added before QA generates its tests
+needs none of this: it is part of the Story QA reads.
+
+- **Mark it in the *Rule* cell** — `BR-4 · added 2026-10-13`, or `BR-2 · changed 2026-10-13` when a
+  ruling changed an existing row. Never rewrite a row silently: QA's existing Test still asserts the
+  old outcome. A Story whose table still has the older *Type* column (*Type*, *Context*, *Actions*,
+  *Expected outcome*) takes the marker in that first column, after the type: `Negative · BR-21 · added
+  2026-10-13`. Add the row in the table's own shape; never restructure a table to add one.
+- **The usual row rules apply** — traceable to the FD, one action, one observable outcome. A case with
+  no FD rule behind it means the FD lacks a ruling: write the ruling into the FD first (§ *Hard
+  precondition*), then the row.
+- **Tell QA in a comment on the Story**, naming the rows added or changed and asking for them to become
+  Xray Tests.
+- **Then add them to Xray with QA's skill, once it exists.** Agreed with Engineering on 2026-10-13:
+  Mohamed Amtiou, Lead Tester, is preparing a marketplace skill that adds test cases to Xray. Look for
+  an `oc-qa-*` plugin under the marketplace's `plugins/qa/`. Until it ships, the row and the comment
+  are the whole hand-off. Once it ships, the row still comes first: the Story stays the source, and
+  the case reaches Xray through that skill.
+
+These rows are how Product's findings reach QA's tests: `po-review.md` § *A Story QA has not passed
+yet — add test cases, never Sub-bugs*.
+
 ## Coverage check — run it before submitting
 
 Walk through the FD and the Limits & volumes checklist and tick each against
