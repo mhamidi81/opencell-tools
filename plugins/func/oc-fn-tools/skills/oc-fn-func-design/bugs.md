@@ -18,6 +18,10 @@ behaviour, it is a User Story or an Enabler, not a Bug.
 *b*), **id `10071`**, `subtask: true`. JQL tolerates `"Sub-Bug"`, so a search that works is **no**
 proof of the spelling — `Sub-bug` is the name the API takes on create.
 
+**Not on a Story QA has never passed.** A defect found before the Story first reaches `To Review by
+PO` becomes a row of its *Acceptance* test cases, not a `Sub-bug` — `po-review.md` § *A Story QA has
+not passed yet — add test cases, never Sub-bugs*. Check the Story's status history before filing.
+
 **Routing — which of the two types:**
 
 | The defect… | File it as | Parent |
