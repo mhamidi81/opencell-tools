@@ -1661,12 +1661,12 @@ function extract() {
     // (`font-variant-numeric: tabular-nums`) on tables, and DrawingML has no OpenType features, so
     // PowerPoint draws them proportional — narrower in Montserrat. Measured proportional, the
     // narrower numbers changed the automatic column widths and any cell could break at other
-    // words than the Marp HTML (the Obeya A3 lost a line in row 6; « 10,2 / k€ » split on slide
-    // 4). Measured tabular, columns, breaks and row heights are Marp's, and a line holding figures
-    // only ends a little short in the PPTX: the line breaks are fixed, so it never wraps again.
-    // What does not follow is a shape placed after a number in a cell (an image, an empty inline
-    // box): it sits at Chromium's x, that much right of the text before it. Tags and inline code
-    // are highlighted text, so they move with their words.
+    // words than the Marp HTML (the Obeya A3 lost a line in row 6; a number split from its unit on
+    // slide 4). Measured tabular, columns, breaks and row heights are Marp's, and a line holding
+    // figures only ends a little short in the PPTX: the line breaks are fixed, so it never wraps
+    // again. What does not follow is a shape placed after a number in a cell (an image, an empty
+    // inline box): it sits at Chromium's x, that much right of the text before it. Tags and inline
+    // code are highlighted text, so they move with their words.
     // And measure with a face PowerPoint will find. A run's font is the first family of its CSS
     // stack, and a stack that opens on a generic family (monospace, sans-serif, system-ui) or a
     // platform-only one (ui-monospace, -apple-system, Menlo, Consolas, Segoe UI) names no face
