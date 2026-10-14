@@ -222,7 +222,7 @@ What lands where:
   cell (an image, an empty inline box) sits at Chromium's x, so the text before it ends that much
   short of it. Until 2026-10-13 tables were measured with proportional figures: the narrower
   numbers changed the automatic column widths, and cells broke at other words than the Marp HTML
-  (the Obeya A3's row 6 lost a line, « 10,2 / k€ » split on slide 4).
+  (the Obeya A3's row 6 lost a line, a number split from its unit on slide 4).
 - **Generic and platform-only fonts become Courier New, Arial or Times New Roman.** A run takes
   the first family of its CSS stack, and a stack that opens on a generic family (`monospace`,
   `sans-serif`, `system-ui`) or one that exists on one platform only (`ui-monospace`,
