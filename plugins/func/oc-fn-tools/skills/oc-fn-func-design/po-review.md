@@ -127,6 +127,9 @@ assignable, trackable defect, not a comment.
 
 - **One `Sub-bug` per distinct defect.** Rejecting for three problems means three `Sub-bug`s, not one
   carrying a list.
+- **Each `Sub-bug` is created assigned to the lead developer of its layer** — not to the Story's
+  developer, and never empty (`bugs.md` § *Assignee — never created unassigned*). Reassigning the
+  Story itself is the separate step below.
 - `bugs.md` carries the `Sub-bug` authoring rules — issue type, parent, required fields at creation,
   which template applies — and the rule for **when a defect belongs under the Story as a `Sub-bug`
   versus as a standalone `Bug`** (a generic, out-of-scope problem the Story merely exposed).
@@ -225,7 +228,8 @@ live.
    (**`oc-fn-portal`** skill, `api-replay.md`).
 4. **Search closed issues for the same symptom** before filing anything (`bugs.md` § *Before
    filing — regression archaeology*).
-5. **File one `Sub-bug` per defect** under the Story (`bugs.md`) — **Story only**; a Bug needs none.
+5. **File one `Sub-bug` per defect** under the Story (`bugs.md`), assigned to its layer's lead
+   developer — **Story only**; a Bug needs none.
    **Only on a Story QA has passed**; before that, the defect is an *Acceptance* row (above). Either
    way, **add every case you ran that *Acceptance* lacks** as a row marked as added after QA's
    generation.

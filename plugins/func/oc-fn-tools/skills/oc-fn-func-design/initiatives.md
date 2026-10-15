@@ -7,8 +7,9 @@ framing.
 
 > **`Initiative` replaced `Feature` — migration complete 2026-07-09.** `Initiative` is the
 > above-Epic container, and it is the **altitude** axis *only*: the product area is captured
-> orthogonally by the **Module**, a Jira Component set on Epics/Stories/Enablers/Bugs/Backports — never by the
-> Initiative.
+> orthogonally by the **Module**, a Jira Component mandatory on Epics/Stories/Enablers/Bugs/Backports.
+> Unlike the retired `Feature`, the Initiative *type* encodes no product area. A module on an
+> Initiative is **optional**, and an Initiative can span several modules (§ *Fields*).
 >
 > **The `Feature` type no longer exists.** All 80 `Feature` issues were deleted and the work type
 > was retired site-wide; the 86 functional areas they encoded became 30 module Components, with 370
@@ -46,6 +47,14 @@ followed by a `rule` node. It is typed `Initiative` and follows the **Epic workf
 (`To Study … Released … Rejected`) — same as Epics.
 
 ## Fields
+
+**Module — optional.** An Initiative may carry a module Component, and an Initiative can span
+several modules: each child Epic carries its own primary module, and the Epics need not share one.
+Set by Stéphane on 2026-10-15, after a session read the altitude-only rule above as "an Initiative
+never carries a module". On that day 2 of the 35 Initiatives carried one: INTRD-44664 — Intelligent
+Query - Scout / L'Éclaireur (`Opencell AI`) and INTRD-34565 — Opencell Marketplace
+(`Marketplace`). A missing module on an Initiative is not a finding: the enforcement in `SKILL.md`
+§ *Product area* covers Epics, Stories, Enablers, Bugs and Backports only.
 
 Initiatives use the standard **`description`** field. Full-read preset:
 

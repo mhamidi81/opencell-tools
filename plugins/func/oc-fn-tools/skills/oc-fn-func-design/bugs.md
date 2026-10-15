@@ -29,8 +29,8 @@ not passed yet — add test cases, never Sub-bugs*. Check the Story's status his
 | breaks something the Story under review is meant to deliver | **`Sub-bug`** | the reviewed **Story**, set via the `parent` field **at creation** |
 | sits outside that Story's scope — e.g. a generic framework-level problem the Story merely exposed | standalone **`Bug`** | none; link it to the Story/Epic whose behaviour it concerns |
 
-A Sub-bug carries `fixVersions` and `priority`; `components` are typically left empty in practice
-and read from the parent.
+A Sub-bug carries `fixVersions` and `priority`; its module is read from the parent. Like a Bug, it is
+**created assigned** to the lead of its layer — § *Assignee — never created unassigned*.
 
 Set **`customfield_10228` (*Regression*)** when the defect is a regression — a single-**option**
 field whose only allowed value is `Regression`, i.e. a flag. Establish that it *is* one with the
@@ -227,8 +227,11 @@ with a `400` a **`Sub-bug`** create never hits. The recognisable body:
 Both create screens expose the same thirteen fields — only the required/optional split differs.
 
 **`components` is optional for Jira, not for this skill.** A Bug is created with the module of the
-affected area, plus its layer (`Backend` / `Frontend`) when known; a Sub-bug reads the module from its
-parent. See `SKILL.md` § *Product area — the module Component is mandatory*.
+affected area, plus its layer (`Backend` / `Frontend`); a Sub-bug reads the module from its parent.
+See `SKILL.md` § *Product area — the module Component is mandatory*.
+
+**Neither is `assignee`.** Both types are created assigned to the lead of their layer — § *Assignee —
+never created unassigned*, next.
 
 The error body above names only two of the Bug's four extra requirements, because `priority` and
 `fixVersions` happened to be set on that call. Read the table, not the error.
@@ -252,6 +255,58 @@ type, the check is one cheap call, and a `400` on create costs more.
 > was created with a 33-node ADF description and its changelog carries no `description` entry. Do
 > **not** conclude from `createmeta` that a Bug must be created empty and then edited.
 
+## Assignee — never created unassigned
+
+**Every Bug and Sub-bug is created with an assignee: the lead developer of the layer that will fix
+it.** Jira accepts an empty `assignee` on both create screens; this skill does not. Raised by Vincent
+Naudion on 2026-10-15: of the 419 Bugs and Sub-bugs created in INTRD over the previous 90 days, 184
+were created unassigned — 94 of 296 Bugs, 90 of 123 Sub-bugs — and waited for someone to pick them up
+by hand.
+
+| Layer | Assign to | `accountId` |
+|---|---|---|
+| `Frontend` — Portal (React) | Mohamed Hamidi, lead developer (frontend) | `5ef5c13914f60e0ac1c9b049` |
+| `Backend` — Core (Java) | Adil El Jaouhari, lead developer (backend) | `63369fa788ed2ebef97cddfb` |
+
+- **The lead, not the developer you expect to fix it.** The lead dispatches. This holds for a Sub-bug
+  filed on a rejected Story too, even when the Story's developer is known — reassigning the *Story*
+  to that developer is a separate step (`po-review.md` § *After the verdict — reassign, or thank*).
+  The one exception is an assignee the user names.
+- **Assign by account ID, never by display name.** The user directory holds a second *Mohamed Hamidi*
+  — a `qm:…` Jira Service Management customer account, not assignable on INTRD. Both IDs above were
+  checked assignable on INTRD on 2026-10-15. When a lead changes, update the table; one call confirms
+  an ID — `jira raw GET "/user/assignable/search?project=INTRD&accountId=<id>"` returns the user, or `[]`.
+
+### Which layer
+
+With no full-stack developers, a defect goes to one team or the other — so the layer is decided **at
+creation**, not left for triage.
+
+1. **The cause is `Established —`** (§ *Analysis*) → the layer whose code changes.
+2. **Otherwise, where it is observed** (§ *Authoring notes* → *Observed at*): REST API, batch or file
+   processing, generated document → **Backend**. Portal GUI → **Frontend**, unless the replayed API
+   call is itself wrong — an error on a valid request, or wrong data in the response — which makes it
+   **Backend** (`oc-fn-portal` skill, `api-replay.md`).
+3. **Both layers need a fix** → two issues, one per layer, each assigned to its own lead, linked to
+   each other.
+4. **Still unsure** → route by where it is observed, and say so in the confirmation. A wrong layer
+   costs the lead one reassignment; an empty assignee costs the whole wait. Never hold the create, or
+   leave the field empty, for want of certainty.
+
+Record the layer as well: a Bug carries `Backend` or `Frontend` in `components` next to its module
+(`SKILL.md` § *Enforcement*); a Sub-bug carries the layer alone, its module coming from the parent.
+
+### In the create call, then verify
+
+- **REST:** `"assignee": {"accountId": "63369fa788ed2ebef97cddfb"}` inside `fields`.
+- **Rovo MCP `createJiraIssue`:** the `assignee_account_id` parameter.
+- **Re-read after creating**, with the module check (`SKILL.md` § *Enforcement*, step 4):
+  ```sh
+  jira raw GET "/issue/$K?fields=assignee" | jq -e '.fields.assignee.accountId' >/dev/null \
+    || echo "UNASSIGNED: $K"
+  ```
+- **Name the assignee and the layer** in the confirmation you give the user, with the module.
+
 ## Authoring notes
 
 Follow the template's sections. A well-formed Bug makes the defect reproducible and scoped:
@@ -262,8 +317,8 @@ Follow the template's sections. A well-formed Bug makes the defect reproducible 
   a GUI defect and an API defect go to different teams and different repos — and it exposes the case
   where one defect needs **two** issues (a Core fix plus an additive Portal fix). It is *not* a
   duplicate of `customfield_10359` (*Issue location (URL)* — one pointer to one page) or of
-  `components` (the module, set at creation, and `Backend`/`Frontend` — the engineering layer, set at
-  triage).
+  `components` (the module, and `Backend`/`Frontend` — the engineering layer, both set at creation,
+  the layer because it picks the assignee: § *Assignee — never created unassigned*).
 - **Reproduction** — exact, numbered steps a reader can follow **without reading code**; **expected
   vs. actual** result; frequency (always / intermittent). A screenshot may *illustrate* a step; it may
   never *be* the step. INTRD-45655 is the counter-example — twelve words and three PNGs, with no page,
