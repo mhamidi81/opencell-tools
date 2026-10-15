@@ -220,6 +220,19 @@ study → respond** on existing CRs, not creation.
    the CR — reference them from the Product response. (Or park it in **Backlog** if it's valuable but
    unschedulable for now.)
    When scheduling:
+   - **Each accepted CR is delivered by an Epic of its own, at least** (Stéphane, 2026-10-14).
+     - **When it needs several Epics,** an Initiative carries them.
+     - **Never a lone Story added to an existing Epic.** Who asked (*Prime Customer*), who paid
+       (*Paid by*) and *Generic or specific* all sit on the Epic. A Story inside a catch-all Epic
+       (« Miscellaneous Portal enhancements », « Discount plans (misc. enhancements) ») mixes several
+       customers' requests, so its cost cannot be attributed. On 2026-10-14, 30 of the 54 accepted or
+       scheduled CRs were linked to Stories only.
+     - **Several CRs asking for the same feature may share one Epic.** That is resale: *Paid by* lists
+       every customer that pays.
+     - **History stays as it is.** Do not restructure delivered work.
+   - **Set the Epic's decisions:**
+     - *Generic or specific* (`customfield_10844`) from the acceptance decision;
+     - *Paid by* when the CR is sold (`SKILL.md` § *Who asked, who paid*).
    - **The due date may be updated** to the date now committed.
    - **The delivering Epic carries the CR's customer in Prime Customer** (`customfield_10547`).
      Argos charges product cost to that customer's P&L from it. Write the generic-or-specific

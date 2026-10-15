@@ -1,7 +1,7 @@
 ---
 name: oc-fn-func-design
-version: 1.43.1
-updated: 2026-10-13T14:32:52+02:00
+version: 1.48.0
+updated: 2026-10-15T15:18:56+02:00
 author: Stéphane Chambrin
 description: >
   Rules and data for Jira issues in the Opencell INTRD and CR (Change Requests) projects. Use
@@ -107,6 +107,7 @@ Load only the file relevant to the current task — do not pre-read all of them.
 
 - All Jira issues must be written in **English**.
 - **Check the create screen before the first create of an issue type you have not created this session** — required fields differ per type and are not guessable. Run `jira meta <issuetypeId>` (or `getJiraIssueTypeMetaWithFields`). Notably a **`Bug`** requires *Issue location (URL)* (`customfield_10359`, a URL-typed string field — send a full URL) and *Affects versions* (`versions`) at creation, while a **`Sub-bug`** requires neither — see `bugs.md` § *Required fields at creation — Bug vs Sub-bug*.
+- **No `Bug` or `Sub-bug` is created unassigned.** The `assignee` goes in the create call: a `Frontend` defect to Mohamed Hamidi, the frontend lead developer; a `Backend` defect to Adil El Jaouhari, the backend lead developer. Account IDs, how to decide the layer, and the post-create check are in `bugs.md` § *Assignee — never created unassigned*.
 - Minimise token usage on every call. First pick the cheapest transport (see [Transport](#transport--rovo-mcp-baseline-vs-the-optional-jira-helper) — default to the `jira` helper when it is installed; otherwise use the Rovo MCP for every operation). Then, on whichever transport, pass an explicit `fields` allowlist (see [Reading efficiency](#reading-efficiency--field-selection)) and prefer `markdown` over ADF on MCP calls whenever possible (see [Content format policy](#content-format-policy--adf-vs-markdown)).
 
 ## Product area — the module Component is mandatory
@@ -126,6 +127,7 @@ INTRD carries the **product-area axis as a Jira Component** (the "module") — o
 - **`Backend` / `Frontend` are a *different* axis** (engineering layer, not product area) that coexists on the same field — an issue may carry `[Backend, Billing]`. Leave any existing `Backend`/`Frontend` in place; **add** the module Component, never replace the `components` field wholesale.
 - **Not a module:** irreducible cross-cutting tech/functional debt has **no** Component (a non-module bucket, not a label) — don't invent a "debt" Component.
 - The module is the *dimension* of work; **altitude** (Initiative/Epic/Story/Enabler) is the separate hierarchy (see `initiatives.md`). The old `Feature` type is **dissolved** — replaced by this Component axis plus the `Initiative` type.
+- **An Initiative's module is optional**, and an Initiative can span several modules through its Epics (`initiatives.md` § *Fields*). The enforcement below does not apply to it.
 
 ### Enforcement — no Epic, Story, Enabler, Bug or Backport leaves this skill without a module
 
@@ -252,6 +254,55 @@ and `backports.md` carry them.
      moves cost already logged.
    - **Report only:** a Backport carrying several versions. Removing one would move cost already
      logged, and no decision covers that.
+
+## Who asked, who paid — Prime Customer and Paid by
+
+Two customer fields answer two different questions. The CPO Obeya's *gâchis produit* reads both: the R&D
+spent on what was not sold, weighted by how many times each development was sold. Set by Stéphane on
+2026-10-14.
+
+- **Prime Customer** (`customfield_10547`, single select) says **who asked**. It names the customer whose
+  request the work serves first, and it goes on the delivering Epic at scheduling
+  (`change-requests.md`). It does not mean that only that customer uses the work. Whether the work is
+  generic or specific is a separate decision, written in the CR's Product response.
+- **Paid by** (`customfield_10094`, labels) says **who paid**. It holds one label per customer that
+  bought the work. That covers a separate invoice, the work included in a project's price, or the work
+  sold within a support package. **Empty means not sold.**
+  - **Where:** on the Epic for a development, and **on the Backport issue itself** for a backport. A
+    backport is sold on its own: the SEPA backports to 9.8 were paid by Fnac-Darty, while the same Epic's
+    18.3 backports are regulatory.
+  - **When:** as soon as a sale is known. That is at scheduling when the CR is sold, or when the CCO
+    reports a sale. Add a label; never remove one, except `Opencell`.
+  - **Spelling:** the CR *Expected by* labels, which allow no spaces: `LaPoste`, `Proxiserve`,
+    `Fnac-Darty`, `Energied'ici`, `Mediapost`, `Vialis`. **Never create a variant** (`PROXISERVE`
+    exists; do not reuse it).
+  - **`Opencell` is a legacy default:** about 10,000 issues from 2024–2025 carry it. Read it as empty,
+    drop it when adding a customer, and never add it.
+  - **No amount, ever.** No price, invoice amount or rate goes into Jira, which is open to about 41 Tech
+    people, mostly subcontractors. Amounts stay in the CCO's workbook and with Finance, then in Argos.
+  - **Payload:**
+    - REST, which leaves the other labels in place:
+      `{"update": {"customfield_10094": [{"add": "Proxiserve"}, {"remove": "Opencell"}]}}`.
+    - Rovo MCP `editJiraIssue`: `fields.customfield_10094` *replaces* the list, so send the full list.
+  - **How it is read:** the number of distinct customers is the number of sales. The Obeya counts a
+    development in full when it was sold to no one, half when sold once, a third when sold twice, and
+    not at all from three sales.
+- **Generic or specific** (`customfield_10844`, single select on INTRD **Epics only**, created
+  2026-10-14) holds **the Product decision**:
+  - `Generic`: other customers use it, or will, so it is not single-customer cost.
+  - `Specific`: built for the requesting customer only.
+  - Empty: not decided.
+
+  The PO sets it when the CR is accepted and at the latest when the delivering Epic is scheduled. The
+  Product response still explains why. Payload: REST `{"fields": {"customfield_10844": {"value":
+  "Specific"}}}`.
+- **Regulatory work is read from the hierarchy, not from a field.** An Epic is regulatory when its
+  parent Initiative carries the label `REGULATORY` (capitals, the spelling already in use). That holds
+  for INTRD-44659 French e-invoicing reform compliance, INTRD-44701 E-reporting and INTRD-44696 SEPA
+  ISO 20022 migration, labelled 2026-10-14.
+  - **A regulatory Epic goes under one of these Initiatives.** Do not label the Epic itself.
+  - **A new regulatory Initiative gets the label when it is created.**
+- **A back-fill is a write:** show the list of issues and values, and get the user's go-ahead first.
 
 ## Version scope — MoSCoW on Epics, Stories and change requests
 
