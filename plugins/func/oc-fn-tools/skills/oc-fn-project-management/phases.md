@@ -4,7 +4,11 @@
 > summary table; this file is the detail. OPH (Opencell Payment Hub) is an internal Opencell
 > reference project used here as an illustrative worked example — it is not bundled with this plugin.
 
-## The gate rule (applies to every phase)
+## The gate rule (applies to every phase the project runs)
+
+A product feature runs **Phases 0–4 only**: Phase 4 ends with the hand-off to the architects, and the
+phases after it are not ours (`SKILL.md` §4 *Where our process ends*). Phases 5–7 apply only to a
+project where we manage the whole process.
 
 A phase **exits only when both hold**:
 
@@ -22,7 +26,7 @@ When the gate is met, **tag the merge commit `phase-N`** (annotated, pushed) —
 single hard line where Jira items first appear** — Stories open with their functional sections; the
 technical design enriches them in Phase 5. See non-negotiable #4 in the spine.
 
-## The co-authoring fast track (Phases 3–5)
+## The co-authoring fast track (Phases 3–4, and 5 when we run it)
 
 When the design is **co-authored with Claude** — the sponsor/PO/architect steer and decide, Claude
 drafts — and the **Phase 4 functional backlog is generated directly from the Phase 3 specs** (with the
@@ -121,11 +125,18 @@ risk sat entirely on the three items above.)*
 - **Exit gate:** every MVP use case is a Story in Jira; each Story's functional sections are complete
   and **domain-PO-approved**; the functional backlog traces to Phase-3 specs. *(Build-readiness —
   Technical design sections, Enablers, sprint 1 — is the Phase 5 gate, not this one.)*
+- **For a product feature this gate is the hand-off, and the last one:** the Stories move to *To
+  Design - Tech* and the architects take over, Jira-native. Record "Phase 4 complete — handed to the
+  architects on <date>" as the project's final phase state. What stays ours is the **PO review** of
+  each delivered Story once QA has passed (`oc-fn-func-design` `po-review.md`).
 - **Who:** sponsor/lead + **domain PO**; issue authoring per `oc-fn-func-design`.
 - **Decision due here:** where the backlog lives — `jira-project-choice.md`.
 - **Scaling:** one **Epic + functional Stories** in the existing project rather than a full program backlog.
 
-## Phase 5 — Technical Design / Architecture
+## Phase 5 — Technical Design / Architecture *(optional — only when we run the whole process)*
+
+> **Not ours on a product feature.** There the architect lane does the technical design in Jira,
+> with no gate, no ADRs in the design repo and no `phase-5` tag (`SKILL.md` §4).
 
 - **Purpose:** decide *how* it is built, freeze the component list, and enrich the backlog with the
   technical design.
@@ -148,7 +159,7 @@ risk sat entirely on the three items above.)*
 - **Scaling:** the technical decisions a feature introduces still become ADRs; the "frozen component
   list" becomes the Enablers + the Stories' Technical design sections.
 
-## Phase 6 — Iterative Implementation
+## Phase 6 — Iterative Implementation *(optional — only when we run the whole process)*
 
 - **Purpose:** build the software, with tests and docs in the *same* PR.
 - **Deliverables:** working software per Story; tests; docs updated in the same PR; AI-authored code
@@ -166,7 +177,7 @@ risk sat entirely on the three items above.)*
 > the Phase 5 → 6 gate** — implementation only begins once Phase 5's hard gate is cleared (no
 > application code before the gate, non-negotiable #1).
 
-## Phase 7 — Docs & Release
+## Phase 7 — Docs & Release *(optional — only when we run the whole process)*
 
 - **Purpose:** finalize documentation and ship a tagged release.
 - **Deliverables:** finalized technical + **user manual**; Confluence sync (hand off to

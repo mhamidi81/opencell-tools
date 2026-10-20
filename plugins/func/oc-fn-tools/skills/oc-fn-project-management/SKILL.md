@@ -1,7 +1,7 @@
 ---
 name: oc-fn-project-management
-version: 1.12.1
-updated: 2026-09-30T11:54:26+02:00
+version: 1.13.1
+updated: 2026-10-20T11:15:00+02:00
 author: Stéphane Chambrin
 description: >
   How to run an Opencell project from kickoff to release: the design-first phased delivery
@@ -31,9 +31,11 @@ they appear throughout only as illustrative worked examples.
 Load it when the work is **big enough to need design before build**:
 
 - **A new Opencell product / project** — greenfield or a standalone subsystem. Use the full
-  model (all phases, formal approval, dedicated docs tree).
+  model (formal approval, dedicated docs tree); Phases 5–7 only if we run the whole process (§4
+  *Where our process ends*).
 - **A big feature / Epic** inside an existing product — significant enough that decisions
-  must be recorded and design must precede a backlog. Use the **scaled-down** model (§5).
+  must be recorded and design must precede a backlog. Use the **scaled-down** model (§5), which
+  **ends at the functional hand-off to the architects** (§4 *Where our process ends*).
 
 **Do not** load it for routine, already-scoped work — a single Story, Enabler, or Bug.
 That is `oc-fn-func-design`'s job. When unsure whether something is "big enough," §5's
@@ -52,7 +54,7 @@ and *defers* to them at the relevant gate:
 |---|---|---|
 | **`oc-fn-project-management`** (this) | the *when / why / what-order* of the whole project | at kickoff, and at each phase gate |
 | **`oc-fn-func-design`** | the *how* of Jira authoring — Epics, Stories, Enablers, ADF, custom fields, and a Story's **functional** sections (Requirement, Functional Design, Acceptance); creates the empty Technical-design scaffold but does **not** author it | at the backlog gate (Phase 4) and for every issue after |
-| **`oc-ar-tech-design`** (marketplace `oc-ar-tools`, where available) | the *how* of a Story's **Technical design** section (`customfield_10137`), authored from the Phase-5 technical artifacts | at the technical-design gate (Phase 5) |
+| **`oc-ar-tech-design`** (marketplace `oc-ar-tools`, where available) | the *how* of a Story's **Technical design** section (`customfield_10137`), authored from the Phase-5 technical artifacts | at the technical-design gate (Phase 5), when we run it; otherwise in the architects' own Jira-native lane |
 | **`oc-fn-documentation`** | the *how* of Confluence pages | at the docs/release gate (Phase 7) |
 | **`oc-fn-decks`** | the *how* of a branded slide deck — Marp theme, authoring, rendering, overflow, locale rule | at the Phase-2 framing/approval deck (and any standalone deck) |
 | **`oc-fn-gui-design`** | the *how* of a screen design against the Figma design system — UX capacity is ≈half a day/week of a contractor, so most Stories never reach it | whenever a Phase 3/4 item has a GUI |
@@ -63,7 +65,8 @@ its gates. On an `oc-fn-tools` + common-plugins setup, the per-ticket implementa
 runs through the marketplace common flow (the **execution** layer): `/oc-cache-jira` → implement
 (`/oc-fe-fix-bug` or `/oc-fe-create-ui` for frontend; `oc-be-tools` `/oc-be-implement` for backend)
 → `/oc-commit` → `/oc-pull-request` → `/oc-review-pr` — subject to the reconciliations in
-`repo-and-ci.md`. The two layers meet at the **Phase 5 → 6 gate** (see `phases.md` Phase 6).
+`repo-and-ci.md`. The two layers meet at the **Phase 5 → 6 gate** (see `phases.md` Phase 6) — only on a project where we
+run Phases 5–6; on a product feature the execution layer is the Factory's.
 
 **Versioning, tagging, and publishing rules this skill leans on** (inline, so the skill stands alone;
 if your environment defines global conventions they apply, otherwise follow these):
@@ -91,13 +94,15 @@ These never scale away, even for a single big Epic:
 2. **Every significant decision is an ADR** (MADR format), not prose buried in a doc or
    tribal knowledge. See `decisions-adr.md`.
 3. **Hard gates.** A phase exits only when (a) its deliverables are merged to trunk **and**
-   (b) its open design questions are resolved as `Accepted` ADRs. No half-open phases.
+   (b) its open design questions are resolved as `Accepted` ADRs. No half-open phases. This binds
+   the phases the project runs — a product feature runs Phases 0–4 only (§4 *Where our process ends*).
 4. **Jira opens at the functional-design→backlog gate** (Phase 4) — once functional design is
    *approved* (the Phase 3 gate is passed), and not before. Creating Epics/Stories earlier is a
    process violation — capture premature items in the relevant `.md` instead. If asked to "make a
    ticket" before the gate, flag it and record the item in `.md`. Stories open with their
    **functional** sections (Requirement, Functional Design, Acceptance); the **Technical design**
-   section and **Enablers** follow in Phase 5, from the technical design.
+   section and **Enablers** follow from the technical design, which the architect lane authors in
+   Jira — Phase 5 when we run it, outside this methodology on a product feature (§4).
    *(Carve-out — the roadmap candidate pool. This rule governs **this project building its own
    backlog**. It does not govern the standing portfolio queue: a candidate awaiting a roadmap
    decision is an Epic in `To Study` from the moment it is raised, which is how the instance
@@ -138,7 +143,8 @@ These never scale away, even for a single big Epic:
 
 ## 4. The phased delivery model
 
-Eight phases with hard gates. **Phases 0–3 produce only `.md` + ADRs** (Phase 2 also a pitch
+Eight phases with hard gates — **but a project runs only the phases that are ours** (*Where our
+process ends*, below). **Phases 0–3 produce only `.md` + ADRs** (Phase 2 also a pitch
 deck). The **3 → 4 gate is the single hard line where Jira items first appear** — Stories open with
 their *functional* sections; the technical design enriches them in Phase 5. Full detail,
 deliverables, and exit criteria per phase live in `phases.md` — load it when planning a phase.
@@ -150,16 +156,40 @@ deliverables, and exit criteria per phase live in `phases.md` — load it when p
 | 2 | Framing & Approval | business case + slide deck; feasibility read | **go/no-go** (SteerCo or sponsor) — mandate, budget, stakeholders engaged |
 | 3 | Functional Design | domain model, specs, API sketch, state machines | every MVP use case spec'd; state machines Accepted; API enumerated |
 | 4 | Backlog Creation — Functional (**Jira opens**) | Epics (one per capability) + Stories with their functional sections (Requirement, Functional Design, Acceptance) filled from Phase-3 specs | every MVP Story exists; functional sections domain-PO-approved |
-| 5 | Technical Design | C4, stack ADRs, security, contracts, OpenAPI, data model, infra; each Story's Technical design section filled (by the **architect lane** — `oc-ar-tech-design`, where available); Enablers created (by `oc-fn-func-design`) | stack ADR'd; OpenAPI validates; infra agreed; component list frozen; Technical design sections filled; Enablers created; sprint 1 selected |
-| 6 | Iterative Implementation | working software, tests, docs in the same PR | story criteria met; CI green; end-to-end path proven |
-| 7 | Docs & Release | finalized docs, Confluence sync, CHANGELOG, tag, runbook | tagged release; Confluence live & matching repo `.md` |
+| 5 | Technical Design *(optional — only when we run the whole process)* | C4, stack ADRs, security, contracts, OpenAPI, data model, infra; each Story's Technical design section filled (by the **architect lane** — `oc-ar-tech-design`, where available); Enablers created (by `oc-fn-func-design`) | stack ADR'd; OpenAPI validates; infra agreed; component list frozen; Technical design sections filled; Enablers created; sprint 1 selected |
+| 6 | Iterative Implementation *(optional — idem)* | working software, tests, docs in the same PR | story criteria met; CI green; end-to-end path proven |
+| 7 | Docs & Release *(optional — idem)* | finalized docs, Confluence sync, CHANGELOG, tag, runbook | tagged release; Confluence live & matching repo `.md` |
 
 **Track the current phase** at the top of the project's `docs/process/ways-of-working.md`,
 and tag each gate's merge commit with an annotated `phase-N` tag (see `repo-and-ci.md`).
 
+### Where our process ends
+
+**Product's job stops once the functional design is sent to the architects** (Stéphane,
+2026-10-20: "that's the rule actually").
+
+- **A product feature** — work that ships inside an existing product (Core, Portal), designed in
+  the shared design repo — runs **Phases 0–4 only**. Phase 4 ends with the hand-off: the
+  functional backlog is approved and its Stories move to *To Design - Tech*. What follows is not
+  ours and has **no gate in this methodology**:
+  - the technical design is **Jira-native**, owned by the architect lane: each Story's *Technical
+    design* field and the Enablers, in Jira. No `docs/technical/`, no technical ADRs in the design
+    repo, no `phase-5` tag;
+  - implementation, QA and release belong to the Factory.
+- **One step after the hand-off stays ours.** Once QA has passed, the PO **validates each delivered
+  Story against its acceptance** — the PO-review lane of `oc-fn-func-design` (`po-review.md`). It is
+  a review, not a phase: no gate, no tag.
+- **Phases 5–7 are optional**, and only for a project where we manage the whole process — a
+  standalone product whose codebase and lifecycle we run (OPH is the reference). Even there, run
+  only the phases we own, and say which.
+- **Record the end state** at the top of `ways-of-working.md` — "Phase 4 complete: functional design
+  handed to the architects on <date>" — never "Phase 5 in progress". From then on the delivery state
+  lives in Jira.
+
 **Co-authoring fast track.** When the design is co-authored with Claude — the Phase 4 functional backlog
-generated from the Phase 3 specs, the Phase 5 Technical design sections + Enablers from the Phase 5
-technical design — **Phases 3–5 compress from weeks to days — without waiving any gate.** The critical
+generated from the Phase 3 specs (and, when we run Phase 5, the Technical design sections + Enablers
+from the Phase 5 technical design) — **the design phases compress from weeks to days — without waiving
+any gate.** The critical
 path then sits on stakeholder availability, external inputs, and the build's non-compressible human floor,
 *not* on authoring time. Plan those phases in days and de-risk those three items; detail in `phases.md`.
 
@@ -179,7 +209,9 @@ it's routine work → go straight to `oc-fn-func-design`.
 | Phase 1–2 Scoping & Approval | full scope set + business case + **SteerCo go/no-go** | a short design brief; **sponsor/lead sign-off**, not full SteerCo |
 | Phase 3 Functional design | full functional design | still required, but proportionate — design-first never waived |
 | Phase 4 Backlog (**Jira opens**) | new or dedicated Jira project (see `jira-project-choice.md`) | one **Epic + functional Stories** in the existing project |
-| Phase 5 Technical design | full technical design + Stories' Technical design sections + Enablers | proportionate; the Epic's Stories get their Technical design + Enablers |
+| Phase 5 Technical design | only when we run the whole process: full technical design + Stories' Technical design sections + Enablers | **not ours** — Jira-native, architect lane, no gate (§4 *Where our process ends*) |
+| Phases 6–7 Build & release | only when we run the whole process | **not ours** — the Factory's |
+| After the hand-off | acceptance is part of Phase 6 | the **PO review** of each delivered Story once QA passes (`oc-fn-func-design` `po-review.md`) — no gate |
 | ADRs | project-scoped `docs/decisions/` | feature-scoped ADRs in the existing log, or a Decision Register section |
 | Engagement | staged (§ `engagement.md`) culminating in SteerCo | lighter — sponsor + relevant PO/architect |
 

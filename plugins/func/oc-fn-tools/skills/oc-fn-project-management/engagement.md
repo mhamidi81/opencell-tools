@@ -24,7 +24,7 @@ constraint.
 |---|---|---|
 | **Sponsor / lead** | from the start | owns the project; writes the scope, business case, and pitch; drives design with Claude |
 | **Approvers** (steering committee — e.g. CEO/CFO/CRO) | Phase 2 | the **go/no-go**: mandate, budget, commercial/ROI case |
-| **Architect** | informal read pre-pitch → formal in Phase 5 | feasibility sanity-check; technical-design & architecture review |
+| **Architect** | informal read pre-pitch → receives the functional backlog at the Phase-4 hand-off; formal in Phase 5 only when we run it | feasibility sanity-check; technical-design & architecture review |
 | **Infra owner** | informal read pre-pitch → formal in Phase 5 | CI/CD + deployment topology; validates infra constraints |
 | **Domain PO** | Phases 3–4 (on approval) | domain validation & functional design (3); functional backlog — Stories' functional sections (4) |
 | **Implementer** (Claude) | Phase 6 | authors code under human review |
@@ -47,6 +47,7 @@ Phases 3–5 aren't blocked waiting on people who were never committed.
 
 ## After approval
 
-Engage the **domain PO** for Phases 3–4 (functional design, then the functional backlog) and the
-**architect + infra owner** for Phase 5 (technical design & infra). Until then, keep the circle small —
+Engage the **domain PO** for Phases 3–4 (functional design, then the functional backlog). The
+**architect** takes over at the Phase-4 hand-off; the **architect + infra owner** join our Phase 5 only
+when we run the whole process. Until then, keep the circle small —
 the early phases are deliberately solo so the story is tight before more people spend time on it.
