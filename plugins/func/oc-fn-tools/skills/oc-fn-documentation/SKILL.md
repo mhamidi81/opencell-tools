@@ -1,7 +1,7 @@
 ---
 name: oc-fn-documentation
-version: 1.8.0
-updated: 2026-10-12T16:40:00+02:00
+version: 1.8.1
+updated: 2026-10-22T16:48:28+02:00
 author: Stéphane Chambrin
 description: Rules and conventions for creating and updating Confluence documentation pages in the Opencell documentation space (opencellsoft.atlassian.net/wiki/spaces/docs). Use this skill whenever the user mentions Confluence, documentation, a "Concepts" page, a "User Manual" page, or asks to document anything for Opencell. Always load this skill before any Atlassian Rovo Confluence tool call targeting the docs space. Also covers linking each documented Story to its pages from Jira, the rule that pages never mention defects, and publishing a set of pages when the CPO says so.
 ---
@@ -227,7 +227,7 @@ quote and order pages, 2026-10-09):
 
 Only when the CPO says so, for the pages named (Rule 3). Done this way for 78 pages
 on 2026-10-12; the kits, scripts and review records are in `opencell-features-design`,
-`notes/20261012_docs-publish/` and `notes/20261012_docs-publish-2/`.
+`documentation/20261012_docs-publish/` and `documentation/20261012_docs-publish-2/`.
 
 1. **Check each page twice.** A checker traces every statement to the release tag and
    fixes what the release does not do (§ *Source of Truth*, Rule 7). A second reviewer
