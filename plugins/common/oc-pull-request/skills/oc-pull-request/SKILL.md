@@ -305,8 +305,8 @@ If the Bitbucket credentials are not set or the call returns `401`:
 
 **Run this step only when [REPO-NAME] contains `opencell-portal`.** For **any** other repository —
 including `opencell-core` — skip it entirely and say nothing about it. Backend AI-usage recording is
-deliberately **not** wired into this command; it stays a manual `/oc-be-tools:oc-be-calculate-ai-use`
-run owned by the backend team.
+deliberately **not** wired into this command: backend developers often commit and open PRs outside Claude,
+so oc-be-tools offers `/oc-be-tools:oc-be-calculate-ai-use` from its own Stop hook after a commit instead.
 
 This is the one point in the workflow where the measurement scope is right: **step 3 squashed the
 branch into a single commit**, so `HEAD` now holds the *whole ticket's* diff — exactly what
