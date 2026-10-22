@@ -1,7 +1,7 @@
 ---
 name: oc-fn-briefs
-version: 1.6.1
-updated: 2026-09-30T11:54:26+02:00
+version: 1.7.0
+updated: 2026-10-22T16:59:32+02:00
 author: Stéphane Chambrin
 description: >
   Author and render branded Opencell DOCUMENTS — one-pagers, analysis notes, briefs, memos,
@@ -304,17 +304,27 @@ The shareable render (`.pdf`) and its **source** must be tracked, never treated 
 
 In `opencell-features-design` the root `.gitignore` blanket-ignores `*.html`/`*.pdf`/`*.pptx` (deck
 render-mirrors). **Do not fight that per-file with `git add -f`** — that silently drops the source the
-moment anyone forgets the flag. Instead the repo **carves `notes/` out of the ignore** so branded
-documents there track with a plain `git add`:
+moment anyone forgets the flag. Instead the repo **carves the folders that hold documents out of the
+ignore**, so branded documents there track with a plain `git add`. Since 2026-10-22 the repo has **one
+folder per topic at the repo root** (`po-reviews/`, `delivery/`, `documentation/`, `regulatory/`,
+`change-requests/`, `portal-apollo2/`, `roadmap/<year>/`); `notes/` is for single work-item analyses
+only. The carve-outs:
 
 ```gitignore
 !**/notes/*.html
 !**/notes/*.pdf
-!**/notes/*.md
+!/<topic>/*.html     # po-reviews, delivery, documentation, regulatory, change-requests, portal-apollo2
+!/<topic>/*.pdf
 ```
 
-So: **keep documents under a `notes/` folder** (or add the equivalent negation for wherever they live),
-then commit normally. What is the *source* depends on the tier:
+`presentations/` is deliberately **not** carved out: deck renders are mirrors. The negation re-includes
+direct children only, so a file in a kit sub-folder keeps the blanket ignore.
+
+So: **put a document in its topic folder** (the folder's `README.md` lists the topics; a work-item
+analysis goes to `notes/`). For a new kind of work with no folder, create the topic folder with its
+`README.md` and add the equivalent negation in the same commit. Then commit normally.
+
+What is the *source* depends on the tier:
 
 - **Tier 1:** commit the **`.md` (source of truth)** and the **`.pdf` (shareable render)**. The `.html`
   is a self-contained intermediate — commit it too for an openable offline copy, or leave it to
