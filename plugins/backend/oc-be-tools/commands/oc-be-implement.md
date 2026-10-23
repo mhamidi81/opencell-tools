@@ -155,6 +155,8 @@ Wait for user to review and approve the plan.
   "revision_rounds": <plan iterations: how many times you presented the plan to the developer; 1 if approved on first presentation, +1 for each requested revision>,
   "plan_word_count": <word count of the approved plan>,
   "plan_text": "<the approved architecture plan, verbatim>",
+  "acceptance": ["<each acceptance point the implementation must satisfy, from the ticket and the plan discussion>"],
+  "deliverables": {"unit_tests": "<required: which | not applicable: why>", "postman": "<required: which | not applicable: why>"},
   "notes": "<1-2 lines: the key design decisions or ambiguities resolved with the developer>"
 }
 ```
@@ -270,6 +272,13 @@ Present summary:
 
 Build the "Files Created/Modified" list by aggregating the manifests in `.claude/cache/ai-stats/{RUN_ID}/*.json` (union with anything you edited directly in this context). Group by layer as shown.
 
-Suggest commit message: `{TICKET}: {brief description}` (no `Co-Authored-By:`/AI-attribution trailer — see CODE_QUALITY.md → Commit Messages).
+Suggest the review, the AI-usage recording **and** the commit together, as three steps in this order:
 
-Then remind the user they can run **`/oc-be-calculate-ai-use`** to record AI-usage stats on the Jira ticket — it reads these manifests (so sub-agent work and the planning effort are attributed) plus this session's transcript (for your post-review fixes), and reports contribution/retention broken down by artifact category as well as the planning/analysis effort captured in `_planning.json`.
+```
+Next steps:
+  1. Review:            /oc-be-tools:oc-be-review   (guidelines + the ticket's acceptance criteria and the agreed acceptance/deliverables in _planning.json)
+  2. Record AI usage:   /oc-be-tools:oc-be-calculate-ai-use --working --ticket {TICKET}   (on the uncommitted changes)
+  3. Commit:            {TICKET}: {brief description}
+```
+
+Step 2 reads these manifests (so sub-agent work and the planning effort are attributed, and `{TICKET}` from the run name takes precedence over the branch name) plus the session transcripts, and reports contribution/retention by artifact category and the planning/analysis effort from `_planning.json`. It fingerprints the measured changes, so once they are committed as measured, nothing is offered again. The commit message carries no `Co-Authored-By:`/AI-attribution trailer (see CODE_QUALITY.md → Commit Messages). If the developer commits without step 2 (here or in the IDE), the oc-be-tools Stop hook offers it at the end of a later turn anyway.

@@ -1,0 +1,71 @@
+{
+  "description": "oc-be-tools: ad-hoc work ends up like an /oc-be-implement run. An analysis checkpoint and per-layer guideline loading hold the first edit once; script edits are captured for the AI-usage metrics; at milestones (tests green, Claude's git commit) review -> record AI usage -> commit is suggested; commits made anywhere are offered for recording afterwards",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if command -v python >/dev/null 2>&1; then exec python \"${CLAUDE_PLUGIN_ROOT}/hooks/ai_use_watch.py\" --session-start; else exec python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/ai_use_watch.py\" --session-start; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/edit_gate.sh\"",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat); case \"$input\" in *commit*) ;; *) exit 0;; esac; if command -v python >/dev/null 2>&1; then py=python; else py=python3; fi; printf \"%s\" \"$input\" | \"$py\" \"${CLAUDE_PLUGIN_ROOT}/hooks/ai_use_watch.py\" --pre-commit",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat); case \"$input\" in *python*|*node*|*perl*|*ruby*|*sed*|*awk*|*'>'*|*tee*|*-Content*|*Out-File*|*Copy-Item*|*Move-Item*|*'cp '*|*'mv '*) ;; *) exit 0;; esac; if command -v python >/dev/null 2>&1; then py=python; else py=python3; fi; printf \"%s\" \"$input\" | \"$py\" \"${CLAUDE_PLUGIN_ROOT}/hooks/ai_use_watch.py\" --pre-script",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat); case \"$input\" in *python*|*node*|*perl*|*ruby*|*sed*|*awk*|*'>'*|*tee*|*-Content*|*Out-File*|*Copy-Item*|*Move-Item*|*'cp '*|*'mv '*) ;; *) exit 0;; esac; if command -v python >/dev/null 2>&1; then py=python; else py=python3; fi; printf \"%s\" \"$input\" | \"$py\" \"${CLAUDE_PLUGIN_ROOT}/hooks/ai_use_watch.py\" --post-script",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if command -v python >/dev/null 2>&1; then exec python \"${CLAUDE_PLUGIN_ROOT}/hooks/ai_use_watch.py\"; else exec python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/ai_use_watch.py\"; fi",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

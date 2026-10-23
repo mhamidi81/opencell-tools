@@ -1,0 +1,2 @@
+# edit_gate.sh runs under bash: a CRLF checkout (core.autocrlf=true on Windows) would break it
+*.sh text eol=lf
