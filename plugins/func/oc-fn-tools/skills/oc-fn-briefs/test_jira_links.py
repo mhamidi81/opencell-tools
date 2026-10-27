@@ -92,5 +92,17 @@ class Protected(unittest.TestCase):
         self.assertEqual(keys("## INTRD-1 heading\n| CR-2 | x |\n|---|---|"), ["INTRD-1", "CR-2"])
 
 
+class Copies(unittest.TestCase):
+    def test_decks_copy_is_identical(self):
+        # skills take no dependency on each other, so oc-fn-decks carries its own copy
+        import os
+        here = os.path.dirname(os.path.abspath(__file__))
+        other = os.path.join(here, "..", "oc-fn-decks", "jira_links.py")
+        if not os.path.exists(other):
+            self.skipTest("oc-fn-decks not beside this skill")
+        with open(os.path.join(here, "jira_links.py"), "rb") as a, open(other, "rb") as b:
+            self.assertEqual(a.read(), b.read(), "oc-fn-briefs/jira_links.py and oc-fn-decks/jira_links.py differ")
+
+
 if __name__ == "__main__":
     unittest.main()

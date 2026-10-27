@@ -1,7 +1,7 @@
 ---
 name: oc-fn-decks
-version: 1.10.0
-updated: 2026-10-27T23:23:52+01:00
+version: 1.10.1
+updated: 2026-10-28T00:04:13+01:00
 author: Stéphane Chambrin
 description: >
   Author and render branded slide decks with the Opencell Marp theme (Charte Graphique 2023)
@@ -194,7 +194,7 @@ separators, then an **underscore** (not a hyphen), then a kebab-case slug:
 - **Jira keys are links in an internal deck** (CPO, 2026-10-27; the same rule as `oc-fn-briefs`):
   every Jira key on a slide links to `https://opencellsoft.atlassian.net/browse/<KEY>`, so the room
   can open it. Write keys bare, then before committing run
-  `python3 <skills>/oc-fn-briefs/jira_links.py --fix <deck>.md` (`--check` lists what is left). It
+  `python3 <this skill>/jira_links.py --fix <deck>.md` (`--check` lists what is left). It
   leaves speaker notes and other HTML comments alone (a note is plain text in PowerPoint), and raw
   HTML, code and existing links. A key in backticks stays plain on purpose. **`render-artifact.sh` and
   `render-internal-pptx.sh` refuse a deck with a bare key**, and print the fix. The official-template
