@@ -27,7 +27,9 @@ An Artifact is a **render, never the source.** `render-artifact.sh` refuses to r
   upstream** (not pushed);
 - the repo's **theme copy** (`assets/marp/opencell.css`) has uncommitted changes, or the theme lives
   outside the deck's repo;
-- the **skill itself** has uncommitted changes, where it lives in a git work tree.
+- the **skill itself** has uncommitted changes, where it lives in a git work tree;
+- the deck still has a **bare Jira key** (`SKILL.md` § *Authoring conventions*). This one applies to
+  `--draft` too.
 
 Every page carries its **provenance** in an HTML comment right after `<title>`: `remote · path @
 commit · theme <path> @ commit · oc-fn-decks <version> · marp-cli <version>`. marp-cli is **pinned**

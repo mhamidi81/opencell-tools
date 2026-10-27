@@ -166,7 +166,7 @@ workflow.
 |---|---|---|
 | **Validated by PO** | The delivered behaviour matches the Story's *Functional design* and *Acceptance*. A pass. | `Ready for Sprint Review` — Phase 7 |
 | **Rejected by PO** | Defects found. **File the `Sub-bug`(s) first** (above). | `Waiting for fixing` — back to Phase 5, Development |
-| **Invalid** | The **Story itself should not exist** — not reproducible, superseded, abandoned. A scope verdict, **not** a defect verdict: never use it for work that was delivered but broken. | `Invalid` — side state, `stories.md` § *Side states* |
+| **Invalid** | The **Story itself should not exist** — not reproducible, superseded, abandoned. A scope verdict, **not** a defect verdict: never use it for work that was delivered but broken. An `Invalid` Story counts as missing: on a `Must have` Story, or one with no value, it holds its Epic's release (`SKILL.md` § *Version scope*). | `Invalid` — side state, `stories.md` § *Side states* |
 | **PO can't test yet** | Blocked from testing — environment down, wrong build deployed, missing data or dependency. **No verdict is given.** | `Test Blocked` — back inside Phase 6, QA |
 | **On Hold** | The review is paused for reasons outside the Story's quality. The reason **must** be written in a comment (`stories.md` § *Side states*). | `On Hold` |
 

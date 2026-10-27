@@ -27,8 +27,11 @@ Epics use the standard **`description`** field — not the custom fields used by
 and Enablers take it by default. See `SKILL.md` § *Product area — the module Component is mandatory*.
 
 **Fix version and MoSCoW.** An Epic carries the version it is planned in once it is scheduled — not
-before, and not because time was logged on it. *Business value (MoSCoW)* `Must have` means the
-version cannot ship without it. See `SKILL.md` § *Cost per version — the Fix version field* and
+before, and not because time was logged on it. **It carries one version, and its Stories and Enablers
+carry the same one** (CPO, 2026-10-26): work for another version is a new step Epic under the same
+Initiative, never a Story on a different version in this one. *Business value (MoSCoW)* `Must have` means the
+version cannot be released until the Epic is done, and the Epic's own `Must have` Stories block it in
+turn (CPO, 2026-10-27, from 20.0.0). See `SKILL.md` § *Cost per version — the Fix version field* and
 `SKILL.md` § *Version scope — MoSCoW on Epics, Stories and change requests*.
 
 Field preset for full read:
