@@ -54,10 +54,10 @@ command -v python3 >/dev/null 2>&1 || die "python3 is not installed — it assem
 
 SRC_ABS="$(readlink -f "$SRC")"
 SRC_DIR="$(dirname "$SRC_ABS")"
-LINKER="$(readlink -f "$SKILL_DIR/../oc-fn-briefs/jira_links.py" || true)"
+LINKER="$SKILL_DIR/jira_links.py"
 
-# ── Jira keys are links: an internal document never ships a bare key (oc-fn-briefs SKILL.md) ──
-[[ -f "$LINKER" ]] || die "jira_links.py not found at $LINKER — oc-fn-decks needs oc-fn-briefs beside it (both ship in oc-fn-tools)"
+# ── Jira keys are links: an internal deck never ships a bare key (SKILL.md § Authoring conventions) ──
+[[ -f "$LINKER" ]] || die "jira_links.py not found at $LINKER"
 if ! BARE="$(python3 "$LINKER" --check "$SRC_ABS")"; then
   die "bare Jira keys — in an internal document every key is a link:
 $BARE

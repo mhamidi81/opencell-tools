@@ -7,7 +7,9 @@
 The rule (oc-fn-briefs and oc-fn-decks, CPO 2026-10-27): in a document read inside Opencell —
 a brief, a note, a deck — every Jira key is a link, so a reader opens the item instead of
 looking it up. The internal render lanes refuse a source that still has a bare key; `--fix`
-is the one-step repair. Shared by both skills (they ship together in oc-fn-tools).
+is the one-step repair. oc-fn-briefs and oc-fn-decks each carry an identical copy, since
+skills take no dependency on each other (ai-config CLAUDE.md): change both, and the briefs
+test checks they still match when the two sit side by side.
 
 Only what Markdown would render as a link is touched. Left as they are:
 - the YAML front matter, fenced code blocks and inline code — `INTRD-1` in backticks is the way
