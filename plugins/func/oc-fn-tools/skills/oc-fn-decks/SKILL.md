@@ -1,7 +1,7 @@
 ---
 name: oc-fn-decks
-version: 1.9.2
-updated: 2026-10-14T09:11:20+02:00
+version: 1.10.0
+updated: 2026-10-27T23:23:52+01:00
 author: Stéphane Chambrin
 description: >
   Author and render branded slide decks with the Opencell Marp theme (Charte Graphique 2023)
@@ -191,6 +191,16 @@ separators, then an **underscore** (not a hyphen), then a kebab-case slug:
   render — see `pptx.md`.)
 - **Speaker notes:** an HTML comment `<!-- note: <text> -->` after a slide's content — Marp
   presenter view shows it, and the PPTX lane converts it into a real PowerPoint speaker note.
+- **Jira keys are links in an internal deck** (CPO, 2026-10-27; the same rule as `oc-fn-briefs`):
+  every Jira key on a slide links to `https://opencellsoft.atlassian.net/browse/<KEY>`, so the room
+  can open it. Write keys bare, then before committing run
+  `python3 <skills>/oc-fn-briefs/jira_links.py --fix <deck>.md` (`--check` lists what is left). It
+  leaves speaker notes and other HTML comments alone (a note is plain text in PowerPoint), and raw
+  HTML, code and existing links. A key in backticks stays plain on purpose. **`render-artifact.sh` and
+  `render-internal-pptx.sh` refuse a deck with a bare key**, and print the fix. The official-template
+  lane does not check, because it also serves customers and partners: link the keys for SteerCo,
+  keep them plain (or drop them) in a deck addressed outside Opencell. The link does not replace the
+  name: a key still carries its name on first mention.
 - **Structure that fits the brand:** one `##` (H2) title per content slide; short bullet phrases;
   tables for inventories/asks (they render full-width with a black header + zebra rows). **A table
   (or image) goes LAST on its slide** — commentary above it, never below: in the PPTX lane, content

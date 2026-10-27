@@ -1,7 +1,7 @@
 ---
 name: oc-fn-briefs
-version: 1.7.0
-updated: 2026-10-22T16:59:32+02:00
+version: 1.8.0
+updated: 2026-10-27T23:23:52+01:00
 author: Stéphane Chambrin
 description: >
   Author and render branded Opencell DOCUMENTS — one-pagers, analysis notes, briefs, memos,
@@ -160,6 +160,29 @@ express cleanly (KPI tiles, magnitude bars):
 totals row renders as an ordinary row); bespoke multi-column / mixed grids; anything needing precise
 page-break control. Don't invent new fenced-div classes for these — hand-author the page in Tier 2.
 
+## Jira keys are links — every internal document
+
+**In a document read inside Opencell, every Jira key is a link** to
+`https://opencellsoft.atlassian.net/browse/<KEY>`, so the reader opens the item instead of looking it
+up (CPO, 2026-10-27). It holds for briefs, notes and reports here, and for decks (`oc-fn-decks`).
+
+- **Write keys bare while drafting, then link them in one step** before committing:
+  `python3 <this skill>/jira_links.py --fix <doc>.md`. `--check` lists what is left, as
+  `file:line: KEY`. It links INTRD, SUPS, CR, MACRD, INTCA and INTCS keys, and leaves alone whatever
+  Markdown would not render as a link: the front matter, code, HTML comments, raw HTML, existing links
+  and URLs. Placeholders (`NEW-12`, `INTRD-44489-S1`) and other codes (`DR-27`) stay text.
+- **A key in backticks stays plain**: that is the way to keep one on purpose.
+- **Links lengthen table rows.** Pandoc gives a pipe table whose longest row passes 72 characters
+  column widths in proportion to the dashes of its separator line: give a wide text column more
+  dashes (`|---|------------|`) rather than letting it be squeezed.
+- **The Artifact lane refuses a source with a bare key**, `--draft` included, and prints the fix.
+  The PDF lane does not check: run `--check` before rendering.
+- **The link does not replace the name.** A key still carries its name on first mention (global
+  rule): `[INTRD-30201](…) — Finance Cockpit`, not the key alone.
+- **Tier 2** (hand-authored HTML): write the `<a href>` yourself; the script reads Markdown only.
+- **A document addressed outside Opencell** (a customer, a partner) keeps keys plain or drops them:
+  the link opens nothing for its reader.
+
 ## Rendering
 
 ### Tier 1 — Markdown → branded HTML (Pandoc) → PDF (Chromium)
@@ -230,7 +253,9 @@ git alone, so `render-artifact.sh` refuses to render when:
 - the source is **not in git**, has **uncommitted changes**, or its last commit is **not on the
   branch's upstream** (not pushed);
 - the **skill itself** has uncommitted changes, where it lives in a git work tree (a page is
-  source × template × CSS — a render from modified tooling wouldn't reproduce either).
+  source × template × CSS — a render from modified tooling wouldn't reproduce either);
+- the source still has a **bare Jira key** (*Jira keys are links*, above). This one applies to
+  `--draft` too.
 
 Every page carries its **provenance** in an HTML comment right after `<title>`: `remote · path @
 commit · oc-fn-briefs <version>`. The remote is stripped of any embedded credentials before it is

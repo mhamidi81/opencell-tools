@@ -76,7 +76,9 @@ Follow the template's sections. An Initiative description is **strategic, not im
 - **Charter** — one sentence, "give Opencell the ability to …": the bounded outcome the
   Initiative delivers and the strategic/regulatory bet behind it, above any single Epic.
 - **Phases & breakdown** — the Epics that compose it, ideally as the `step 1 → step N`
-  sequence; what is in scope and explicitly out; the end-state that closes the Initiative.
+  sequence; what is in scope and explicitly out; the end-state that closes the Initiative. The
+  steps are how an Initiative spans versions: **each step Epic carries one version** (`SKILL.md`
+  § *Cost per version*), and the Initiative is never itself a roadmap item — its step Epics are.
 - **Linkage** — parent or link the child Epics so the hierarchy is navigable. Each child Epic
   carries its own **Module** (the orthogonal area axis), independent of the Initiative.
 

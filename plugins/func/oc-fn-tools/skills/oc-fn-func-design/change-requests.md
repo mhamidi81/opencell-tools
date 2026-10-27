@@ -145,7 +145,7 @@ plain string for structured content).
 |---|---|---|---|
 | **Product response** | `customfield_10153` | ADF text | Official Product ruling (see above). |
 | **Expected by** | `customfield_10095` | labels (array) | **The customer/driver(s)** behind the CR (e.g. `Fnac-Darty`, `Docaposte`, `Vialis`). *This* is the customer field — **not** `labels`. Can hold several. |
-| **Business value (MoSCoW)** | `customfield_10103` | select | `Must have` · `Should have` · `Could have` · `Won't have`. On a CR, `Must have` is read as "the customer's go-live depends on it" — the CPO Obeya's blocked-revenue register counts it that way. On the delivering Epics and Stories, `Must have` means the version cannot ship without them. |
+| **Business value (MoSCoW)** | `customfield_10103` | select | `Must have` · `Should have` · `Could have` · `Won't have`. On a CR, `Must have` is read as "the customer's go-live depends on it" — the CPO Obeya's blocked-revenue register counts it that way. On the delivering Epic, `Must have` means the version cannot be released until it is done, and on its Stories that the Epic cannot be released without them (`SKILL.md` § *Version scope*). |
 | **Due date** | `duedate` | date | The earliest date any of the CR's customers wishes for — a wish, set on Accept, revisable once *Scheduled*. On the edit screen since 2026-10-07, not on the create or transition screens: set it by an edit. |
 | **Change rejection reason** | `customfield_10139` | select | Set when rejecting. One of: `Not in product scope` · `Not in product strategy` · `Too specific` · `Workaround exists` · `Already in Product` · `Duplicate` · `This is a bug`. |
 | **Epic Link** | `customfield_10014` | epic link | Links a scheduled CR to its delivery Epic. |
@@ -245,8 +245,9 @@ study → respond** on existing CRs, not creation.
      - **Payload:** REST `{"fields": {"customfield_10547": {"value": "La Poste"}}}`, or the
        same object under Rovo `editJiraIssue` `fields`. The field is on the Epic create screen, so
        it can go in the create call.
-   - **The delivering Epics and Stories get their own MoSCoW.** There, `Must have` means the version
-     cannot be delivered without them (`SKILL.md` § *Version scope — MoSCoW on Epics, Stories and change
+   - **The delivering Epics and Stories get their own MoSCoW**, never copied from the CR. The Epic's
+     comes from the Gate decision. A `Must have` Epic blocks its version's release, and a `Must have`
+     Story blocks its Epic's (`SKILL.md` § *Version scope — MoSCoW on Epics, Stories and change
      requests*).
    - **Fix versions** follow `SKILL.md` § *Cost per version*: one per Story or Enabler, with
      backports in *Backport versions* and their own Backport issues.

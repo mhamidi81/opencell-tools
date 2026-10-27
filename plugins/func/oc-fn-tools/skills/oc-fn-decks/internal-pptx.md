@@ -30,6 +30,9 @@ SKILL=~/.claude/skills/oc-fn-decks
 | `--keep-centring` | Keep Marp's vertical centring on every slide (see *Deliberate differences*). |
 | `--qa <dir>` | Also render the `.pptx` to `slide-N.png` through LibreOffice, with the brand fonts loaded. |
 
+**It refuses a deck with a bare Jira key** (`SKILL.md` § *Authoring conventions*): the linker,
+`oc-fn-briefs/jira_links.py`, must sit beside this skill, as it does in `oc-fn-tools`.
+
 **Requirements:** `node` + `npx`, `python3`, Chromium or Chrome (on `PATH`, or `CHROME_PATH`);
 LibreOffice + `pdftoppm` for `--qa`. The first run needs network:
 

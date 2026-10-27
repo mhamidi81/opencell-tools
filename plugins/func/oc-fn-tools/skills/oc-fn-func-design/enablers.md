@@ -39,6 +39,9 @@ Enablers use the standard **`description`** field — not the custom fields `cus
 **Fix versions: at most one,** as for a Story — one once scheduled, never two. Backports go into *Backport versions*
 (`customfield_10260`) and their own Backport issues, created by the architect lane (`SKILL.md` § *Cost per version — the Fix version field*, `backports.md`).
 
+**No MoSCoW.** *Business value* is not on the Enabler screens. An Enabler counts as `Must have` when
+a `Must have` Story depends on it, so it can hold its Epic's release (`SKILL.md` § *Version scope*).
+
 Field preset for full read:
 
 ```

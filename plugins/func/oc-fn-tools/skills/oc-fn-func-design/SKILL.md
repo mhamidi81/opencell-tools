@@ -1,7 +1,7 @@
 ---
 name: oc-fn-func-design
-version: 1.48.0
-updated: 2026-10-15T15:18:56+02:00
+version: 1.52.0
+updated: 2026-10-27T11:26:03+01:00
 author: Stéphane Chambrin
 description: >
   Rules and data for Jira issues in the Opencell INTRD and CR (Change Requests) projects. Use
@@ -212,6 +212,24 @@ Argos, the financial steering project, costs every logged hour by version from *
 - **A Story or an Enabler carries at most one: one once it is scheduled, never two.** Each older
   version it must also reach goes into its **Backport versions** field (`customfield_10260`) **and**
   gets its own Backport issue, which the architect lane creates — `backports.md`.
+- **An Epic carries at most one too, and every Story and Enabler under it carries that same one**
+  (CPO, 2026-10-26). Work planned for another version is **another Epic**, the next step under the same
+  Initiative (`initiatives.md`) — never a second Fix version on the Epic, and never a Story on a
+  different version under it. An Epic partly delivered in earlier versions does not take new work for
+  a later one: that work opens a new step Epic. This is what lets a version's scope be read as a list
+  of Epics, and what makes an Epic a roadmap item (`oc-roadmap`).
+  - **Provisional exception: the Factory's technical container Epics** (CPO, 2026-10-26, until he has
+    discussed it with JB and/or Vincent Naudion): the six Vincent Naudion created on 2026-09-19,
+    INTRD-47281 → INTRD-47286, collect the tech team's Enablers across versions. Nothing in Jira marks a
+    technical Epic, so the exception is that list; don't extend it by inference.
+  - **Exception, Epic by Epic, on the CPO's call: a partly delivered Epic kept whole** (CPO,
+    2026-10-27). Instead of opening a step Epic, the Epic takes the new version with all its open
+    work, and its delivered Stories keep their old versions. A Story still open on the version
+    before keeps that version until it ships. Decided for the Epics whose Stories were sent to the
+    Factory ahead of the 2027 round, on condition that they go In for 20.0.0: INTRD-119,
+    INTRD-11495, INTRD-37640, INTRD-3228 and INTRD-4229. If one of them does not go In, its Stories
+    already sent move to a step Epic for 20.0.0 (INTRD-4229 takes 20.0.0 for INTRD-16582 alone).
+    The exception is that list.
 
 **When it is set.**
 
@@ -306,14 +324,88 @@ spent on what was not sold, weighted by how many times each development was sold
 
 ## Version scope — MoSCoW on Epics, Stories and change requests
 
-**Business value (MoSCoW)** (`customfield_10103`) is set on Epics, Stories and change requests, not
-on Enablers. It reads differently depending on where it is set:
+**Business value (MoSCoW)** (`customfield_10103`) is set on Epics, Stories and change requests. It
+is not on the Enabler screens. On an Epic or a Story it is a **release rule** (CPO, 2026-10-27),
+applied **from 20.0.0**, the first version through the roadmap Gate. Values on 19.0.0 and earlier
+were not set with this meaning, so they are not read as one.
 
-- **On an Epic or a Story, `Must have` means the version cannot be delivered without it.** Set it
-  with that meaning when scheduling, and read it that way when judging a version's scope.
+**Two levels, each blocking the one above.**
+
+- **A `Must have` Story blocks its Epic:** the Epic cannot be released while one of its `Must have`
+  Stories is missing. `Should have` and `Could have` Stories may be dropped when planning shifts.
+- **A `Must have` Epic blocks its version:** the version cannot be released while one of its
+  `Must have` Epics is not done. Every Epic drawn **In** at the Gate is `Must have`, and so is every
+  Epic of the **mandatory lane** (regulatory obligation, commitment already sold) — `oc-roadmap`
+  `decision-record.md`.
+- **When a `Must have` Epic slips, it is either demoted or the version slips.** Who decides follows
+  `oc-roadmap` §3. A demotion is a scope change: recorded with its decision and who took it, and
+  counted in the drift (`oc-roadmap` `decision-record.md` § *The freeze, and the drift*).
+- **The rule binds at release, not at merge.** Each issue reaches `dev` through its own PR, neither
+  codebase has feature flags, and whatever is on `dev` ships when it is tagged. Dropping work whose
+  code is already merged means reverting it.
+  The Confluence page *Branch management* (2480898049, 2023) describes Epic branches that would make
+  "merged" meaningful, but the Factory does not use them. Reviving them is the VP Engineering's call.
+- **An unfinished `Should have` or `Could have` Epic ships its merged work by default** (CPO,
+  2026-10-27), once it has been checked that this work breaks nothing and does not damage the
+  user's experience. Who runs that check is not decided yet. If the check finds a problem, the work
+  does not ship, and with no feature flags that means reverting it. The Epic is not released while
+  a `Must have` Story is missing. Its remaining work follows § *Cost per version*.
+
+**What counts as present and done.** Test the status names, never `statusCategory`: Jira's Done
+category also holds `Rejected` (Epic) and `Invalid` (Story).
+
+| | Counts | Does not count |
+|---|---|---|
+| A Story is **present** | `Ready for Sprint Review` (PO-validated), `Need Documentation`, `Ready for Release`, `Released` | any earlier status, `On Hold`, `Invalid` |
+| An Epic is **done** | `Ready for Release`, `Released` | any other status, `Rejected` |
+
+**Setting the value.**
+
+- **It is set when the item is scheduled, and required from then on:** on the Epic at the Gate, from
+  the decision (`oc-roadmap`), and on each Story when it is authored at Handoff. **When a CSM writes
+  the Story, the CSM sets it**, and Product checks it at the Story review (`Review Design - Func`)
+  and amends it if necessary (CPO, 2026-10-27). Claude asks the CSM for each Story's value and does
+  not choose it.
+- **An empty value on a scheduled Epic or Story reads as `Must have`** until someone sets it. So
+  nothing is dropped because nobody filled the field.
+- **Enablers carry no value.** An Enabler counts as `Must have` when a `Must have` Story depends on
+  it. The technical container Epics INTRD-47281 → INTRD-47286 carry no version and are outside the
+  rule (§ *Cost per version*).
 - **On a change request, `Must have` is read as "the customer's go-live depends on it".** That is how
   the CPO Obeya's blocked-revenue register counts it, and Stéphane kept that use on 2026-10-07
-  (`change-requests.md`).
+  (`change-requests.md`). The delivering Epic's value comes from the Gate decision, not from the CR.
+
+**A dropped Story** — a `Should have` or `Could have` Story taken out of the version — cannot stay in
+its Epic on another version (§ *Cost per version*). It moves to the next
+step Epic under the same Initiative (`initiatives.md`), created if needed, and has no Fix version
+until that Epic passes its Gate. The old Epic closes on what it delivered. The drop is a scope change,
+recorded and counted like a demotion. A Story whose merged work ships by default is not dropped: it
+keeps its Epic and its version.
+
+**The release check** runs before a version is released. It is the Factory's release manager's to
+run: Vincent Naudion in practice, as there is no official Release Manager position (CPO,
+2026-10-27). It has three parts:
+
+1. **Epics blocking the version.** Every hit blocks it:
+   ```
+   project = INTRD AND issuetype = Epic AND fixVersion = "X"
+     AND (cf[10103] = "Must have" OR cf[10103] is EMPTY)
+     AND status not in ("Ready for Release", "Released")
+   ```
+2. **Stories blocking their Epic.** Select by parent, not by the Story's own Fix version: a Story
+   whose version disagrees with its Epic's is still that Epic's. `<keys>` are all the Epics on
+   version X (`project = INTRD AND issuetype = Epic AND fixVersion = "X"`). A hit holds its Epic.
+   It holds the version only through a `Must have` Epic.
+   ```
+   parent in (<keys>) AND issuetype = Story
+     AND (cf[10103] = "Must have" OR cf[10103] is EMPTY)
+     AND status not in ("Ready for Sprint Review", "Need Documentation", "Ready for Release", "Released")
+   ```
+3. **Enablers, by hand.** List the open Enablers under those Epics and check which `Must have`
+   Stories depend on them.
+
+The version is releasable when the first query returns nothing and no `Must have` Epic is held by
+the second or the third.
 
 ## Authoring boundary — User Stories are functional, never technical
 
