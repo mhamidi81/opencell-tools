@@ -1,7 +1,7 @@
 ---
 name: oc-fn-briefs
-version: 1.8.1
-updated: 2026-10-28T00:04:13+01:00
+version: 1.8.2
+updated: 2026-10-28T09:15:00+01:00
 author: Stéphane Chambrin
 description: >
   Author and render branded Opencell DOCUMENTS — one-pagers, analysis notes, briefs, memos,

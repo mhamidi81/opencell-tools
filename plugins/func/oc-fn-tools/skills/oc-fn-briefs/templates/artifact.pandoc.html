@@ -43,14 +43,16 @@ $if(lead)$  <p class="lead">$lead$</p>
 $endif$
 $body$
 </div>
-$-- Theme switch, part 2 — the effective theme is read back from the computed color-scheme,
-$-- so it stays right whichever of the two explicit choices set it, and the label follows a
-$-- claude.ai theme change made while the page is open.
+$-- Theme switch, part 2 — the effective theme follows theme/artifact.css's precedence, read
+$-- from the same two attributes, and the label follows a claude.ai theme change made while the
+$-- page is open. Never read it back from the computed color-scheme: the claude.ai viewer can
+$-- hold the root's color-scheme at dark on its own, and the switch then cannot go back to dark
+$-- (found on the oc-fn-decks switch, 2026-10-28).
 <script>
 (function(){
   var r=document.documentElement,b=document.getElementById('oc-theme-toggle');
   if(!b)return;
-  function isDark(){return getComputedStyle(r).colorScheme.indexOf('dark')>-1;}
+  function isDark(){var v=r.getAttribute('data-oc-theme');return v==='dark'||(v!=='light'&&r.getAttribute('data-theme')==='dark');}
   function sync(){var l=isDark()?'Switch to light theme':'Switch to dark theme';b.setAttribute('aria-label',l);b.title=l;}
   b.addEventListener('click',function(){
     var v=isDark()?'light':'dark';
@@ -58,7 +60,7 @@ $-- claude.ai theme change made while the page is open.
     try{localStorage.setItem('oc-theme',v);}catch(e){}
     sync();
   });
-  new MutationObserver(sync).observe(r,{attributes:true,attributeFilter:['data-theme']});
+  new MutationObserver(sync).observe(r,{attributes:true,attributeFilter:['data-theme','data-oc-theme']});
   sync();
 })();
 </script>
