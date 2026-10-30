@@ -1,7 +1,7 @@
 ---
 name: oc-fn-briefs
-version: 1.8.2
-updated: 2026-10-28T09:15:00+01:00
+version: 1.8.3
+updated: 2026-10-28T14:30:00+01:00
 author: Stéphane Chambrin
 description: >
   Author and render branded Opencell DOCUMENTS — one-pagers, analysis notes, briefs, memos,
@@ -332,7 +332,7 @@ render-mirrors). **Do not fight that per-file with `git add -f`** — that silen
 moment anyone forgets the flag. Instead the repo **carves the folders that hold documents out of the
 ignore**, so branded documents there track with a plain `git add`. Since 2026-10-22 the repo has **one
 folder per topic at the repo root** (`po-reviews/`, `delivery/`, `documentation/`, `regulatory/`,
-`change-requests/`, `portal-apollo2/`, `roadmap/<year>/`); `notes/` is for single work-item analyses
+`change-requests/`, `portal-apollo2/`); `notes/` is for single work-item analyses
 only. The carve-outs:
 
 ```gitignore
