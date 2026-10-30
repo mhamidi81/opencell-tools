@@ -1,7 +1,7 @@
 ---
 name: oc-fn-func-design
-version: 1.52.0
-updated: 2026-10-27T11:26:03+01:00
+version: 1.54.1
+updated: 2026-10-30T19:35:00+01:00
 author: Stéphane Chambrin
 description: >
   Rules and data for Jira issues in the Opencell INTRD and CR (Change Requests) projects. Use
@@ -291,9 +291,12 @@ spent on what was not sold, weighted by how many times each development was sold
     18.3 backports are regulatory.
   - **When:** as soon as a sale is known. That is at scheduling when the CR is sold, or when the CCO
     reports a sale. Add a label; never remove one, except `Opencell`.
-  - **Spelling:** the CR *Expected by* labels, which allow no spaces: `LaPoste`, `Proxiserve`,
-    `Fnac-Darty`, `Energied'ici`, `Mediapost`, `Vialis`. **Never create a variant** (`PROXISERVE`
-    exists; do not reuse it).
+  - **Spelling:** the CR *Expected by* labels, which follow the 2027 roadmap grid's names and allow no
+    spaces: `LaPoste`, `Proxiserve`, `Fnac-Darty`, `Energied'ici`, `Mediaposte`, `Maileva`, `MET`,
+    `Siplec`, `Vialis`. La Poste's units (BGPN, BSCC, Colissimo) are `LaPoste`; Docaposte is
+    `Maileva`; Mediaposte is a customer of its own, not La Poste. Outside labels (the grid, *Prime
+    Customer*) La Poste keeps its space: `La Poste`. **Never create a variant:** the case and spelling
+    variants were renamed away across INTRD and CR on 2026-10-30 (CPO).
   - **`Opencell` is a legacy default:** about 10,000 issues from 2024–2025 carry it. Read it as empty,
     drop it when adding a customer, and never add it.
   - **No amount, ever.** No price, invoice amount or rate goes into Jira, which is open to about 41 Tech
@@ -406,6 +409,11 @@ run: Vincent Naudion in practice, as there is no official Release Manager positi
 
 The version is releasable when the first query returns nothing and no `Must have` Epic is held by
 the second or the third.
+
+**After the release, a separate Product step** (the CPO or the Senior PO, not the release check),
+also for an item whose code ships earlier in a backport: every CR still held in `Accepted` for the
+version takes `101` *Feature has been scheduled* then `91` *Feature has been released*, and the
+version's items get the label `roadmap-public` (`change-requests.md` § *The Product-team job on a CR*, step 5).
 
 ## Authoring boundary — User Stories are functional, never technical
 
