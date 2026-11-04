@@ -20,8 +20,8 @@ actual work is authored as INTRD issues and linked back.
 
 **Who decides** (CPO, 2026-11-04; `oc-roadmap` § 3). There are two bodies:
 - **The Roadmap Committee** schedules a CR into a version, as it decides every small roadmap subject.
-  Its members are the CPO (chair), the VP Engineering, the CCO and the CRO. The Factory's release
-  manager is invited to its checkpoints during the build.
+  Its members are the CPO (chair), the VP Engineering and the CCO. The CRO is invited when an offer
+  or a sale is on the agenda, and the Factory's release manager to its checkpoints during the build.
 - **The CODIR**, also called the SteerCo, is consulted on big subjects and informed otherwise.
 
 There is **no standing Discovery Committee**: triage and study are Product's.
