@@ -18,6 +18,14 @@ actual work is authored as INTRD issues and linked back.
 > page (docs space, Product-authored). This file mirrors it — if they diverge, that page wins; keep
 > this file in step.
 
+**Who decides** (CPO, 2026-11-04; `oc-roadmap` § 3). There are two bodies:
+- **The Roadmap Committee** schedules a CR into a version, as it decides every small roadmap subject.
+  Its members are the CPO (chair), the VP Engineering, the CCO and the CRO. The Factory's release
+  manager is invited to its checkpoints during the build.
+- **The CODIR**, also called the SteerCo, is consulted on big subjects and informed otherwise.
+
+There is **no standing Discovery Committee**: triage and study are Product's.
+
 - **Project:** key **`CR`** ("Change Requests", project id `10054`). Single issue type **Change
   Request** (id `10077`, not a subtask).
 - **Not a bug.** A **bug fix is not a CR** (though a client may report a bug that gets *requalified*
@@ -84,13 +92,13 @@ Each status has an **actor** — *Reporter* (raises / answers), **Product** (tri
 | Status | Category | Actor | Meaning |
 |---|---|---|---|
 | **Draft** | new | Reporter | Logged but not ready — reporter is still filling it in. **Product does not pick it up.** |
-| **To Study** | new | Product | Submitted (*Send to Product*); queued for the **Discovery Committee** / Product triage. |
+| **To Study** | new | Product | Submitted (*Send to Product*); queued for Product triage. |
 | **In Study** | indeterminate | Product | Product is actively studying it. |
 | **Need Information** | indeterminate | Reporter | Product has asked the reporter for more information. |
 | **Rejected** | done | — | Declined — a **Change rejection reason** is always set (+ detailed *Product response*). |
 | **Accepted** | indeterminate | Product / Factory | Has value for Product — but **NOT scheduled yet**; schedule-vs-backlog still under discussion. A roadmap-round CR without the label `roadmap-public` stays here even once its Epic is versioned (step 5). |
 | **Backlog** | done | Product | Interesting, but will stay unscheduled for the foreseeable future. |
-| **Scheduled** | indeterminate | Product / Factory | **Roadmap committee** picked a candidate version — *Fix versions* set, and the INTRD Epics/Stories are **created and linked** to the CR. A roadmap-round CR comes here only with the label `roadmap-public` on it or its Epic (step 5). |
+| **Scheduled** | indeterminate | Product / Factory | The **Roadmap Committee** picked a candidate version — *Fix versions* set, and the INTRD Epics/Stories are **created and linked** to the CR. A roadmap-round CR comes here only with the label `roadmap-public` on it or its Epic (step 5). |
 | **Released** | done | — | Delivered — actual version set. |
 
 Happy path: **Draft →(*Send to Product*)→ To Study → In Study → Accepted → Scheduled → Released**,
@@ -175,7 +183,7 @@ projects freely). Typical shape:
 
 When a CR is **scheduled**, create or locate the INTRD delivery issue(s) (authored per the rest of
 this skill) and link them back so the decision → delivery trail is explicit. A roadmap-round CR held
-in `Accepted` (step 5) gets its Epic, versioned and linked, at the Roadmap committee's decision all
+in `Accepted` (step 5) gets its Epic, versioned and linked, at the Roadmap Committee's decision all
 the same.
 
 ## Template — CR-3
@@ -220,7 +228,7 @@ study → respond** on existing CRs, not creation.
    by the CR project only). It is still on neither the create screen nor the *Accept change* /
    *Scheduled* transition screens, so write it with a plain edit, before or after the transition.
 5. **Accepted ≠ scheduled.** *Accepted* means "has value"; scheduling is a separate decision. When
-   the **Roadmap committee** picks a candidate version, move to **Scheduled**, set **Fix versions**,
+   the **Roadmap Committee** picks a candidate version, move to **Scheduled**, set **Fix versions**,
    and **create the INTRD Epics/Stories** (authored per the rest of this skill) **linked back** to
    the CR — reference them from the Product response. (Or park it in **Backlog** if it's valuable but
    unschedulable for now.)
