@@ -14,9 +14,6 @@ A Jira ticket key (e.g. `INTRD-41234`). If none is given, ask for one. Optional 
 - `--base-url <url>`: REST base URL of the development instance for the compile check (default:
   `$OC_BASE`, else `http://localhost:8080/opencell/api/rest`).
 - `--no-compile`: skip the compile check (say so in the wrap-up).
-- `--no-jira-summary`: skip Phase 7 (a trial run, or a ticket that must not be commented). By default the
-  script summary is proposed as a comment on the ticket and posted once the developer confirms it. The
-  code itself is never posted or attached.
 
 ## Critical rules
 
@@ -207,7 +204,7 @@ Next steps:
   3. Commit:            {TICKET}: {brief description}
 ```
 
-## Phase 7: Jira summary (skipped with `--no-jira-summary`)
+## Phase 7: Jira summary
 
 The summary keeps the design of the script on the ticket for the reviewer and the product owner: run
 this phase on every real ticket.
