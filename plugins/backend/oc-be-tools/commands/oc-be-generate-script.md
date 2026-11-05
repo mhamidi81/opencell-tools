@@ -34,7 +34,12 @@ A Jira ticket key (e.g. `INTRD-41234`). If none is given, ask for one. Optional 
    `oc-be-script-guide` § 3).
    - Overlay: the scripts go in its script module (package from its profile), and a `JAVA_CLASS` in the
      module the profile uses for compiled code.
-   - Not an overlay: write them under `./scripts/{TICKET}/` in the current directory.
+   - `opencell-core` (modules `opencell-admin`, `opencell-model`): a standard core script is a
+     `JAVA_CLASS` in its module, `opencell-admin/ejbs/src/main/java/org/meveo/service/script/<category>/`,
+     registered by a Liquibase changeset in `opencell-model/src/main/resources/db_resources/changelog/current/structure.xml`
+     (and `rebuild/data-demo.xml` when the script is part of the demo data). If a class with the same name
+     exists, stop and ask: never overwrite it.
+   - Anywhere else: write them under `./scripts/{TICKET}/` in the current directory.
 2. **Branch** (only when the target is a git repository). Resolve the branch type from the Jira issue
    type (`getJiraIssue({TICKET}, fields: ["issuetype", "summary"])`: Story or Enabler → `feature/`, Bug
    or Sub-bug → `bugfix/`; anything else: ask). Then **`AskUserQuestion`**: *"For {TICKET}, create a new
@@ -151,6 +156,24 @@ Report the result per script: compiled at round N, or the remaining errors.
 
 ### Files
 - <path> (Created) — <hook point id>, <JAVA | JAVA_CLASS>, compiled on <url> at round <N> | not compiled: <why>
+
+### Script summary
+One table per script; every row is filled, with "none" when it does not apply.
+
+| Item | <ClassName> |
+|---|---|
+| Hook point | <id> — <name>, configured on <entity field / job parameter / notification / inbound request> |
+| Starting point | <template or starter path> |
+| Script type | <JAVA / JAVA_CLASS> — <why> |
+| Transactions | <caller's transaction / new transaction per item / ...>; <REQUIRES_NEW core methods avoided>; what is rolled back on error |
+| Inputs | <context keys and their types>; script parameters <code: type, mandatory, default> |
+| Outputs | <context keys set and their types>; HTTP status and body for an inbound request |
+| Entities read | <Entity (how: query / service method)> |
+| Entities created, updated or deleted | <Entity: field(s) changed, status transitions> / none (read only) |
+| Services called | <ServiceName.method(...)> |
+| Errors and edge cases | <case: behaviour (exception, status, message)> |
+| Business rules taken from | <ticket section / developer answer at the checkpoint> |
+| Business rules still assumed | <rule: what was assumed and why> / none |
 
 ### Configuration to do (developer)
 - ScriptInstance <code>: type <JAVA | JAVA_CLASS>, category <...>
