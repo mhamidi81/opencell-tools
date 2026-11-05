@@ -96,6 +96,8 @@ The library explains each of them; check them on every script.
 | Import explicitly every class provided by the application server, even one that only appears in a `throws` clause | The core compiles a `JAVA` script against the war plus the jars of the imported classes only |
 | No state in instance fields when the hook point runs the script from a pool | The same instance serves several calls, possibly on several threads |
 | Never assume a business rule, an entity field or a service method: check it in the library or in the core | A plausible method that does not exist compiles in no instance |
+| When the script bypasses a core method (for example it creates a `DiscountPlanInstance` itself instead of calling `SubscriptionService.instantiateDiscountPlan`), read that method and keep its side effects: filters it checks (`applicationFilterEL`), status changes (plan `ACTIVE` → `IN_USE`), counters it updates | The core method does more than its name says; skipping it silently drops business rules and statistics |
+| "Operations already rated" are the `WalletOperation`s in status `OPEN` **and** `TREATED` whose rated transaction is not `BILLED`; leave out invoiced ones and the discount operations themselves | `RT_Job` turns `OPEN` operations into rated transactions (`TREATED`) at night: a script that only reads `OPEN` misses the part of the period already processed |
 | Never deploy or enable a script on an instance; the compile check creates it **disabled** and deletes it | Deployment is the developer's decision |
 
 ## 5. Check that it compiles
