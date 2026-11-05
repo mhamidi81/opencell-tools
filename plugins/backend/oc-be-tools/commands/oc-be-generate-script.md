@@ -14,8 +14,9 @@ A Jira ticket key (e.g. `INTRD-41234`). If none is given, ask for one. Optional 
 - `--base-url <url>`: REST base URL of the development instance for the compile check (default:
   `$OC_BASE`, else `http://localhost:8080/opencell/api/rest`).
 - `--no-compile`: skip the compile check (say so in the wrap-up).
-- `--jira-summary`: after the wrap-up, post the script summary as a comment on the ticket, once the
-  developer has confirmed it (Phase 7). The code itself is never posted or attached.
+- `--no-jira-summary`: skip Phase 7 (a trial run, or a ticket that must not be commented). By default the
+  script summary is proposed as a comment on the ticket and posted once the developer confirms it. The
+  code itself is never posted or attached.
 
 ## Critical rules
 
@@ -24,7 +25,7 @@ A Jira ticket key (e.g. `INTRD-41234`). If none is given, ask for one. Optional 
 2. **Never write on a live instance.** The compile check creates each script **disabled** and deletes it;
    never use `--keep`, never deploy or enable a script, never run `mvn opencell:deploy-scripts`.
    Deployment is the developer's action.
-3. **Write nothing to Jira** except the summary comment of `--jira-summary`, after the developer's
+3. **Write nothing to Jira** except the summary comment of Phase 7, after the developer's
    confirmation; never attach or post the code.
 4. **Read an attachment only when the developer names it**: sample files may hold real customer data.
 5. Explicit types (never `var`), `jakarta.*` (never `javax.*`, except the JDK's own `javax.xml.*`),
@@ -206,7 +207,10 @@ Next steps:
   3. Commit:            {TICKET}: {brief description}
 ```
 
-## Phase 7: Jira summary (only with `--jira-summary`)
+## Phase 7: Jira summary (skipped with `--no-jira-summary`)
+
+The summary keeps the design of the script on the ticket for the reviewer and the product owner: run
+this phase on every real ticket.
 
 1. Build the comment from the wrap-up: the **Script summary** table of each script, the configuration
    to do, the open questions, the branch name, and the statement *"AI-generated draft, not yet reviewed"*.
