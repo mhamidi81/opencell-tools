@@ -14,6 +14,8 @@ A Jira ticket key (e.g. `INTRD-41234`). If none is given, ask for one. Optional 
 - `--base-url <url>`: REST base URL of the development instance for the compile check (default:
   `$OC_BASE`, else `http://localhost:8080/opencell/api/rest`).
 - `--no-compile`: skip the compile check (say so in the wrap-up).
+- `--jira-summary`: after the wrap-up, post the script summary as a comment on the ticket, once the
+  developer has confirmed it (Phase 7). The code itself is never posted or attached.
 
 ## Critical rules
 
@@ -22,10 +24,12 @@ A Jira ticket key (e.g. `INTRD-41234`). If none is given, ask for one. Optional 
 2. **Never write on a live instance.** The compile check creates each script **disabled** and deletes it;
    never use `--keep`, never deploy or enable a script, never run `mvn opencell:deploy-scripts`.
    Deployment is the developer's action.
-3. **Read an attachment only when the developer names it**: sample files may hold real customer data.
-4. Explicit types (never `var`), `jakarta.*` (never `javax.*`, except the JDK's own `javax.xml.*`),
+3. **Write nothing to Jira** except the summary comment of `--jira-summary`, after the developer's
+   confirmation; never attach or post the code.
+4. **Read an attachment only when the developer names it**: sample files may hold real customer data.
+5. Explicit types (never `var`), `jakarta.*` (never `javax.*`, except the JDK's own `javax.xml.*`),
    Javadoc on every method.
-5. Every checkpoint below is a **hard pause** with the `AskUserQuestion` tool, in every permission mode
+6. Every checkpoint below is a **hard pause** with the `AskUserQuestion` tool, in every permission mode
    including auto mode. A prose question is not enough.
 
 ## Phase 0: Setup
@@ -155,7 +159,11 @@ Report the result per script: compiled at round N, or the remaining errors.
 ## Script draft: {TICKET}
 
 ### Files
-- <path> (Created) — <hook point id>, <JAVA | JAVA_CLASS>, compiled on <url> at round <N> | not compiled: <why>
+Branch: <branch> in <repository root>
+- [<FileName>](<absolute path>) (Created) — <hook point id>, <JAVA | JAVA_CLASS>, compiled on <url> at round <N> | not compiled: <why>
+
+Give each file as a link to its **absolute path**, so the developer opens it in one click from the
+terminal or the IDE. Do not print the code.
 
 ### Script summary
 One table per script; every row is filled, with "none" when it does not apply.
@@ -197,3 +205,17 @@ Next steps:
   2. Record AI usage:   /oc-be-tools:oc-be-calculate-ai-use --working --ticket {TICKET}
   3. Commit:            {TICKET}: {brief description}
 ```
+
+## Phase 7: Jira summary (only with `--jira-summary`)
+
+1. Build the comment from the wrap-up: the **Script summary** table of each script, the configuration
+   to do, the open questions, the branch name, and the statement *"AI-generated draft, not yet reviewed"*.
+   Never put the code, a secret, a credential or a value read from an attachment in it.
+2. Show the exact comment, then **`AskUserQuestion`: "Post this summary as a comment on {TICKET}?"**
+   (**Post** / **Change it first** / **Do not post**). Block until answered; post nothing without
+   **Post**.
+3. On **Post**: `addCommentToJiraIssue` (cloudId `648ef912-b483-4da2-91af-73ea1e3fdad8`) with the
+   comment, and give the developer the link to it. On failure, report the error and leave the comment
+   text in the conversation; do not retry blindly.
+
+This comment is the only write the command makes outside the developer's checkout.
