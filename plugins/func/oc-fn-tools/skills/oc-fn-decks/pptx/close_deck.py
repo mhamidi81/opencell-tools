@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Finishing pass for a pandoc-generated Opencell deck.
 
-One package fix and two per-slide corrections pandoc cannot make itself:
+Two package fixes and two per-slide corrections pandoc cannot make itself:
 
 0. Content types — pandoc (verified on 3.1.11) copies the reference doc's
    embedded fonts (ppt/fonts/*.fntdata) but drops their Default declaration
@@ -9,6 +9,16 @@ One package fix and two per-slide corrections pandoc cannot make itself:
    refuses to open it and strict readers may offer to repair it. Restore the
    declarations this lane is known to lose, and refuse any OTHER undeclared
    part rather than ship an invalid file.
+
+0b. Dangling relationships — pandoc (verified on 3.1.11) copies the reference
+   doc's ppt/_rels/presentation.xml.rels whole but not every part it points
+   to (customXml items, revisionInfo, changesInfos, the handout master). The
+   package stays readable by LibreOffice and zip tools, but PowerPoint calls
+   the file damaged and offers to repair it. Drop every internal relationship
+   whose target part is missing, and every content-type Override naming a
+   missing part. A dropped relationship still referenced from its source part
+   is a hard failure, except the handout master's list, which is removed with
+   it (PowerPoint rebuilds a default handout master).
 
 1. Red closing bookend — pandoc maps every H1 to the single "Section Header"
    layout, so the closing "# Thank you" slide comes out as a photo section
@@ -75,6 +85,63 @@ def restore_content_types(tmp):
         xml = re.sub(r"(<Types\b[^>]*>)", lambda m: m.group(1) + add, xml, count=1)
         open(path, "w", encoding="utf-8").write(xml)
     return sorted(missing)
+
+
+REL = re.compile(r"<Relationship\b[^>]*?/>")
+
+
+def drop_dangling_rels(tmp):
+    """Remove relationships and Overrides pointing at parts the package lacks.
+
+    Returns a list of "<rels file> -> <target>" strings, one per dropped link.
+    """
+    dropped = []
+    for walk_root, _, files in os.walk(tmp):
+        for f in files:
+            if not f.endswith(".rels"):
+                continue
+            rels_path = os.path.join(walk_root, f)
+            # a .rels in <dir>/_rels/ describes <dir>/<name>; package rels have no source part
+            src_dir = os.path.dirname(os.path.dirname(rels_path))
+            src_part = os.path.join(src_dir, f[:-len(".rels")]) if f != ".rels" else None
+            xml = open(rels_path, encoding="utf-8").read()
+            gone = []
+            for el in REL.findall(xml):
+                if 'TargetMode="External"' in el:
+                    continue
+                target = re.search(r'Target="([^"]+)"', el).group(1)
+                path = (os.path.join(tmp, target.lstrip("/")) if target.startswith("/")
+                        else os.path.normpath(os.path.join(src_dir, target)))
+                if not os.path.exists(path):
+                    gone.append((re.search(r'Id="([^"]+)"', el).group(1), target, el))
+            if not gone:
+                continue
+            for rid, target, el in gone:
+                xml = xml.replace(el, "", 1)
+                dropped.append(f"{os.path.relpath(rels_path, tmp)} -> {target}")
+            open(rels_path, "w", encoding="utf-8").write(xml)
+            if src_part and os.path.exists(src_part):
+                part = open(src_part, encoding="utf-8").read()
+                for rid, target, _ in gone:
+                    if not re.search(rf'r:id="{re.escape(rid)}"', part):
+                        continue
+                    if "handoutMaster" in target:
+                        part = re.sub(r"<p:handoutMasterIdLst>.*?</p:handoutMasterIdLst>",
+                                      "", part, flags=re.S)
+                    else:
+                        sys.exit(f"FATAL: {os.path.relpath(src_part, tmp)} references {rid} "
+                                 f"({target}), a part pandoc did not copy — extend "
+                                 "drop_dangling_rels in close_deck.py")
+                open(src_part, "w", encoding="utf-8").write(part)
+    ct_path = os.path.join(tmp, "[Content_Types].xml")
+    ct = open(ct_path, encoding="utf-8").read()
+    for el in re.findall(r"<Override\b[^>]*?/>", ct):
+        name = re.search(r'PartName="([^"]+)"', el).group(1)
+        if not os.path.exists(os.path.join(tmp, name.lstrip("/"))):
+            ct = ct.replace(el, "", 1)
+            dropped.append(f"[Content_Types].xml Override -> {name}")
+    open(ct_path, "w", encoding="utf-8").write(ct)
+    return dropped
 
 
 def layout_name(root, layout_file):
@@ -149,6 +216,7 @@ def main():
             z.extractall(tmp)
 
         restored = restore_content_types(tmp)
+        dangling = drop_dangling_rels(tmp)
         cover = next(f for f in os.listdir(os.path.join(tmp, "ppt/slideLayouts"))
                      if f.endswith(".xml") and layout_name(tmp, f) == "Title Slide")
 
@@ -172,9 +240,9 @@ def main():
                 retarget(tmp, slide, cover)
                 closed.append(slide)
 
-        if not closed and not spaced and not restored:
-            print("nothing to finish (content types complete, no closing slide, "
-                  "no caption slide) — no-op")
+        if not closed and not spaced and not restored and not dangling:
+            print("nothing to finish (content types complete, no dangling link, "
+                  "no closing slide, no caption slide) — no-op")
             return
 
         out = deck + ".tmp"
@@ -189,6 +257,9 @@ def main():
         if restored:
             print(f"[Content_Types].xml: restored {', '.join('.' + e for e in restored)} "
                   "(dropped by pandoc)")
+        if dangling:
+            print(f"dropped {len(dangling)} dangling link(s) to parts pandoc did not copy: "
+                  + "; ".join(dangling))
         if closed:
             print(f"{', '.join(closed)}: Section Header -> Title Slide (red closing bookend)")
         if spaced:

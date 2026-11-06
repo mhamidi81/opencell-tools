@@ -1,7 +1,7 @@
 ---
 name: oc-fn-decks
-version: 1.10.2
-updated: 2026-10-28T09:15:00+01:00
+version: 1.10.3
+updated: 2026-11-06T20:30:00+01:00
 author: Stéphane Chambrin
 description: >
   Author and render branded slide decks with the Opencell Marp theme (Charte Graphique 2023)

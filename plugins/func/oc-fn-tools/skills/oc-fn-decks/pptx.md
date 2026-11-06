@@ -25,7 +25,7 @@ see SKILL.md § *Where the theme lives*).
 |------|------|
 | `opencell-slides-ref.pptx` | Curated pandoc reference: the official template + 7 layouts renamed to pandoc's English names, cover placeholders rewired, brand fonts embedded |
 | `deck2pptx.py` | One-command render: Marp-dialect bridge → column guard → pandoc → `close_deck.py`. The guard **refuses a deck** in which pandoc would silently drop content from a column (see *Columns* below) |
-| `close_deck.py` | Finishing pass: restores the embedded-font content type pandoc drops (else the `.pptx` is an invalid package that python-pptx refuses and PowerPoint may offer to repair; any *other* undeclared part is a hard failure) + red closing bookend ("Thank you" / "Merci" slides → cover layout, backups may follow) + dynamic caption/table spacing on text-then-table slides (standalone-usable) |
+| `close_deck.py` | Finishing pass: restores the embedded-font content type pandoc drops (else the `.pptx` is an invalid package that python-pptx refuses and PowerPoint may offer to repair; any *other* undeclared part is a hard failure) + drops the links pandoc keeps to template parts it does not copy (customXml, revision info, handout master: PowerPoint calls such a file damaged) + red closing bookend ("Thank you" / "Merci" slides → cover layout, backups may follow) + dynamic caption/table spacing on text-then-table slides (standalone-usable) |
 | `curate_ref.py` | Regenerates the reference from marketing's template (see *Re-curation*) |
 
 Provenance: curated from **`Opencell_2024 V3 - EN.pptx`** (SharePoint → *2 - Marketing / 01_Brand /
@@ -116,6 +116,11 @@ Marp's 25 px — a slide that barely fits in the Marp lane overflows in PPTX**; 
 sans) — layout/overflow verdicts are reliable, font fidelity is judged in real PowerPoint. Fonts
 (Montserrat, Playfair Display) are **embedded** in every generated deck, so viewers need no font
 install.
+
+**LibreOffice is not a package check.** It opens a file PowerPoint calls damaged: on 2026-11-06 a
+deck with six links to parts pandoc had not copied rendered cleanly here and failed in PowerPoint.
+`close_deck.py` now drops such links and prints what it dropped; a FATAL from it means a new kind
+of loss to handle in the script, never a file to ship.
 
 ## Re-curation (when marketing revs the template)
 
