@@ -13,9 +13,10 @@ description: >
 # Opencell script guide
 
 The knowledge lives in the **Opencell script library** (`opencellsoft/opencell-script-library`):
-39 hook point contracts mapped from the core, one starter per hook point, business templates
-generalized from customer projects, and the rules below in full. This skill locates it and says in
-which order to apply it. It does **not** restate the library: read it.
+39 hook point contracts mapped from the core, 36 starters (two hook points reuse the starter of a
+neighbour with the same contract, and the mediation reader has none on purpose), and business templates
+generalized from customer projects. This skill locates it and says in which order to apply it. It does
+**not** restate the library: the rules below are a summary, and the library explains each of them.
 
 ## 1. Resolve the library
 
@@ -101,12 +102,13 @@ The library explains each of them; check them on every script.
 | When the core shows several conventions for the same thing, follow the most recent one (check the `git log` of the sibling scripts), and never replace a choice the developer made explicitly: point out the difference instead. Standard core scripts are now `JAVA_CLASS`, with the fully qualified class name as ScriptInstance code; a `JAVA` source that only extends the war class is the older pattern | Older code stays in the core next to newer code; copying the first example found reproduces an abandoned convention |
 | A filter parameter (offers, sellers...) restricts where the rule applies: when it leaves nothing to check, the rule does not apply and passes | Rejecting an invoice that the rule does not concern blocks billing for every customer outside the filter |
 | A case the ticket does not settle (empty parameter, no data to check) is a question for the developer, never a default rejection or acceptance chosen by the agent | A default chosen silently is an invented business rule |
-| Never deploy or enable a script on an instance; the compile check creates it **disabled** and deletes it | Deployment is the developer's decision |
+| Never deploy or enable a script on an instance; the compile check only saves a temporary, **disabled** copy and removes it | Deployment is the developer's decision |
 
 ## 5. Check that it compiles
 
 - `JAVA`: `python3 "$LIB/tools/compile_on_instance.py" <file.java...> --base-url <instance>/opencell/api/rest`
-  with `OC_USER` / `OC_PASS` in the environment, against a **development** instance only. The script is
-  created disabled, its compilation errors are read, then it is deleted.
+  with `OC_USER` / `OC_PASS` in the environment, against a **development** instance only. The tool saves
+  a temporary, disabled copy of the draft, reads its compilation errors, then removes the copy: the script
+  stays in the developer's checkout and nothing is left on the instance.
 - `JAVA_CLASS`: compile it with the module that ships it (overlay or project module), or with `javac`
   against the `WEB-INF/lib` of the war (see the library README).
