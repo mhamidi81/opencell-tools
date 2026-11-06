@@ -5,7 +5,10 @@ description: >
   a class extending org.meveo.service.script.Script or a core script base class such as TaxScript,
   PaymentScript, DateRangeScript, AccountOperationFilterScript), to pick the hook point a script
   plugs into, or to choose between a JAVA and a JAVA_CLASS script.
-  Also trigger before writing a script for a Jira ticket, and when a builder agent writes scripts.
+  Also trigger when reading, analysing or planning a Jira ticket whose need is a script (a "standard
+  script", an invoice validation rule, a hook point, a ScriptInstance, a script parameter, a custom
+  action, a scripting job), before proposing any plan for it, even when no code is written yet; and when
+  a builder agent writes scripts.
   Loads the Opencell script library (hook point contracts, starters, business templates, JAVA vs
   JAVA_CLASS rule, transaction rules) and, in an overlay repository, the overlay script rules.
 ---
