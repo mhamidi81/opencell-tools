@@ -1,7 +1,7 @@
 ---
 name: oc-fn-func-design
-version: 1.55.1
-updated: 2026-11-04T10:20:00+01:00
+version: 1.56.0
+updated: 2026-11-06T12:00:00+01:00
 author: Stéphane Chambrin
 description: >
   Rules and data for Jira issues in the Opencell INTRD and CR (Change Requests) projects. Use
@@ -218,10 +218,27 @@ Argos, the financial steering project, costs every logged hour by version from *
   different version under it. An Epic partly delivered in earlier versions does not take new work for
   a later one: that work opens a new step Epic. This is what lets a version's scope be read as a list
   of Epics, and what makes an Epic a roadmap item (`oc-roadmap`).
-  - **Provisional exception: the Factory's technical container Epics** (CPO, 2026-10-26, until he has
-    discussed it with JB and/or Vincent Naudion): the six Vincent Naudion created on 2026-09-19,
-    INTRD-47281 → INTRD-47286, collect the tech team's Enablers across versions. Nothing in Jira marks a
-    technical Epic, so the exception is that list; don't extend it by inference.
+  - **The Factory's technical Epics: one per subject per version** (agreed with Vincent Naudion on
+    2026-11-05; split by the CPO on 2026-11-06). A technical subject, such as performance, security,
+    test quality, the API or the UI migration, has one ordinary Epic per version, named
+    `<Subject> — <version>`. That Epic carries one Fix version, and its Enablers carry the same one.
+    - **When it is created:** when that version's work is planned. The CPO session creates it.
+    - **What it carries at creation:**
+      - its kind, the label `tech-debt` or `security`, on the Epic itself and never on a product
+        Initiative;
+      - `Generic`;
+      - the module of its children, or the stated cross-cutting exception.
+    - **Leftover work at release:** it goes to the next version's Epic. An unstarted Enabler moves
+      as it is. A started one is split, so the hours already logged stay on their version. Who
+      moves them is not decided yet.
+  - **The one remaining exception: the six former container Epics, now closed.** These are
+    INTRD-47281 → INTRD-47286, which Vincent Naudion created on 2026-09-19 to collect the tech
+    team's Enablers across versions with no Fix version.
+    - Since 2026-11-06 they take no new children.
+    - Their open work on 19.0.0 and 20.0.0 moved to the step Epics, INTRD-49542 → INTRD-49552.
+    - What they still hold stays until done: maintenance-line, unversioned and multi-version work,
+      and history.
+    - Nothing in Jira marks them, so the exception is that list. Don't extend it by inference.
   - **Exception, Epic by Epic, on the CPO's call: a partly delivered Epic kept whole** (CPO,
     2026-10-27). Instead of opening a step Epic, the Epic takes the new version with all its open
     work, and its delivered Stories keep their old versions. A Story still open on the version
@@ -372,8 +389,11 @@ category also holds `Rejected` (Epic) and `Invalid` (Story).
 - **An empty value on a scheduled Epic or Story reads as `Must have`** until someone sets it. So
   nothing is dropped because nobody filled the field.
 - **Enablers carry no value.** An Enabler counts as `Must have` when a `Must have` Story depends on
-  it. The technical container Epics INTRD-47281 → INTRD-47286 carry no version and are outside the
-  rule (§ *Cost per version*).
+  it. The six former container Epics, INTRD-47281 → INTRD-47286, carry no version and stay
+  outside the rule until they close.
+  - A technical step Epic is different: it carries one version and is inside the rule.
+  - With an empty value, it holds its version from 20.0.0 until it reaches *Ready for Release*.
+  - The leftover move at release is what lets it get there (§ *Cost per version*).
 - **On a change request, `Must have` is read as "the customer's go-live depends on it".** That is how
   the CPO Obeya's blocked-revenue register counts it, and Stéphane kept that use on 2026-10-07
   (`change-requests.md`). The delivering Epic's value comes from the Gate decision, not from the CR.
