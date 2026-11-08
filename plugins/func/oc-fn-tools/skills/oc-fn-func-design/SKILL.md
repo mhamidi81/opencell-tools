@@ -1,7 +1,7 @@
 ---
 name: oc-fn-func-design
-version: 1.56.0
-updated: 2026-11-06T12:00:00+01:00
+version: 1.57.0
+updated: 2026-11-08T16:19:00+01:00
 author: Stéphane Chambrin
 description: >
   Rules and data for Jira issues in the Opencell INTRD and CR (Change Requests) projects. Use
@@ -44,7 +44,11 @@ connector is not enabled. That is not blocking: the optional `jira`/curl helper 
 
 ## Transport — Rovo MCP (baseline) vs the optional `jira` helper
 
-The Atlassian **Rovo MCP** is the **baseline transport that always works** — it covers every operation below (reads, search, metadata, transitions, plain writes, and rich ADF writes). The optional `jira` helper (a thin curl/jq Jira REST wrapper on `~/.local/bin/jira`; install it per `rest-api.md`) — or raw `curl` — is a **token-saving accelerator**, not a dependency: the MCP injects every tool response into context in full, whereas direct calls filter with `jq` in the shell so only the projection costs tokens. Run `command -v jira` once: if absent, use the Rovo MCP equivalent for every row below.
+The Atlassian **Rovo MCP** is the **baseline transport that always works** — it covers every operation below (reads, search, metadata, transitions, plain writes, and rich ADF writes). The `jira` helper (a thin curl/jq Jira REST wrapper) — or raw `curl` — is a **token-saving accelerator**, not a dependency: the MCP injects every tool response into context in full, whereas direct calls filter with `jq` in the shell so only the projection costs tokens.
+
+- **It ships with this skill**, at `bin/jira` under this skill's base directory (shown when the skill loads). Call it by that path unless `command -v jira` finds it on `PATH`; every `jira …` in this skill means that command.
+- **It needs a Jira API token in `~/.netrc`**, one line per user (setup in `rest-api.md`). Without that line it refuses every command before sending a request.
+- **Probe once per session:** `jira raw GET /myself >/dev/null`. A non-zero exit means no usable token (no `~/.netrc` line, or a revoked one): use the Rovo MCP equivalent for every row below, and mention the one-line setup to the user once.
 
 | Operation | Use |
 |---|---|

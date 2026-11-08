@@ -19,9 +19,10 @@ Figma → *Settings → Security → Personal access tokens*, scope **File conte
 
 ## The `figma` helper (accelerator)
 
-An optional wrapper, `bin/figma` in this repo → `~/.local/bin/figma` (symlinked by `install.sh`),
-the exact analogue of `bin/jira`. It reads the PAT from `~/.netrc` and projects with `jq`. Run
-`figma help` for the full list. The ones you need:
+A wrapper that ships with this skill, at `bin/figma` under the skill's base directory (call it by
+that path unless `command -v figma` finds it on `PATH`), the exact analogue of `oc-fn-func-design`'s
+`jira` helper. It reads the PAT from `~/.netrc`, exits 1 before any request when the line is missing,
+and projects with `jq`. Run `figma help` for the full list. The ones you need:
 
 | Command | What it returns |
 |---|---|
@@ -43,8 +44,8 @@ into the link that becomes the Story's source-of-truth Figma reference.
 
 ## Raw `curl` recipes (the fallback — no helper needed)
 
-The helper is a convenience. Anyone with the PAT + `curl`/`jq` (including teammates who install the
-marketplace bundle, which does **not** ship `bin/`) can do the same directly. Read the token first:
+The helper is a convenience. Anyone with the PAT + `curl`/`jq` can do the same directly. These recipes
+need the same token: with no token at all, see `SKILL.md` § *Access — in brief*. Read the token first:
 
 ```bash
 TOK="$(awk 'END{for(j=1;j<=n;j++){if(tok[j]=="machine")c=(tolower(tok[j+1])=="api.figma.com");if(c&&tok[j]=="password"){print tok[j+1];exit}}} {for(i=1;i<=NF;i++)tok[++n]=$i}' ~/.netrc)"

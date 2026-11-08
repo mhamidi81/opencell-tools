@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+#
+# figma — thin curl+jq wrapper over the Figma REST API v1.
+#
+# Purpose: discover a Figma file's structure — its pages and the frames
+# (screens) on them — which the Figma MCP connector cannot enumerate (its
+# get_metadata returns only the first/Cover page). curl fetches, jq projects
+# in the shell, and only the projection reaches stdout — cheap on context.
+# Once you have a screen's node id, hand it to the Figma MCP tools
+# (get_screenshot / get_design_context / get_variable_defs) for the visual and
+# styling detail. Companion to the oc-fn-gui-design skill (figma-rest.md).
+#
+# Auth: Figma Personal Access Token read from ~/.netrc. Figma requires the
+# X-Figma-Token header (NOT HTTP Basic), so we read the token and send the
+# header ourselves — same store as bin/jira, adapted wire format. One line,
+# chmod 600:
+#   machine api.figma.com login you@opencellsoft.com password <FIGMA_PAT>
+# Create a token: Figma → Settings → Security → Personal access tokens
+#   (scope: File content — Read-only). Docs: https://www.figma.com/developers/api
+#
+# Config (env override): FIGMA_HOST (default api.figma.com).
+#
+# A FILEKEY is the segment in a Figma URL: figma.com/design/<FILEKEY>/<name>.
+# A NODEID may be given colon (123:456) or dash (123-456) form — both work.
+#
+# Subcommands:
+#   pages FILEKEY                   List the file's pages ("id  name"), with a
+#                                   header line (file name, role, page count).
+#   screens FILEKEY PAGEID          List a page's top-level children/frames
+#                                   ("id  [TYPE]  name") — the screens on it.
+#   find FILEKEY REGEX              List pages whose name matches REGEX (case-i).
+#   node FILEKEY NODEID [DEPTH]     Print the id/type/name tree under a node to
+#                                   DEPTH (default 2). Drill into a page/frame.
+#   url FILEKEY NODEID              Build the node-specific Figma URL (offline;
+#                                   the "Copy link to selection" link).
+#   me                              Show the authenticated user (auth check).
+#   raw METHOD PATH [DATA|@file]    Escape hatch. Prints the raw response.
+#
+# Writing designs is NOT here — it goes through the Figma MCP use_figma tool
+# under the oc-fn-gui-design Mode-B safety gate. The REST API cannot write
+# design content anyway.
+
+set -euo pipefail
+
+HOST="${FIGMA_HOST:-api.figma.com}"
+BASE="https://$HOST"
+TOKEN=""
+
+die() { echo "figma: $*" >&2; exit 1; }
+
+# Read the PAT for machine api.figma.com from ~/.netrc. Tokenises the whole file
+# so it works whether the entry is one line or split across lines.
+netrc_token() {
+    [[ -f "$HOME/.netrc" ]] || return 1
+    awk '
+        { for (i=1;i<=NF;i++) tok[++n]=$i }
+        END {
+            for (j=1;j<=n;j++) {
+                if (tok[j]=="machine") cur=(tolower(tok[j+1])=="api.figma.com")
+                if (cur && tok[j]=="password") { print tok[j+1]; exit }
+            }
+        }' "$HOME/.netrc"
+}
+
+preflight_auth() {
+    TOKEN="$(netrc_token || true)"
+    if [[ -z "$TOKEN" ]]; then
+        echo "figma: no api.figma.com entry in ~/.netrc — add:" >&2
+        echo "  machine api.figma.com login <you@domain> password <FIGMA_PAT>" >&2
+        echo "  (chmod 600 ~/.netrc; token via Figma → Settings → Security → Personal access tokens, scope File content read-only)" >&2
+        exit 1
+    fi
+}
+
+# curl with the Figma token header, JSON accept, and HTTP-error surfacing.
+api() {
+    local method="$1" path="$2"; shift 2
+    curl -sS --fail-with-body \
+        -X "$method" \
+        -H "X-Figma-Token: $TOKEN" \
+        -H "Accept: application/json" \
+        "$@" \
+        "$BASE$path"
+}
+
+# Run an api call, capturing the body into RESP without tripping `set -e`.
+# Usage: fetch GET /path … || fail_resp
+RESP=""
+fetch() {
+    set +e; RESP="$(api "$@")"; local rc=$?; set -e
+    return "$rc"
+}
+fail_resp() {
+    # Figma errors are JSON like {"status":403,"err":"..."} — render tersely if so.
+    local msg
+    msg="$(printf '%s' "$RESP" | jq -r 'if type=="object" then "status=\(.status // "?") \(.err // .message // "")" else . end' 2>/dev/null || printf '%s' "$RESP")"
+    printf 'figma: API error — %s\n' "$msg" >&2
+    exit 1
+}
+
+# NODEID may arrive dash-form (from a URL); Figma keys nodes by colon form.
+to_colon() { printf '%s' "${1//-/:}"; }
+
+cmd_pages() {
+    [[ $# -eq 1 ]] || die "usage: figma pages FILEKEY"
+    fetch GET "/v1/files/$1?depth=1" || fail_resp
+    printf '%s' "$RESP" | jq -r '
+        "\(.name)   role=\(.role)   editor=\(.editorType)   pages=\(.document.children|length)",
+        (.document.children[] | "  \(.id)\t\(.name)")'
+}
+
+cmd_screens() {
+    [[ $# -eq 2 ]] || die "usage: figma screens FILEKEY PAGEID"
+    local id; id="$(to_colon "$2")"
+    fetch GET "/v1/files/$1/nodes?ids=$id&depth=2" || fail_resp
+    printf '%s' "$RESP" | jq -r --arg id "$id" '
+        .nodes[$id].document as $p
+        | if $p == null then "figma: node \($id) not found in \($id)"
+          else "\($p.name)   children=\($p.children|length)",
+               ($p.children[] | "  \(.id)\t[\(.type)]\t\(.name)")
+          end'
+}
+
+cmd_find() {
+    [[ $# -eq 2 ]] || die "usage: figma find FILEKEY REGEX"
+    fetch GET "/v1/files/$1?depth=1" || fail_resp
+    printf '%s' "$RESP" | jq -r --arg re "$2" '
+        .document.children[] | select(.name|test($re;"i")) | "\(.id)\t\(.name)"'
+}
+
+cmd_node() {
+    [[ $# -ge 2 ]] || die "usage: figma node FILEKEY NODEID [DEPTH]"
+    local id depth; id="$(to_colon "$2")"; depth="${3:-2}"
+    fetch GET "/v1/files/$1/nodes?ids=$id&depth=$depth" || fail_resp
+    printf '%s' "$RESP" | jq -r --arg id "$id" '
+        def walk($d): "\("  " * $d)\(.id)\t[\(.type)]\t\(.name)",
+                      ((.children // [])[] | walk($d + 1));
+        .nodes[$id].document as $n
+        | if $n == null then "figma: node \($id) not found" else ($n | walk(0)) end'
+}
+
+cmd_url() {
+    [[ $# -eq 2 ]] || die "usage: figma url FILEKEY NODEID"
+    printf 'https://www.figma.com/design/%s/?node-id=%s\n' "$1" "${2//:/-}"
+}
+
+cmd_me() {
+    fetch GET "/v1/me" || fail_resp
+    printf '%s' "$RESP" | jq -r '"\(.email // .handle // "?")   id=\(.id // "?")"'
+}
+
+cmd_raw() {
+    [[ $# -ge 2 ]] || die "usage: figma raw METHOD PATH [DATA|@file.json]"
+    local method="$1" path="$2"; shift 2
+    if [[ $# -ge 1 ]]; then
+        api "$method" "$path" -H "Content-Type: application/json" --data "$1"
+    else
+        api "$method" "$path"
+    fi
+}
+
+usage() {
+    awk 'NR>=3 { if ($0 !~ /^#/ && $0 != "") exit; sub(/^# ?/, ""); print }' "$0"
+}
+
+main() {
+    [[ $# -ge 1 ]] || { usage; exit 1; }
+    local sub="$1"; shift
+    case "$sub" in
+        pages)   preflight_auth; cmd_pages "$@" ;;
+        screens) preflight_auth; cmd_screens "$@" ;;
+        find)    preflight_auth; cmd_find "$@" ;;
+        node)    preflight_auth; cmd_node "$@" ;;
+        me)      preflight_auth; cmd_me "$@" ;;
+        raw)     preflight_auth; cmd_raw "$@" ;;
+        url)     cmd_url "$@" ;;
+        help|-h|--help) usage ;;
+        *) die "unknown subcommand '$sub' (try: figma help)" ;;
+    esac
+}
+
+main "$@"

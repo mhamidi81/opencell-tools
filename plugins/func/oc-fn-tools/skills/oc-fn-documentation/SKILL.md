@@ -1,7 +1,7 @@
 ---
 name: oc-fn-documentation
-version: 1.8.1
-updated: 2026-10-22T16:48:28+02:00
+version: 1.8.2
+updated: 2026-11-08T16:19:00+01:00
 author: Stéphane Chambrin
 description: Rules and conventions for creating and updating Confluence documentation pages in the Opencell documentation space (opencellsoft.atlassian.net/wiki/spaces/docs). Use this skill whenever the user mentions Confluence, documentation, a "Concepts" page, a "User Manual" page, or asks to document anything for Opencell. Always load this skill before any Atlassian Rovo Confluence tool call targeting the docs space. Also covers linking each documented Story to its pages from Jira, the rule that pages never mention defects, and publishing a set of pages when the CPO says so.
 ---
@@ -25,6 +25,10 @@ The connector is the portable path, but it is **not the only one**: on a machine
 carries the Atlassian host, the Confluence REST API answers `curl -n` directly (verified on
 `sabretooth`, 2026-08-07) — see § *Page update workflow* for when to prefer it. Everything else in
 this skill — the rules, the audience constraints, the HTML patterns — applies to both transports.
+
+Where this skill runs `jira …`, it means the `jira` helper that ships with `oc-fn-func-design`
+(`bin/jira` under that skill's directory). Its setup, its once-per-session probe and the Rovo MCP
+fallback when the user has no Jira token are in that skill's § *Transport*.
 
 ## Instance
 
@@ -420,7 +424,7 @@ existing content and orphans any media nodes it contained.
 
 **Large pages: prefer direct REST over the MCP.** On a machine whose `~/.netrc`
 carries the Atlassian host, `curl -n https://<site>/wiki/api/v2/pages/{id}?body-format=atlas_doc_format`
-works — the same pattern `bin/jira` uses for Jira. That matters because Rule 3's
+works — the same pattern the `jira` helper uses for Jira. That matters because Rule 3's
 full-body reconstruction means a whole page must round-trip: through the MCP it
 lands in context twice (fetch, then re-send), while over REST it can be edited
 **surgically in a file** — locate the node, change it, `PUT` the result — which
