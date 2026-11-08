@@ -1,0 +1,350 @@
+#!/usr/bin/env bash
+#
+# jira — thin curl+jq wrapper over the Jira Cloud REST API v3.
+#
+# Purpose: read and lightly write Jira issues without routing large JSON
+# payloads through an LLM context window. curl fetches, jq projects in the
+# shell, and only the projection reaches stdout — far cheaper than the
+# Atlassian Rovo MCP, which injects every tool response into context wholesale.
+#
+# Auth: HTTP Basic via ~/.netrc (curl -n). One line, chmod 600:
+#   machine opencellsoft.atlassian.net login you@opencellsoft.com password <API_TOKEN>
+# Create a token at https://id.atlassian.com/manage/api-tokens
+# Without that line every subcommand exits 1 before any request (see preflight_auth).
+#
+# Location: ships inside the oc-fn-func-design skill (bin/jira), so the oc-fn-tools plugin
+# carries it; ai-config's bin/jira is a symlink to this file, for ~/.local/bin.
+#
+# Config (env overrides): JIRA_SITE (default opencellsoft.atlassian.net),
+#                         JIRA_PROJECT (default INTRD),
+#                         JIRA_MAX_PAGES (default 100) — runaway guard for
+#                         `jql --all`; at the default page size, 10k issues.
+#
+# Subcommands:
+#   get  KEY [fields] [--json]      Fetch one issue. fields = comma list
+#                                   (default: a compact read preset). Default
+#                                   output renders fields as "name: value" with
+#                                   ADF flattened to text; --json = raw JSON.
+#   jql  'QUERY' [--fields=a,b] [--max=N] [--token=T] [--all] [--json]
+#                                   Enhanced JQL search. Default output is one
+#                                   "KEY  status  summary" line per issue, and a
+#                                   "…more (rerun with --token=…)" hint when the
+#                                   result is truncated. --all follows that cursor
+#                                   itself and drains every page: --max then means
+#                                   PAGE size (default 100, the API maximum) and
+#                                   no hint is printed. --json always emits one
+#                                   JSON document, so `jq '.issues[]'` reads the
+#                                   same with or without --all.
+#   count 'QUERY'                   Approximate match count (a single number).
+#   transitions KEY                 List available transitions as "id  name".
+#   transition  KEY ID              Apply a transition (no body on success).
+#   comment KEY 'TEXT'              Add a plain-text comment (trivial ADF).
+#   meta ISSUETYPE_ID               List create fields for an issue type
+#                                   ("fieldId  name  required") — find custom IDs.
+#   raw METHOD PATH [DATA]          Escape hatch. DATA may be inline JSON or
+#                                   @file.json. Prints the raw response.
+#   aliases                         List the JQL aliases below.
+#   help | -h | --help              Print this header (also printed with no args).
+#
+# JQL aliases — run as `jira <alias>` or `jira jql <alias>`; they inherit all
+# jql flags (--max / --fields / --json / --token / --all):
+#   mine        my open issues           open        all open issues
+#   recent      recently updated         unassigned  open & unassigned
+#   new         created in last 7 days    children KEY  child issues of KEY
+#                                         (an Epic's Stories / an issue's subtasks)
+#
+# Reads/search/metadata/transitions/plain comments/simple edits go here.
+# Complex ADF writes (Story custom fields, template clones) stay on the Rovo
+# MCP — see the oc-fn-func-design skill (rest-api.md) for the policy.
+
+set -euo pipefail
+
+SITE="${JIRA_SITE:-opencellsoft.atlassian.net}"
+PROJECT="${JIRA_PROJECT:-INTRD}"
+BASE="https://$SITE/rest/api/3"
+MAX_PAGES="${JIRA_MAX_PAGES:-100}"
+
+# Common JQL aliases — short names that expand to full queries (project-scoped
+# to $PROJECT, so JIRA_PROJECT still applies). A "%s" marks a KEY slot supplied
+# as the next positional arg. Usable as `jira <alias>` or `jira jql <alias>`;
+# they ride on cmd_jql, so all its flags (--max/--fields/--json/--token/--all) apply.
+declare -A JQL_ALIASES=(
+  [mine]="project = $PROJECT AND assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC"
+  [open]="project = $PROJECT AND statusCategory != Done ORDER BY updated DESC"
+  [recent]="project = $PROJECT ORDER BY updated DESC"
+  [unassigned]="project = $PROJECT AND assignee IS EMPTY AND statusCategory != Done ORDER BY created DESC"
+  [new]="project = $PROJECT AND created >= -7d ORDER BY created DESC"
+  [children]="parent = %s ORDER BY created ASC"
+)
+
+die() { echo "jira: $*" >&2; exit 1; }
+
+# Validated here rather than at assignment, where die() does not exist yet. Left
+# unchecked, a typo reaches the arithmetic guard as an unbound variable (bash's
+# own diagnostic, not ours), and 0 silently returns nothing at all.
+[[ "$MAX_PAGES" =~ ^[1-9][0-9]*$ ]] || die "JIRA_MAX_PAGES must be a positive integer, got '$MAX_PAGES'"
+
+# Scratch buffer for `jql --all`. Global, not a cmd_jql local, because the EXIT
+# trap fires after the function's locals are gone — a trap referencing a local
+# would itself die under `set -u` and, being the last command, overwrite the
+# script's exit status. `return 0` keeps the trap from doing that too.
+JQL_TMP=""
+cleanup_jql() { [[ -n "${JQL_TMP:-}" ]] && rm -f "$JQL_TMP"; JQL_TMP=""; return 0; }
+trap cleanup_jql EXIT
+
+# Refuse to run if ~/.netrc lacks an entry for the site. Warning and carrying on is not enough:
+# curl then sends the request unauthenticated, and Jira answers it as an anonymous user who sees
+# nothing, so `count` prints 0 and `jql` prints no issues, both with exit 0 (observed 2026-11-08).
+preflight_auth() {
+    if [[ ! -f "$HOME/.netrc" ]] || ! grep -q "$SITE" "$HOME/.netrc" 2>/dev/null; then
+        echo "jira: no ~/.netrc entry for $SITE — add:" >&2
+        echo "  machine $SITE login <you@domain> password <API_TOKEN>" >&2
+        echo "  (chmod 600 ~/.netrc; token at https://id.atlassian.com/manage/api-tokens)" >&2
+        exit 1
+    fi
+}
+
+# curl with netrc auth, JSON accept, and HTTP-error surfacing (body kept on 4xx/5xx).
+api() {
+    local method="$1" path="$2"; shift 2
+    curl -nsS --fail-with-body \
+        -X "$method" \
+        -H "Accept: application/json" \
+        "$@" \
+        "$BASE$path"
+}
+
+# Run an api call, capturing the body into RESP without tripping `set -e`, and
+# returning curl's exit status. Lets callers surface an HTTP error cleanly
+# instead of piping the error body into a projection jq (which then errors on
+# the unexpected shape and adds noise). Usage: fetch GET /path … || fail_resp
+RESP=""
+fetch() {
+    set +e; RESP="$(api "$@")"; local rc=$?; set -e
+    return "$rc"
+}
+fail_resp() { printf 'jira: API error\n%s\n' "$RESP" >&2; exit 1; }
+
+# jq prelude: ADF document -> plain text, and a generic field-value renderer.
+read -r -d '' JQ_LIB <<'JQ' || true
+def adf:
+  def walk:
+    if type == "object" then
+      (.type) as $t
+      | if   $t == "text"      then (.text // "")
+        elif $t == "hardBreak" then "\n"
+        elif $t == "rule"      then "\n---\n"
+        else
+          ((.content // []) | map(walk) | join("")) as $in
+          | if   $t == "paragraph"  then $in + "\n"
+            elif $t == "heading"    then "\n" + (("#" * (.attrs.level // 1))) + " " + $in + "\n"
+            elif $t == "listItem"   then "- " + $in
+            elif $t == "codeBlock"  then "```\n" + $in + "```\n"
+            elif $t == "blockquote" then "> " + $in
+            elif $t == "tableRow"   then $in + "\n"
+            elif ($t == "tableCell" or $t == "tableHeader") then $in + " | "
+            else $in end
+        end
+    elif type == "array" then (map(walk) | join(""))
+    else "" end;
+  walk;
+def render:
+  if   type == "object" then
+         if   (.type? == "doc")        then adf
+         elif (.name? != null)         then .name
+         elif (.value? != null)        then .value
+         elif (.displayName? != null)  then .displayName
+         elif (.key? != null)          then (.key + (if .fields?.summary then " — \(.fields.summary)" else "" end))
+         else tojson end
+  elif type == "array"  then (map(render) | join(", "))
+  else tostring end;
+JQ
+
+cmd_get() {
+    [[ $# -ge 1 ]] || die "usage: jira get KEY [fields] [--json]"
+    local key="$1"; shift
+    local fields="summary,status,issuetype,priority,assignee,parent,labels,description"
+    local raw=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --json) raw=true ;;
+            # Without this, a mistyped flag becomes the field list: `jira get KEY
+            # --jsno` would request fields=--jsno and exit 0 with plausible-looking
+            # but wrong output. cmd_jql already rejects unknown args; match it.
+            --*)    die "jira get: unknown flag '$1'" ;;
+            *)      fields="$1" ;;
+        esac
+        shift
+    done
+    fetch GET "/issue/$key?fields=$fields" || fail_resp
+    if $raw; then
+        printf '%s' "$RESP" | jq .
+    else
+        printf '%s' "$RESP" | jq -r "$JQ_LIB"'
+            "\(.key)\n" + (.fields | to_entries
+              | map(select(.value != null))
+              | map("\(.key): \(.value | render)") | join("\n"))'
+    fi
+}
+
+cmd_jql() {
+    [[ $# -ge 1 ]] || die "usage: jira jql 'QUERY'|<alias> [KEY] [--fields=a,b] [--max=N] [--token=T] [--all] [--json]"
+    local query="$1"; shift
+    if [[ -n "${JQL_ALIASES[$query]+x}" ]]; then
+        local alias="$query"
+        query="${JQL_ALIASES[$alias]}"
+        if [[ "$query" == *%s* ]]; then
+            [[ $# -ge 1 && "$1" != --* ]] || die "alias '$alias' needs a KEY, e.g. jira $alias INTRD-1949"
+            query="${query//%s/$1}"; shift
+        fi
+    fi
+    local fields='["summary","status","issuetype","assignee","updated"]'
+    local max=10 raw=false token="" all=false max_set=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --fields=*) fields="$(echo "${1#*=}" | jq -R 'split(",")')" ;;
+            --max=*)    max="${1#*=}"; max_set=true ;;
+            --token=*)  token="${1#*=}" ;;
+            --all)      all=true ;;
+            --json)     raw=true ;;
+            *)          die "jira jql: unknown arg '$1'" ;;
+        esac
+        shift
+    done
+    [[ "$max" =~ ^[1-9][0-9]*$ ]] || die "jira jql: --max must be a positive integer, got '$max'"
+    # Under --all, --max is the page size, not a total. Default it to the API
+    # maximum so a full drain costs the fewest round trips; an explicit --max
+    # still wins (useful to keep individual responses small).
+    if $all && ! $max_set; then max=100; fi
+
+    # --all buffers to a temp file rather than a shell variable: a full drain can
+    # run to thousands of issues, well past what is comfortable in argv.
+    # A drain can buffer megabytes, and `--all | head` is exactly what the flag
+    # invites — without the EXIT trap above, SIGPIPE leaks the file every time.
+    local acc="" page=0 drained=true
+    if $all; then JQL_TMP="$(mktemp -t jira-jql.XXXXXX)"; acc="$JQL_TMP"; fi
+
+    while : ; do
+        page=$((page + 1))
+        if $all && (( page > MAX_PAGES )); then
+            echo "jira jql: stopped at the $MAX_PAGES-page guard — raise JIRA_MAX_PAGES, narrow the query," >&2
+            echo "          or resume from here with --token=$token" >&2
+            drained=false
+            break
+        fi
+        local body
+        body="$(jq -nc --arg jql "$query" --argjson fields "$fields" \
+                      --argjson max "$max" --arg token "$token" \
+                      '{jql:$jql, fields:$fields, maxResults:$max}
+                       + (if $token == "" then {} else {nextPageToken:$token} end)')"
+        fetch POST "/search/jql" -H "Content-Type: application/json" --data "$body" || fail_resp
+        if $all; then
+            printf '%s' "$RESP" | jq -c '.issues[]?' >> "$acc"
+            token="$(printf '%s' "$RESP" | jq -r '.nextPageToken // empty')"
+            [[ -n "$token" ]] || break
+        elif $raw; then
+            printf '%s' "$RESP" | jq .
+            break
+        else
+            printf '%s' "$RESP" | jq -r '
+                (.issues[]? | "\(.key)\t\(.fields.status.name // "?")\t\(.fields.summary // "")"),
+                (if .nextPageToken then "…more (rerun with --token=\(.nextPageToken))" else empty end)'
+            break
+        fi
+    done
+
+    if $all; then
+        if $raw; then
+            # Same envelope as a single page minus the spent cursor, so
+            # `jq '.issues[]'` and `.isLast` read identically either way.
+            jq -s --argjson isLast "$drained" '{isLast: $isLast, issues: .}' "$acc"
+        else
+            jq -r '"\(.key)\t\(.fields.status.name // "?")\t\(.fields.summary // "")"' "$acc"
+        fi
+        cleanup_jql
+        # A truncated drain must not look like a complete one. --json carries
+        # isLast:false, but line mode has no in-band signal, so use the status.
+        $drained || exit 2
+    fi
+}
+
+cmd_count() {
+    [[ $# -eq 1 ]] || die "usage: jira count 'QUERY'"
+    fetch POST "/search/approximate-count" -H "Content-Type: application/json" \
+          --data "$(jq -nc --arg jql "$1" '{jql:$jql}')" || fail_resp
+    printf '%s' "$RESP" | jq -r '.count'
+}
+
+cmd_transitions() {
+    [[ $# -eq 1 ]] || die "usage: jira transitions KEY"
+    fetch GET "/issue/$1/transitions" || fail_resp
+    printf '%s' "$RESP" | jq -r '.transitions[] | "\(.id)\t\(.name)"'
+}
+
+cmd_transition() {
+    [[ $# -eq 2 ]] || die "usage: jira transition KEY ID"
+    fetch POST "/issue/$1/transitions" -H "Content-Type: application/json" \
+          --data "$(jq -nc --arg id "$2" '{transition:{id:$id}}')" || fail_resp
+    echo "ok: $1 transitioned ($2)"
+}
+
+cmd_comment() {
+    [[ $# -eq 2 ]] || die "usage: jira comment KEY 'TEXT'"
+    local body
+    body="$(jq -nc --arg t "$2" \
+        '{body:{type:"doc",version:1,content:[{type:"paragraph",content:[{type:"text",text:$t}]}]}}')"
+    fetch POST "/issue/$1/comment" -H "Content-Type: application/json" --data "$body" || fail_resp
+    printf '%s' "$RESP" | jq -r --arg key "$1" '"ok: comment #\(.id) on \($key)"'
+}
+
+cmd_meta() {
+    [[ $# -eq 1 ]] || die "usage: jira meta ISSUETYPE_ID"
+    fetch GET "/issue/createmeta/$PROJECT/issuetypes/$1" || fail_resp
+    printf '%s' "$RESP" | jq -r '.fields[]? | "\(.fieldId)\t\(.name)\trequired=\(.required)"'
+}
+
+cmd_raw() {
+    [[ $# -ge 2 ]] || die "usage: jira raw METHOD PATH [DATA|@file.json]"
+    local method="$1" path="$2"; shift 2
+    if [[ $# -ge 1 ]]; then
+        api "$method" "$path" -H "Content-Type: application/json" --data "$1"
+    else
+        api "$method" "$path"
+    fi
+}
+
+cmd_aliases() {
+    local k
+    for k in $(printf '%s\n' "${!JQL_ALIASES[@]}" | sort); do
+        printf '%-11s %s\n' "$k" "${JQL_ALIASES[$k]}"
+    done
+}
+
+usage() {
+    awk 'NR>=3 { if ($0 !~ /^#/ && $0 != "") exit; sub(/^# ?/, ""); print }' "$0"
+}
+
+main() {
+    [[ $# -ge 1 ]] || { usage; exit 1; }
+    local sub="$1"; shift
+    case "$sub" in
+        get)         preflight_auth; cmd_get "$@" ;;
+        jql)         preflight_auth; cmd_jql "$@" ;;
+        count)       preflight_auth; cmd_count "$@" ;;
+        transitions) preflight_auth; cmd_transitions "$@" ;;
+        transition)  preflight_auth; cmd_transition "$@" ;;
+        comment)     preflight_auth; cmd_comment "$@" ;;
+        meta)        preflight_auth; cmd_meta "$@" ;;
+        raw)         preflight_auth; cmd_raw "$@" ;;
+        aliases)     cmd_aliases ;;
+        help|-h|--help) usage ;;
+        *)
+            if [[ -n "${JQL_ALIASES[$sub]+x}" ]]; then
+                preflight_auth; cmd_jql "$sub" "$@"
+            else
+                die "unknown subcommand '$sub' (try: jira help)"
+            fi ;;
+    esac
+}
+
+main "$@"

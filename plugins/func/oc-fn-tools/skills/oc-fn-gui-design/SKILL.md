@@ -1,7 +1,7 @@
 ---
 name: oc-fn-gui-design
-version: 1.3.1
-updated: 2026-09-21T11:15:00+02:00
+version: 1.4.0
+updated: 2026-11-08T16:19:00+01:00
 author: Stéphane Chambrin
 description: >
   Design GUI-impacting Opencell User Stories against the real Opencell Design System in Figma —
@@ -74,11 +74,21 @@ marketplace — the same pattern as the Atlassian Rovo connector. Confirm it at 
 **Two surfaces, split by job.** The MCP does search, tokens, screenshots, styling context, and
 authoring — but it **cannot list a file's pages** (`get_metadata` returns only the *Cover* page).
 The **Figma REST API** fills that gap: the `figma` helper (`figma pages` / `find` / `screens`)
-enumerates pages and screens. So:
+enumerates pages and screens.
+
+- **It ships with this skill**, at `bin/figma` under this skill's base directory (shown when the
+  skill loads). Call it by that path unless `command -v figma` finds it on `PATH`.
+- **It needs a Figma personal access token in `~/.netrc`**, one line per user (`figma-rest.md` §
+  *Auth*). Probe once per session with `figma me`; without the line it exits 1 before any request.
+- **Without a token there is no automated discovery**: the MCP alone sees only the Cover page. Ask
+  the user once for a link to the frame (*Copy link to selection*), and mention the one-line setup.
+
+So:
 
 - **Design system** — library-scoped `search_design_system` / `get_variable_defs` (MCP), page-independent.
 - **Screen discovery** — `figma pages` / `find` / `screens` (REST); enumerate screens yourself, then
-  hand a node id to the MCP for the picture and styling. Don't send the user hunting for node-URLs.
+  hand a node id to the MCP for the picture and styling. When the helper works, don't send the user
+  hunting for node-URLs.
 - **Authoring** — `use_figma` (Mode B), MCP only.
 
 File keys, the library key, seats/scopes, the REST discovery commands, and the node-URL recipe live
