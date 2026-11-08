@@ -1,7 +1,7 @@
 ---
 name: oc-fn-portal
-version: 1.8.0
-updated: 2026-10-23T16:10:00+02:00
+version: 1.9.0
+updated: 2026-11-08T01:21:04+01:00
 author: Stéphane Chambrin
 description: >
   Drive the Opencell Portal (React SPA) through the Playwright MCP server to navigate pages,
@@ -102,11 +102,19 @@ Auth is handled by **Keycloak (OpenID Connect)**: navigating to `OC_PORTAL_URL` 
 a `…/auth/realms/opencell/protocol/openid-connect/auth?…` URL that serves a hosted login form.
 The persistent profile usually keeps the Keycloak session alive, so **most sessions need no login**.
 
+**A sandbox may be asleep.** SoberCloud sandboxes (`*.oc-nsb.eu`) suspend when idle and wake on the
+first request. While one wakes, every URL on its host (the Portal, Keycloak, the API) answers
+**HTTP 200 with a holding page** titled *Réveil en cours · SoberCloud*. Measured on `scn2`: about
+2 minutes (2026-08-07 and 2026-11-08), although the page itself warns it can take up to 8. If the
+first navigation lands on that page, wait 30 s and navigate again. Nothing seen before the Portal
+answers says anything about the product: not a blank page, not a failed login, not a `curl` that
+returns HTML where JSON was expected.
+
 1. **Check first.** `browser_navigate` to `OC_PORTAL_URL`. If the result URL is the portal (page title `Opencell | Portal`), you're already in — skip to the task. If it's an `…/auth/realms/opencell/…` URL, log in.
 2. **The Keycloak form** has a `Username or email` textbox, a `Password` textbox, and a `Sign In` button — plus an `Opencell Internal` broker link for SSO, which you **ignore** (use the username/password form). `Read` the snapshot `.yml` once to get the field `target` ids, then `browser_fill_form` both fields and click `Sign In`.
 3. **Credentials — pass the password's *key name*, never its value.** Read `OC_PORTAL_USER` from the credentials file (Bash — not sensitive) and fill it literally. For the password, fill the **string `OC_PORTAL_PASS`**: the server is registered with `--secrets` pointing at that same credentials file, so Playwright substitutes the real value on the way in and redacts it on the way out. **Never try to read the password itself** — the permission classifier refuses it and refuses every workaround (see `setup.md` § 6, which also covers what to do when `--secrets` isn't in effect yet: hand the user a checklist, don't chase the secret).
 4. **Settle, then verify.** After the redirect the SPA renders — the page title goes `Opencell | Portal` → `- Opencell` and the home hub appears. Give it a moment (`browser_wait_for`) before screenshotting; a capture can take several seconds on slower hardware (hence `--timeout-action=30000`).
-5. **Probe that clicks land — once, before any interaction sequence that matters.** Click **one** control with an unmistakable observable effect (switch a tab, expand a menu) and confirm the effect actually happened. If it did not, **stop**: this session cannot drive this app. Fall back to read-only navigation + screenshots and tell the user. Skip the probe only for a pure navigate-and-capture errand where you never click anything.
+5. **Probe that clicks land — once, before any interaction sequence that matters.** Click **one** control with an unmistakable observable effect (switch a tab, expand a menu) and confirm the effect actually happened. If it did not, **stop**: this session cannot drive this app. Fall back to read-only navigation + screenshots and tell the user. **Read-only UI can still be opened with a DOM click** through `browser_evaluate` (`element.click()` on the element): a menu, a tab, the version panel. Observed on `scn2` on 2026-11-08, where Playwright's clicks were inert on the version panel and a menu item and the DOM click opened both. Never use it to save, submit or trigger anything, and say you used it. Skip the probe only for a pure navigate-and-capture errand where you never click anything.
 
 **The failure this probe catches is silent.** `browser_click` reports success and the generated
 Playwright line looks exactly right (`getByRole('button', { name: 'Edit' }).click()`) while nothing

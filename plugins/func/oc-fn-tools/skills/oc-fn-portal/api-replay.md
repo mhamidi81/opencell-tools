@@ -51,6 +51,10 @@ Three details, each of which costs a failed attempt if you get it wrong:
   (`KEYCLOAK_APP_TOKEN_REFRESH_RATE`). A sudden `401` halfway through a sequence is an expired
   token, not a permissions change.
 
+**On a sleeping sandbox, every call below first returns SoberCloud's HTML holding page with HTTP
+200** (`SKILL.md` § *Login & session*): `jq` then fails to parse, and the token call gets no token.
+Wait until `/v2/version` answers JSON before reading anything.
+
 Credentials come from the same file the rest of the skill uses,
 `~/.config/oc-fn-portal/credentials` (`OC_PORTAL_URL`, `OC_PORTAL_USER`, `OC_PORTAL_PASS`; see
 `setup.md`). **Keep `OC_PORTAL_PASS` out of argv and out of your shell history the same way you
@@ -112,24 +116,38 @@ entirely. (The fix is `--secrets` on the MCP registration, which fills the passw
 revealing it — `setup.md` § 6. Until that is in effect, do not chase the secret.) Don't stop there and
 ask the user either: the build constants are readable unauthenticated.
 
+**They come in two forms, depending on the build.** Older builds carry them **by name** in the shell
+chunk `assets/index-<hash>.js`. Current builds inline them **without their names**: on the
+`19.0.0-SNAPSHOT` build seen on `scn2` on 2026-11-08, `index-<hash>.js` was a 32 KB loader, and the
+three values sat side by side, as minified variables, in the `app-<hash>.js` chunk it loads (2.7 MB).
+The block tries both:
+
 ```bash
 BASE="https://<host>/opencell/frontend/<TENANT>/portal"
 IDX=$(curl -s "$BASE/" | grep -oE 'assets/index-[^"]+\.js' | head -1)
+# older builds: named, in the shell chunk
 curl -s "$BASE/$IDX" \
   | grep -oE 'VITE_APP_GIT_SHA[A-Z_]*:"[^"]{1,60}"|npm_package_version:"[^"]{1,40}"'
+# current builds: version, sha and date side by side, unnamed, in the app chunk
+APP=$(curl -s "$BASE/$IDX" | grep -oE 'app-[A-Za-z0-9_-]+\.js' | head -1)
+curl -s "$BASE/assets/$APP" \
+  | grep -oE '="[0-9]+\.[0-9]+\.[0-9]+[-A-Za-z0-9.]*",[A-Za-z_$][A-Za-z0-9_$]*="[0-9a-f]{40}",[A-Za-z_$][A-Za-z0-9_$]*="[0-9]{10}"'
 ```
 
-| Key | Meaning |
-|---|---|
-| `VITE_APP_GIT_SHA` | full 40-char commit sha of the Portal build |
-| `VITE_APP_GIT_SHA_DATE` | commit date, **epoch seconds** (`git log -1 --format=%ct`) |
-| `npm_package_version` | the Portal version, e.g. `18.2.0-SNAPSHOT` |
+| Value | Named form | Meaning |
+|---|---|---|
+| sha | `VITE_APP_GIT_SHA` | full 40-char commit sha of the Portal build |
+| date | `VITE_APP_GIT_SHA_DATE` | commit date, **epoch seconds** (`git log -1 --format=%ct`) |
+| version | `npm_package_version` | the Portal version, e.g. `18.2.0-SNAPSHOT` |
+
+In the unnamed form the order is version, sha, date, as in
+`="19.0.0-SNAPSHOT",vkt="ba6e37e2c52e2ae4ed5e99d788ac697d4df91b1e",Ikt="1793958142"`. That match is
+positional, not named, so only the verification below makes it usable.
 
 They are present **by construction, not by luck**: `package.json`'s `build` script sets
-`VITE_APP_GIT_SHA=$(git rev-parse HEAD)` and `VITE_APP_GIT_SHA_DATE=$(git log -1 --format=%ct)`, and
-`vite.config.js` carries `define: { 'process.env': process.env, … }`, which inlines the whole
-build-machine env into the bundle. The shell chunk is ~18 MB uncompressed — **pipe it, or `curl -o` to
-the scratchpad; never `Read` it.**
+`VITE_APP_GIT_SHA=$(git rev-parse HEAD)` and `VITE_APP_GIT_SHA_DATE=$(git log -1 --format=%ct)`. How
+the build inlines them changed between August and November 2026, which is why both forms are given.
+**Pipe the chunk, never `Read` it.**
 
 **Verification is mandatory, not optional.** A sha lifted out of a bundle is a claim until it is
 placed. Two independent checks, both cheap:
@@ -137,7 +155,7 @@ placed. Two independent checks, both cheap:
 ```bash
 cd $GIT_HOME/opencell-portal
 git cat-file -t <sha>                                     # must resolve to `commit`
-git log -1 --format=%ct <sha>                             # must equal VITE_APP_GIT_SHA_DATE exactly
+git log -1 --format=%ct <sha>                             # must equal the bundle's date exactly
 git log -1 --format='%cd %an: %s' --date=iso-strict <sha>  # for the record
 ```
 
@@ -145,12 +163,13 @@ If the sha does not resolve, **or** the dates disagree, stop — fall back to th
 user. Do not report the value.
 
 > **This is a lookup, not an inference — the ban below still stands in full.** Reading one *fixed,
-> known* key that the build pipeline guarantees is in the shell chunk is not the same act as searching
+> known* value that the build pipeline guarantees is in the bundle is not the same act as searching
 > served code for feature-specific symbols to decide whether a change is deployed. That second thing
 > remains forbidden, for the reasons in the block further down: it produced a wrong, publicly
 > retracted conclusion, and it cannot work. The test: if you are grepping for a **name you chose
 > because of the feature under review**, you are inferring — stop. If you are reading
-> `VITE_APP_GIT_SHA`, you are looking up a constant, and the answer is verifiable against the repo.
+> the build's sha, version and date, you are looking up a constant, and the answer is verifiable
+> against the repo.
 
 *Worked example, verified 2026-08-03 on `energie-18.oc-nsb.eu`:* the bundle gave
 `VITE_APP_GIT_SHA:"dab5763e58786868d0b70067a29ffef6e5611df4"`,
@@ -158,6 +177,12 @@ user. Do not report the value.
 resolved to `commit` and `git log -1 --format=%ct` returned `1785763585` — an exact match — for
 *Merged in bugfix/INTRD-45534-regportal-error-loading-invo-18x* by Vladimir Morev. Both checks passed,
 so the value could be used.
+
+*Unnamed form, verified 2026-11-08 on `scn2.oc-nsb.eu`:* the app chunk gave `19.0.0-SNAPSHOT`,
+`ba6e37e2c52e2ae4ed5e99d788ac697d4df91b1e` and `1793958142`. `git cat-file -t` resolved to `commit`
+and `git log -1 --format=%ct` returned `1793958142`, an exact match, for *Merged in
+mhamidi/bugfix/dev/INTRD-49348-pdp-status-chip-colors*. It was also the build the UI version panel
+showed.
 
 **Then place each sha in its local checkout** — a bare sha tells you nothing until you locate it.
 **Find the branch first:** sandboxes commonly run a release branch, not `dev`, and comparing against
