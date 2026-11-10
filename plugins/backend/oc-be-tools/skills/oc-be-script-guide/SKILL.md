@@ -29,11 +29,13 @@ LIB=""
 [ -n "$OC_SCRIPT_LIBRARY" ] && [ -d "$OC_SCRIPT_LIBRARY/src/main/java/org/meveo/service/script" ] && LIB="$OC_SCRIPT_LIBRARY"
 # 2. the clone managed by oc-be-tools, kept on main
 MANAGED="$HOME/.claude/oc-be-tools/opencell-script-library"
+URL="git@ssh.bitbucket.org:opencellsoft/opencell-script-library.git"   # Bitbucket SSH host since 12 Nov 2026
 if [ -z "$LIB" ]; then
   if [ -d "$MANAGED/.git" ]; then
+    git -C "$MANAGED" remote set-url origin "$URL"   # a clone made on bitbucket.org before the move
     git -C "$MANAGED" pull -q --ff-only || echo "WARN: could not update $MANAGED, using it as is"
   else
-    mkdir -p "$(dirname "$MANAGED")" && git clone -q git@bitbucket.org:opencellsoft/opencell-script-library.git "$MANAGED"
+    mkdir -p "$(dirname "$MANAGED")" && git clone -q "$URL" "$MANAGED" || echo "ERROR: could not clone. If the message says 'Host key verification failed', accept the Bitbucket SSH host once with: ssh -T git@ssh.bitbucket.org"
   fi
   [ -d "$MANAGED/src/main/java/org/meveo/service/script" ] && LIB="$MANAGED"
 fi
