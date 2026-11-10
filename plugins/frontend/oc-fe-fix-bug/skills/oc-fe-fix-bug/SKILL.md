@@ -183,6 +183,20 @@ Directly after the Vitest step, protect the screens the fix touched:
 - **This step is blocking.** If it reports a genuine application regression, stop and fix the
   regression before continuing to the tag and commit steps — do not weaken the spec.
 
+### Step 6c: Post the Fix Evidence on the Ticket
+
+Once the regression step is green, show the fix working for real:
+
+- Run `/oc-fe-fix-evidence [TICKET-NUMBER]`.
+- It asks the developer which backend server to use (`SERVER_URL`), starts the local portal of
+  this branch against it, replays the ticket's reproduction steps in a real browser, and posts
+  one Jira comment with the screenshots and the screencast attached.
+- The developer signs in by hand with their Microsoft account the first time per server;
+  never ask for or handle the password.
+- **This step is not blocking.** If it cannot record or post (no token, no display, test data
+  missing on the server), report why and continue. The exception: if the recording shows the
+  bug is **still present on a real backend**, the fix is not done — go back to Step 5.
+
 ### Step 7: Mark the Ticket as Handled by the Frontend AI Dev
 
 Once the bug is fixed, add the tag `ai_Dev_Front` to the JIRA **AI field** (`customfield_10613`) to record that the frontend AI dev addressed the ticket.
