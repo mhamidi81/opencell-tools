@@ -77,6 +77,9 @@ def check_manifest(manifest):
         return "the scenario did not pass: " + str(manifest.get("error"))
     if not manifest.get("backendVerified"):
         return "no API call reached the chosen backend, so this is not a real-backend run"
+    if manifest.get("restored") is False:
+        return ("a user setting the scenario changed was not restored: "
+                + str(manifest.get("restoreError") or "restore() kept reporting a change"))
     if not manifest.get("screenshots") and not manifest.get("video"):
         return "the run produced no screenshot and no video"
     return None

@@ -14,11 +14,22 @@
  *
  * Exit codes: 0 ok · 1 scenario failed · 2 usage / Playwright missing ·
  *             3 session missing or expired (run `login`) · 4 login timed out ·
- *             5 scenario reported missing test data (DATA_MISSING: ...)
+ *             5 scenario reported missing test data (DATA_MISSING: ...) ·
+ *             6 recorded, but a user setting the scenario changed was NOT restored
  *
  * The scenario is an ES module:
- *   export default async ({ page, step, shot, portalUrl, serverUrl }) => { ... }
- * `step(text)` records a human-readable step; `shot(label)` takes a screenshot.
+ *   export default async ({ page, step, shot, mark, portalUrl, serverUrl }) => { ... }
+ *   export async function restore({ page, portalUrl, serverUrl }) { ...; return changed; }
+ * `step(text)` records a human-readable step; `shot(label)` takes a screenshot;
+ * `mark(locator)` requires the element to be really visible, scrolls it into
+ * view and outlines it, so the next screenshot shows what the step claims.
+ *
+ * `restore` is optional and is for scenarios that had to change one of the
+ * signed-in user's own settings (the portal language, for instance). It runs
+ * after the recording in fresh, unrecorded sessions: it must put the setting
+ * back and return true when it had to change something, false when everything
+ * was already right. The run only counts as restored once a fresh session
+ * returns false.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -103,6 +114,53 @@ async function pinServer(context, serverUrl) {
   });
 }
 
+/** Outline `locator` after proving a person could actually see it. */
+async function markVisible(page, locator) {
+  const target = locator.first();
+  await target.waitFor({ state: 'visible', timeout: 20_000 });
+  await target.scrollIntoViewIfNeeded();
+  const box = await target.boundingBox();
+  const view = page.viewportSize();
+  const onScreen = box && box.width > 0 && box.height > 0
+    && box.y >= 0 && box.x >= 0 && box.y + box.height <= view.height && box.x + box.width <= view.width;
+  const hit = onScreen && await target.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return !!top && (el === top || el.contains(top) || top.contains(el));
+  });
+  if (!hit) throw new Error('mark(): the element is in the page but not visible on screen');
+  await target.evaluate((el) => {
+    const box = el.closest('.MuiFormControl-root') || el;
+    box.style.outline = '3px solid #e53935';
+    box.style.outlineOffset = '4px';
+  });
+  await page.waitForTimeout(1200);
+}
+
+async function restoreSettings(chromium, options, scenario, manifest) {
+  if (typeof scenario?.restore !== 'function') return;
+  manifest.restored = false;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const context = await browser.newContext({ viewport: VIEWPORT, storageState: options.auth });
+      await pinServer(context, options.server);
+      const page = await context.newPage();
+      await page.goto(options.portal, { waitUntil: 'domcontentloaded' });
+      if (!(await waitSettled(page, options.portal, SESSION_TIMEOUT_MS))) break;
+      const changed = await scenario.restore({
+        page, portalUrl: options.portal, serverUrl: options.server
+      });
+      await page.waitForTimeout(3000);           // let the write reach the server
+      if (!changed) { manifest.restored = true; break; }
+    } catch (error) {
+      manifest.restoreError = String(error?.message || error);
+    } finally {
+      await browser.close();
+    }
+  }
+}
+
 async function waitSettled(page, portalUrl, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   let stableSince = 0;
@@ -179,17 +237,19 @@ async function run(options) {
     manifest.screenshots.push({ file, label: String(label) });
   };
   const step = (text) => { manifest.steps.push(String(text)); };
+  const mark = (locator) => markVisible(page, locator);
 
   let code = 0;
+  let scenario = null;
   try {
     await page.goto(options.portal, { waitUntil: 'domcontentloaded' });
     if (!(await waitSettled(page, options.portal, SESSION_TIMEOUT_MS))) {
       manifest.error = 'saved session missing or expired';
       code = 3;
     } else {
-      const scenario = await import(pathToFileURL(path.resolve(options.scenario)).href);
+      scenario = await import(pathToFileURL(path.resolve(options.scenario)).href);
       await scenario.default({
-        page, step, shot, portalUrl: options.portal, serverUrl: options.server
+        page, step, shot, mark, portalUrl: options.portal, serverUrl: options.server
       });
       manifest.ok = true;
     }
@@ -209,6 +269,11 @@ async function run(options) {
     } catch { /* no video produced */ }
   }
   await browser.close();
+
+  if (code !== 3) {
+    await restoreSettings(chromium, options, scenario, manifest);
+    if (manifest.restored === false && code === 0) code = 6;
+  }
 
   manifest.backendVerified = manifest.backendRequests > 0;
   manifest.finishedAt = new Date().toISOString();
