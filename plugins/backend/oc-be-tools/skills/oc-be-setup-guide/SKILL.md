@@ -26,11 +26,13 @@ REPO=""
 [ -n "$OC_SETUP_EXPORT" ] && [ -f "$OC_SETUP_EXPORT/tools/setup_export.py" ] && REPO="$OC_SETUP_EXPORT"
 # 2. the clone managed by oc-be-tools
 MANAGED="$HOME/.claude/oc-be-tools/opencell-setup-export"
+URL="git@ssh.bitbucket.org:opencellsoft/opencell-setup-export.git"   # Bitbucket SSH host since 12 Nov 2026
 if [ -z "$REPO" ]; then
   if [ -d "$MANAGED/.git" ]; then
+    git -C "$MANAGED" remote set-url origin "$URL"   # a clone made on bitbucket.org before the move
     git -C "$MANAGED" fetch -q origin || echo "WARN: could not update $MANAGED, using it as is"
   else
-    mkdir -p "$(dirname "$MANAGED")" && git clone -q git@bitbucket.org:opencellsoft/opencell-setup-export.git "$MANAGED"
+    mkdir -p "$(dirname "$MANAGED")" && git clone -q "$URL" "$MANAGED" || echo "ERROR: could not clone. If the message says 'Host key verification failed', accept the Bitbucket SSH host once with: ssh -T git@ssh.bitbucket.org"
   fi
   [ -f "$MANAGED/tools/setup_export.py" ] && REPO="$MANAGED"
 fi
