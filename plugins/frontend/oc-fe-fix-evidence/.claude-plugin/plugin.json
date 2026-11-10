@@ -1,5 +1,5 @@
 {
   "name": "oc-fe-fix-evidence",
   "description": "Record a fixed OpenCell Portal bug in a real browser against a real backend and post the screenshots and screencast as a Jira comment",
-  "version": "1.0.0"
+  "version": "1.0.1"
 }

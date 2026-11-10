@@ -85,6 +85,14 @@ def test_failed_or_mocked_runs_are_refused(tmp_path):
         assert jira.attached == [] and jira.posted == []
 
 
+def test_an_unrestored_user_setting_blocks_the_post(tmp_path):
+    jira = FakeJira()
+    bad = {**MANIFEST, "restored": False, "restoreError": "flag not found"}
+    assert je.post(jira, args(), bad, str(tmp_path), log=lambda *_: None) == 3
+    assert jira.attached == [] and jira.posted == []
+    assert je.check_manifest({**MANIFEST, "restored": True}) is None
+
+
 def test_multipart_carries_name_and_type():
     data, boundary = je.encode_multipart("a.webm", b"VID", boundary="B")
     assert data.startswith(b"--B\r\n") and data.endswith(b"\r\n--B--\r\n")
@@ -110,5 +118,10 @@ def test_packaging():
     skill = (PLUGIN / "skills" / "oc-fe-fix-evidence" / "SKILL.md").read_text()
     # The recording must never reuse the mocked regression harness.
     assert "app-boot.ts" in skill and "must not" in skill.lower()
+    # The checkout is chosen before anything is recorded or posted.
+    assert skill.index("portal_checkout.py select") < skill.index("jira_evidence.py check") \
+        < skill.index("evidence_run.mjs run") < skill.index("jira_evidence.py post")
+    runner = (SCRIPTS / "evidence_run.mjs").read_text()
+    assert "restoreSettings" in runner and "markVisible" in runner
     fix_bug = (REPO / "plugins/frontend/oc-fe-fix-bug/skills/oc-fe-fix-bug/SKILL.md").read_text()
     assert fix_bug.index("Step 6b") < fix_bug.index("/oc-fe-fix-evidence") < fix_bug.index("### Step 7")
