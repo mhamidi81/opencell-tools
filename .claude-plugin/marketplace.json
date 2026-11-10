@@ -66,7 +66,7 @@
     {
       "name": "oc-be-tools",
       "source": "./plugins/backend/oc-be-tools",
-      "description": "Backend development toolkit for Opencell Core — agents for building entities, services, APIs, tests, and Postman collections, guideline-loading skills, an implementation orchestrator (/oc-be-implement), a guideline-based code review command (/oc-be-review), and an AI-usage recorder (/oc-be-calculate-ai-use) that a Stop hook offers automatically once a ticket's work is committed"
+      "description": "Backend development toolkit for Opencell Core — agents for building entities, services, APIs, tests, and Postman collections, guideline-loading skills, an implementation orchestrator (/oc-be-implement), a guideline-based code review command (/oc-be-review), a Postman SETUP generator from an Opencell environment (/oc-be-generate-setup, opencell-setup-export tool), and an AI-usage recorder (/oc-be-calculate-ai-use) that a Stop hook offers automatically once a ticket's work is committed"
     },
     {
       "name": "oc-ov-tools",
