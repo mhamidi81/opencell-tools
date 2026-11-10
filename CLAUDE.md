@@ -150,6 +150,20 @@ The skills chain together into a standard workflow:
   short-circuits `onAuthSuccess` and deadlocks the profile bootstrap. The step is
   **blocking**: a genuine screen regression stops the workflow, and weakening or skipping an
   assertion to reach green is forbidden.
+- `/oc-fe-fix-evidence` runs as **Step 6c of `/oc-fe-fix-bug`**, after the regression step: it
+  replays the ticket's reproduction steps in a real browser and posts one Jira comment with
+  screenshots and a screencast. It is the **opposite of `/oc-fe-regression-test` on purpose** —
+  a **real backend, no mocks, no `app-boot.ts`**, and a throwaway scenario that is never
+  committed. Five things must survive any edit: it **always asks** which server to use for
+  `SERVER_URL`; the developer signs in **by hand** with their Microsoft account (the skill never
+  sees a password — the session is saved per server under `~/.claude/oc-fe-tools/evidence/auth/`);
+  the backend is set by `VITE_SERVER_URL` plus an in-browser `app-properties.js` override, so
+  **no tracked file is edited**; `jira_evidence.py` **refuses** a run whose manifest shows no
+  API call reaching the chosen server; and the duplicate guard is a `fix-evidence:<state>`
+  marker in the comment body, because comments are append-only. The upload uses Jira REST
+  (`JIRA_EMAIL` + `JIRA_API_TOKEN`) since the Atlassian MCP cannot attach files, and the
+  comment uses **API v2** because wiki markup embeds an attachment by file name. The step is
+  **non-blocking**, unlike 6b. Tests: `python3 -m pytest plugins/frontend/oc-fe-fix-evidence/tests -q`.
 - `/oc-be-implement` orchestrates a full backend ticket across the `oc-be-*` builder agents; `/oc-be-review` reviews backend changes via `oc-be-pr-reviewer`.
 - `/oc-be-generate-script` drafts the Opencell script(s) a ticket needs (hook point, business template or starter, `JAVA` / `JAVA_CLASS`, transaction strategy, configuration to do) from the **Opencell script library** (`opencellsoft/opencell-script-library`, cloned on first use under `~/.claude/oc-be-tools/` or taken from `$OC_SCRIPT_LIBRARY`), and checks a `JAVA` script compiles on a development instance with the library's `tools/compile_on_instance.py` (created disabled, then deleted; never deployed). The knowledge sits in the `oc-be-script-guide` skill, so any script work, including `oc-ov-tools:oc-ov-script-builder`, can load the same rules; in an overlay the skill reads `oc-ov-tools`' `OVERLAY_SCRIPTS.md` rather than restating it.
 - `/oc-fe-calculate-ai-use` measures AI contribution/retention on the last commit (or working tree) of **opencell-portal** and records it on the ticket. It runs **automatically as the last step of `/oc-pull-request`** (and remains usable on its own): a human comment, the `ai_Dev_Front` / `ai_test_front_dev` tags on `customfield_10613`, and a machine-readable record in the AI-metrics field (`customfield_10745`). It is the frontend twin of `/oc-be-tools:oc-be-calculate-ai-use` and **must keep the shared parts identical** — see the AI-usage measurement convention below. Two rules make the automatic invocation safe, and both matter to any future caller: `--if-not-recorded` **exits silently** when the ticket already holds a record for that exact commit sha (`addCommentToJiraIssue` is append-only — only `customfield_10745` is an upsert — so a re-run would otherwise post a second comment), and `--run` resolves the AI-stats directory by **`[TICKET-NUMBER]-*` prefix**, not "newest directory", so a developer who switched tickets in one checkout cannot have the other ticket's sub-agent manifests attributed here.
