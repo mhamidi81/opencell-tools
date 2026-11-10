@@ -13,7 +13,8 @@ A Jira ticket key (e.g. `INTRD-41234`). If none is given, ask for one. Optional 
 
 - `--base-url <url>`: REST base URL of the development instance for the compile check (default:
   `$OC_BASE`, else `http://localhost:8080/opencell/api/rest`).
-- `--no-compile`: skip the compile check (say so in the wrap-up).
+- `--no-compile`: skip the compile check (say so in the wrap-up). Refused when the library branch is not
+  the one of the target Opencell version (`oc-be-script-guide` § 1).
 
 ## Critical rules
 
@@ -132,7 +133,8 @@ first?"** Block until answered.
 
 ## Phase 5: Compile check
 
-Skip only with `--no-compile`, and say so.
+Skip only with `--no-compile`, and say so. When the library branch is not the one of the target Opencell
+version, the check is mandatory and runs on an instance of the target version.
 
 - **`JAVA`**: the credentials come from `OC_USER` / `OC_PASS` in the environment of the Claude Code
   session (never ask the developer to paste them in the conversation; if they are missing, explain how
@@ -158,6 +160,7 @@ Report the result per script: compiled at round N, or the remaining errors.
 
 ### Files
 Branch: <branch> in <repository root>
+Script library: branch <library branch> for Opencell <target version> (<tested | not the target version: a contract may differ>)
 - [<FileName>](<absolute path>) (Created) — <hook point id>, <JAVA | JAVA_CLASS>, compiled on <url> at round <N> | not compiled: <why>
 
 Give each file as a link to its **absolute path**, so the developer opens it in one click from the
