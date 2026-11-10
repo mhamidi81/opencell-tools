@@ -64,17 +64,23 @@ are not proposed.
 2. For each chosen module with more than one entity, show the numbered list of its entities (with counts) and ask
    in one line: all (empty answer), exclude (`-3,5`), or only (`2,4`). Then ask whether a code filter is needed
    (`OfferTemplate=off_cyber_%`, `Product=CODE1,CODE2`); none by default.
-3. Build the configuration:
+3. Ask, in one line, for which instance and user the generated environment is made: the base URL (for example
+   `https://<project>-dev.opencell.com/opencell`) and the user; default: the catalogue values
+   (`http://localhost:8080/opencell`, `opencell.admin`). Never ask for the password: it is always written empty,
+   the developer types it in Postman (current value) or passes it at replay time.
+4. Build the configuration:
 
    ```bash
    python3 "$REPO/tools/setup_export.py" build-config --preset <P> | --modules "<M1>,<M2>" \
      [--exclude <E1,E2>] [--only <E1,E2>] [--filter "<Entity>=<pattern>"] \
-     [--collection-name "<name>"] --out <work dir>/setup-config.json
+     [--collection-name "<name>"] [--target-base <url>] [--target-user <user>] \
+     --out <work dir>/setup-config.json
    ```
 
-4. Show the result: modules and entities in replay order, **the dependencies the tool added and why**, the
-   filters, and any warning (an excluded entity another one depends on).
-5. **`AskUserQuestion`: "Approve this choice?"** — **Approve** / **Change** / **Stop**. On Change, go back to
+5. Show the result: modules and entities in replay order, **the dependencies the tool added and why**, the
+   filters, the target URL and user of the generated environment, and any warning (an excluded entity another
+   one depends on).
+6. **`AskUserQuestion`: "Approve this choice?"** — **Approve** / **Change** / **Stop**. On Change, go back to
    step 2.
 
 ## Phase 3: Configure (checkpoint)
