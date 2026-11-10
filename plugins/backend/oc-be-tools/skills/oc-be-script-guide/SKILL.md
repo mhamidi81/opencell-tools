@@ -27,13 +27,13 @@ generalized from customer projects. This skill locates it and says in which orde
 LIB=""
 # 1. an explicit location (a developer's own working clone)
 [ -n "$OC_SCRIPT_LIBRARY" ] && [ -d "$OC_SCRIPT_LIBRARY/src/main/java/org/meveo/service/script" ] && LIB="$OC_SCRIPT_LIBRARY"
-# 2. the clone managed by oc-be-tools, kept on main
+# 2. the clone managed by oc-be-tools, on the branch of the target Opencell version (below)
 MANAGED="$HOME/.claude/oc-be-tools/opencell-script-library"
 URL="git@ssh.bitbucket.org:opencellsoft/opencell-script-library.git"   # Bitbucket SSH host since 12 Nov 2026
 if [ -z "$LIB" ]; then
   if [ -d "$MANAGED/.git" ]; then
     git -C "$MANAGED" remote set-url origin "$URL"   # a clone made on bitbucket.org before the move
-    git -C "$MANAGED" pull -q --ff-only || echo "WARN: could not update $MANAGED, using it as is"
+    git -C "$MANAGED" fetch -q origin || echo "WARN: could not update $MANAGED, using it as is"
   else
     mkdir -p "$(dirname "$MANAGED")" && git clone -q "$URL" "$MANAGED" || echo "ERROR: could not clone. If the message says 'Host key verification failed', accept the Bitbucket SSH host once with: ssh -T git@ssh.bitbucket.org"
   fi
@@ -42,10 +42,41 @@ fi
 echo "$LIB"
 ```
 
-- Never `pull` the developer's own clone (`OC_SCRIPT_LIBRARY`): it may hold work in progress. If it is
-  behind `origin/main`, say so.
+- Never `pull` or switch the branch of the developer's own clone (`OC_SCRIPT_LIBRARY`): it may hold work
+  in progress. Say which branch it is on, and if it is not the branch of the target version.
 - If `LIB` is empty (no access to the repository), **stop** and say so: generating a script without the
   hook point contracts produces code that compiles and fails at run time.
+
+### Pick the branch of the Opencell version
+
+The contracts quote core classes and lines, and the core compiles a `JAVA` script against its own war: the
+library has **one branch per Opencell version** (`18.X`, …), `tested-versions.json` lists the versions a
+branch was proven on, and `main` follows the latest one.
+
+1. The **target version** is the version the script is written for: in `opencell-core`, the `<version>` of
+   the root `pom.xml` (`18.3.0-SNAPSHOT` → 18); in an overlay, the Opencell version it builds against; with
+   neither, the version of the instance of the compile check (`GET <base-url>/v2/version`). Ask the
+   developer when none of them says it.
+2. In the managed clone, check out the branch of that version, or the latest branch when it has none:
+
+   ```bash
+   MAJOR=<major of the target version>   # 18 for 18.3.0-SNAPSHOT
+   if [ "$LIB" = "$MANAGED" ]; then
+     BR="$MAJOR.X"
+     git -C "$MANAGED" rev-parse -q --verify "origin/$BR" >/dev/null \
+       || BR=$(git -C "$MANAGED" branch -r --format='%(refname:lstrip=3)' | grep -E '^[0-9]+\.X$' | sort -V | tail -1)
+     BR="${BR:-main}"                     # no version branch at all: main
+     git -C "$MANAGED" checkout -q "$BR" && git -C "$MANAGED" pull -q --ff-only \
+       || echo "WARN: could not update $MANAGED, using it as is"
+     echo "library branch: $BR"
+   fi
+   ```
+
+3. When the branch is not the one of the target version (for example a `dev` core in 19.0.0-SNAPSHOT and a
+   library that only has `18.X`), or the target minor version is not in `tested-versions.json`, **say so**:
+   "library proven on <branch>, script written for <version>: a contract may differ". The compile check on
+   an instance of the target version is then **mandatory** (no `--no-compile`), and the wrap-up repeats the
+   warning.
 
 ## 2. Read, in this order
 
