@@ -1,0 +1,28 @@
+{
+  "_class": "org.jenkinsci.plugins.workflow.job.WorkflowRun",
+  "number": 4970,
+  "result": "SUCCESS",
+  "building": false,
+  "url": "https://jenkins.opencell.eu/job/dev/4970/",
+  "actions": [
+    {"_class": "hudson.model.CauseAction", "causes": [{"_class": "org.jenkinsci.plugins.parameterizedscheduler.ParameterizedTimerTriggerCause", "shortDescription": "Started by timer with parameters: {version=dev, build_core=true, build_front=true, build_storybook=true, action=update, ASSETS_URL=/opencell/frontend/DEMO/portal/, SERVER_URL=https://dev.oc-nsb.eu, VITE_APP_BASE_URL= /opencell/frontend/DEMO/portal/, to_mail=dev1@example.com,dev2@example.com, dev3@example.com}"}]},
+    {"_class": "hudson.model.ParametersAction", "parameters": [
+      {"_class": "hudson.model.StringParameterValue", "name": "version", "value": "dev"},
+      {"_class": "hudson.model.BooleanParameterValue", "name": "build_core", "value": true},
+      {"_class": "hudson.model.BooleanParameterValue", "name": "build_front", "value": true},
+      {"_class": "hudson.model.BooleanParameterValue", "name": "build_storybook", "value": true},
+      {"_class": "hudson.model.StringParameterValue", "name": "action", "value": "update"},
+      {"_class": "hudson.model.StringParameterValue", "name": "sandboxType", "value": "sandbox"},
+      {"_class": "hudson.model.BooleanParameterValue", "name": "runCollectionSuites", "value": false},
+      {"_class": "hudson.model.StringParameterValue", "name": "SERVER_URL", "value": "https://dev.oc-nsb.eu"},
+      {"_class": "hudson.model.BooleanParameterValue", "name": "force_kc", "value": false},
+      {"_class": "hudson.model.StringParameterValue", "name": "to_mail", "value": "dev1@example.com,dev2@example.com, dev3@example.com"},
+      {"_class": "hudson.model.StringParameterValue", "name": "cc_mail", "value": ""}
+    ]},
+    {"_class": "jenkins.metrics.impl.TimeInQueueAction"},
+    {},
+    {"_class": "hudson.plugins.git.util.BuildData", "remoteUrls": ["https://gitlab.example/ops/jenkins.git"], "lastBuiltRevision": {"SHA1": "f7b33d8991f42852cda961f2d3454de30a3c7464"}},
+    {"_class": "hudson.plugins.git.util.BuildData", "remoteUrls": ["https://bitbucket.org/opencellsoft/opencell-core/src/master/"], "lastBuiltRevision": {"SHA1": "943a211f645c2f9776c9b59e354465ae32268074"}},
+    {"_class": "hudson.plugins.git.util.BuildData", "remoteUrls": ["git@bitbucket.org:opencellsoft/opencell-portal.git"], "lastBuiltRevision": {"SHA1": "e8dbdc60285b7032862e78b44ebabea626c41bca"}}
+  ]
+}

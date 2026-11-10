@@ -1,0 +1,5 @@
+{
+  "name": "oc-fe-check-jenkins-build",
+  "description": "Check the latest Jenkins build of a branch (default dev); when it failed in the frontend stages (Checkout Front / Build Front), diagnose the log, fix opencell-portal under INTRD-22890 (local build must pass), open and merge the PR, then re-run the job with the failed build's parameters and watch the frontend stages. Fully automatic, one fix attempt per run. Jenkins via REST (JENKINS_USER + JENKINS_API_TOKEN), Bitbucket via REST.",
+  "version": "1.0.0"
+}
