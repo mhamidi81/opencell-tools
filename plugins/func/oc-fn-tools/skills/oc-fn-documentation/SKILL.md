@@ -1,9 +1,9 @@
 ---
 name: oc-fn-documentation
-version: 1.7.0
-updated: 2026-10-09T22:40:00+02:00
+version: 1.8.2
+updated: 2026-11-08T16:19:00+01:00
 author: Stéphane Chambrin
-description: Rules and conventions for creating and updating Confluence documentation pages in the Opencell documentation space (opencellsoft.atlassian.net/wiki/spaces/docs). Use this skill whenever the user mentions Confluence, documentation, a "Concepts" page, a "User Manual" page, or asks to document anything for Opencell. Always load this skill before any Atlassian Rovo Confluence tool call targeting the docs space. Also covers linking each documented Story to its pages from Jira.
+description: Rules and conventions for creating and updating Confluence documentation pages in the Opencell documentation space (opencellsoft.atlassian.net/wiki/spaces/docs). Use this skill whenever the user mentions Confluence, documentation, a "Concepts" page, a "User Manual" page, or asks to document anything for Opencell. Always load this skill before any Atlassian Rovo Confluence tool call targeting the docs space. Also covers linking each documented Story to its pages from Jira, the rule that pages never mention defects, and publishing a set of pages when the CPO says so.
 ---
 
 # Confluence — Opencell Documentation Space
@@ -25,6 +25,10 @@ The connector is the portable path, but it is **not the only one**: on a machine
 carries the Atlassian host, the Confluence REST API answers `curl -n` directly (verified on
 `sabretooth`, 2026-08-07) — see § *Page update workflow* for when to prefer it. Everything else in
 this skill — the rules, the audience constraints, the HTML patterns — applies to both transports.
+
+Where this skill runs `jira …`, it means the `jira` helper that ships with `oc-fn-func-design`
+(`bin/jira` under that skill's directory). Its setup, its once-per-session probe and the Rovo MCP
+fallback when the user has no Jira token are in that skill's § *Transport*.
 
 ## Instance
 
@@ -57,8 +61,9 @@ them against the live instance before each create/update.
 2. **Format:** Always create/update pages in **HTML format** — never Markdown.
    Markdown strips heading colors and rich formatting. HTML is round-trip safe
    and supports all required Confluence elements (see patterns below).
-3. **Status:** Always save as **DRAFT**. Never publish directly.
-   The docs owner reviews and publishes manually. On updates to already-published
+3. **Status:** Always save as **DRAFT**. Publish only when the CPO says so, for
+   the pages named, and only through § *Publishing a set of pages*. Otherwise
+   the docs owner reviews and publishes manually. On updates to already-published
    pages, `status: "draft"` creates an unpublished revision while the live
    version remains visible to readers.
 4. **Template:** Use global template ID `913080328` ("Documentation page") on
@@ -76,12 +81,31 @@ them against the live instance before each create/update.
    body, not inside a panel, and **not in the `versionMessage`** (page history is
    readable by anyone with access to the page). This holds even when the ticket
    is the most precise way to say it, and even when the reference is labelled
-   "internal ref." — labelling it does not make it publishable. State the change
-   and the version instead: *"planned for a future version"*, *"corrected by the
-   same future change"*, *"from 18.0.0 onwards"*. Traceability to the ticket
+   "internal ref." — labelling it does not make it publishable. State the version
+   instead when it helps, such as *"from 18.0.0 onwards"*. Traceability to the ticket
    belongs in Jira and in the design repo, both of which the docs owner can
    reach; the published page cannot. The Story points at the page, never the
    reverse: see § *Link each Story to the pages that document it*.
+7. **Never mention a defect** (CPO ruling, 2026-10-12). No known-limitation panel
+   describing a bug, no *"not yet taken into account"*, no *"a correction is
+   planned"*, no *"in current versions"* hinting at a fix, no workaround for a bug,
+   no *"known defects in this sample"*. Defects belong in Jira, release notes and
+   support. Where a defect breaks a behaviour, the page **says nothing about it,
+   and never promises it either**: remove or neutralise the sentence that claims
+   the broken effect. While invoices ignored the specific trading price,
+   *"the customer is charged this price"* became *"rating uses this price"*, and
+   the invoice pages stopped describing that case. Record what to restore when
+   the fix ships outside the page (the design repo), with the release it waits
+   for. Not defects, and kept:
+   - design limits and scalability advice (*"no pagination on this job"*,
+     *"split the period on a large database"*);
+   - capability statements (*"not supported"*) and roadmap lists;
+   - a limit stated as the setting that sets it (*"an export holds at most 1,000
+     items by default: the advanced setting `genericExport.limitation.default`
+     sets this limit"*).
+
+   The ruling removed such text from nine pages on 2026-10-12, including the
+   CPO's own section on UBL discount defects.
 
 ## Space Structure — Parent Pages
 
@@ -102,15 +126,25 @@ content never reached the working version and had to be rebuilt.)
 
 ### The working version and when it is published
 
-Stated by the CPO on 2026-10-09:
+Stated by the CPO on 2026-10-09 and 2026-10-12:
 
 - **The working version is the up-to-date documentation.** Customers read it on
   the knowledge center (`knowledgecenter.opencellsoft.com`, K15t Scroll Sites),
   where every link opens it by default; saved versions are one click away in the
   version picker. `docs.opencellsoft.com` is only a small public subset.
-- **A change is published when the version it describes is released**, minor or
-  major. So a draft may sit until its release: when you save one, tell the user
-  which version it waits for, so the docs owner publishes it at the right time.
+- **A change is published at the first release that ships it**, minor or major.
+  Customers on every minor read the working version, and versions are saved only
+  at a major: the 18.0.0 copy never receives 18.2.0 changes. So a draft may sit
+  until its release: when you save one, tell the user which version it waits
+  for, so the docs owner publishes it at the right time.
+- **Decide by the release tags, not by the fix version.** A Story whose fix
+  version is 19.0.0 but whose code is already in the 18.2.0 or 18.1.0 tag is
+  published now. Content that first ships in 18.3.0 waits for 18.3.0, even on a
+  page published today. Check with `git tag --contains <commit>` or by reading the
+  tag (`git show 18.2.0:<path>`), in Core and in the Portal.
+- **A Story at *Ready for Sprint Review* is PO-validated.** That status comes after
+  *To Review by PO*; the sprint review is a demo, not a gate. Document and publish
+  it like a Done Story.
 - **A published page holds a single unpublished draft.** Before drafting a change
   for a later version on a page whose draft already carries a change for an
   earlier version, stop and tell the user: the docs owner could no longer
@@ -180,6 +214,62 @@ quote and order pages, 2026-10-09):
 - **Take UI labels from the Portal's English i18n** (`src/i18n/common-resources.en.json`
   and the module's `i18n/en.json`), not from the Story's EN/FR label pairs,
   which drift: the Stories say *Calculate*, the button reads *Re-calculate quote*.
+- **Before a page is published, check every statement against the release tag**,
+  not only against the Stories. On 2026-10-12 most of 78 pages written from
+  Stories needed corrections. Most were Story claims that were never built:
+  - a save button said to stay disabled, which is not;
+  - a tooltip that does not exist;
+  - saved grid layouts that users without user-management rights never get back.
+
+  Labels had drifted too. Remove what was not built; describe what was built
+  instead only when a Story describes it. **A reproduced defect report beats a
+  code reading.** Two invoice pages, checked against the code, still promised a
+  catalog price on invoices that a Bug had reproduced as never applied. Search
+  the open Bugs on the feature before trusting a reading.
+
+## Publishing a set of pages
+
+Only when the CPO says so, for the pages named (Rule 3). Done this way for 78 pages
+on 2026-10-12; the kits, scripts and review records are in `opencell-features-design`,
+`documentation/20261012_docs-publish/` and `documentation/20261012_docs-publish-2/`.
+
+1. **Check each page twice.** A checker traces every statement to the release tag and
+   fixes what the release does not do (§ *Source of Truth*, Rule 7). A second reviewer
+   then tries to find anything a reader of that release must not read. Keep the final
+   bodies and the evidence in the design repo, not only in Confluence.
+2. **Guard each page just before publishing it.** Skip the page and say why when:
+   - its draft was saved after the check, so someone edited it since;
+   - its body contains a tracker key (Rule 6);
+   - an image it shows is not attached, or is not an image file. An error body
+     saved as `.png` renders broken: on 2026-10-09 a migration copied an attachment
+     from a page that existed only as a draft without `status=draft`, and uploaded
+     the 291-byte 404 response. Check the first bytes of every small image.
+3. **Publish** with `PUT /wiki/api/v2/pages/{id}`, `status: "current"`, the version
+   after the live one (`1` for a page never published) and an empty version message.
+   Publish first the pages that others link to, starting with pages never published.
+   Read each page back: version, text, images.
+4. **Then replace the page's editor draft with the published body.** Publishing
+   through the API leaves the earlier editor draft in place (all 23 pages of the
+   first run, 2026-10-12). Opened in the editor, that draft offers the
+   pre-publication text, and publishing it from there undoes the publication. Save
+   the published body as the draft (`status: "draft"`, version `1`), then check that
+   the live version did not move. A `409` a second after publishing is Confluence
+   saving its own draft; retry.
+5. **Link the Stories** (§ below), then **move them in Jira** only once every page
+   they link to is live with no pending draft.
+
+**Jira transitions of the documentation flow** (INTRD, verified 2026-10-08 to
+2026-10-12). Released or Ready for Release follows the `released` flag of the fix
+version.
+
+| From | Transition | To |
+|---|---|---|
+| Ready for Sprint Review | 181 *Documentation needed* (assigns the Story to whoever runs it) | Need Documentation |
+| Ready for Sprint Review | 651 *No documentation needed* | Ready for Release |
+| Ready for Sprint Review, Need Documentation | 261 *Released* | Released |
+| Need Documentation | 121 *Documented before release* | Ready for Release |
+| Need Documentation | 371 *Documented after release* | Released |
+| Backport | 161 *Release* | Released |
 
 ## Link each Story to the pages that document it
 
@@ -334,7 +424,7 @@ existing content and orphans any media nodes it contained.
 
 **Large pages: prefer direct REST over the MCP.** On a machine whose `~/.netrc`
 carries the Atlassian host, `curl -n https://<site>/wiki/api/v2/pages/{id}?body-format=atlas_doc_format`
-works — the same pattern `bin/jira` uses for Jira. That matters because Rule 3's
+works — the same pattern the `jira` helper uses for Jira. That matters because Rule 3's
 full-body reconstruction means a whole page must round-trip: through the MCP it
 lands in context twice (fetch, then re-send), while over REST it can be edited
 **surgically in a file** — locate the node, change it, `PUT` the result — which

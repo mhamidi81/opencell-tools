@@ -1,0 +1,5 @@
+{
+  "name": "oc-reports",
+  "description": "Opencell team reports from Jira + Tempo, as three skills sharing one set of scripts (plugin scripts/ folder) and one 54-person developer roster: /oc-reports:oc-time-report - estimation-vs-logged report, one row per ticket with per-area (Backend/Frontend/QA) estimates, logged and sub-bug hours split AI / non-AI, gains, overhead; /oc-reports:oc-noai-report - which tickets reached test/review/done WITHOUT AI-logged time (per ticket x area, totals by area and month, no-AI details); /oc-reports:oc-ai-report - aggregates the AI-metrics JSON records (contribution, retention, tests, requests) per area/user/ticket with estimates, logged hours and gains. Ticket date = first sent to test (Jira status history). Date-stamped HTML (+CSV) to ./docs/. Read-only; Jira via direct REST (mandatory JIRA_API_TOKEN), Tempo per-user (TEMPO_API_TOKEN); no Atlassian MCP.",
+  "version": "1.0.0"
+}

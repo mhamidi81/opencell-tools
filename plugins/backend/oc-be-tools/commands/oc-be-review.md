@@ -1,31 +1,34 @@
 ---
-description: Evaluate Opencell backend code changes against the project guidelines using the oc-be-pr-reviewer agent, plus a requirements-conformance check against the JIRA ticket's acceptance criteria and test scenarios, augmented with a SonarQube quality-gate summary. Reviews uncommitted changes, a specific Bitbucket PR, or lets you pick from open PRs, and tags the JIRA ticket ai_code_review_back.
-argument-hint: "[PR-number | list] [light]"
+description: Review Opencell backend changes in an isolated, reproducible run — fresh headless Claude processes with no conversation, no user memory and no personal settings, pinned to one model and effort, judging a frozen input bundle (diff, ticket acceptance items split by script, agreed scope, guideline rule catalogue, deterministic mechanical checks) with the verdict computed by script — plus a SonarQube quality-gate summary. Reviews uncommitted changes, a commit range, a specific Bitbucket PR, or lets you pick from open PRs; records the reviewed code state for the commit hold and /oc-be-calculate-ai-use, and tags the JIRA ticket ai_code_review_back.
+argument-hint: "[PR-number | list | range <A>..<B>]"
 ---
 
 # Review Backend Changes
 
 You evaluate Opencell backend code changes and produce a review with an approval decision, along **two** axes:
 
-1. **Coding-guideline conformance** — performed by the `oc-be-tools:oc-be-pr-reviewer` agent, which reads the guideline files in `${CLAUDE_PLUGIN_ROOT}/guidelines/` (the same guidelines used to generate the code). This is *how* the code is written.
-2. **Requirements conformance** — performed by the `oc-be-tools:oc-be-conformance-reviewer` agent(s): does the code actually implement the ticket's acceptance criteria, and is each documented test scenario covered? This is *whether the feature was delivered*. See **Requirements Conformance review** below. It runs on **every** review.
+1. **Coding-guideline conformance** — every rule of a fixed catalogue (the `oc-be-tools:oc-be-pr-reviewer` criteria, read against the guideline files in `${CLAUDE_PLUGIN_ROOT}/guidelines/`) gets PASS / FAIL / N/A. This is *how* the code is written.
+2. **Requirements conformance** — every acceptance item of the ticket (and of the agreed scope) gets PRESENT / PARTIAL / ABSENT, every test scenario COVERED / PARTIAL / NOT COVERED (the `oc-be-tools:oc-be-conformance-reviewer` method). This is *whether the feature was delivered*.
 
 A guideline-clean change can still be incomplete against its ticket; both axes must pass for an APPROVE.
 
+> **Why the review runs isolated.** A review run inside the developer's session sees the conversation that produced the code and the developer's personal memory, and an unconstrained reviewer builds its own checklist each time — so the developer, a re-run and the dev lead got different reports. The review is therefore **not** done in this conversation. You (the orchestrator) only resolve the ticket, freeze the inputs and present the result; `${CLAUDE_PLUGIN_ROOT}/scripts/isolated_review.py` does the rest:
+> - **Same input:** the diff, the ticket's acceptance items (split from the Jira fields *by script* into a numbered list), the agreed scope, the rule catalogue and deterministic mechanical checks (javax, `var`, AGPL header, Liquibase current/rebuild pairing, `{{$timestamp}}`) go into a bundle; the same code gives a byte-identical bundle.
+> - **Same reviewer:** each axis runs as a fresh headless `claude -p` process — no conversation, no user `CLAUDE.md`, no auto-memory, no `settings.local.json`, no plugin hooks — pinned to **opus, effort high**, read-only tools, answering in a JSON schema that demands a status for *every* rule and item.
+> - **Same rules for the verdict:** the score and APPROVE / CHANGES_REQUESTED are computed by the script from those statuses; the model never picks the verdict.
+> - **Fresh every time:** a report is never reused; every run reviews anew. The script only records *that* a code state was reviewed (and the verdict), for the commit hold and `/oc-be-calculate-ai-use`.
+>
+> Do not add your own review findings, re-judge items, or soften the verdict: present the script's report as is. You may explain a finding when asked.
+
 ## Argument Parsing
 
-Parse `$ARGUMENTS` into a **mode token** and an optional **depth modifier**. They can appear together in any order (e.g. `15042 light`, `light`, `list`).
-
-Mode token:
-- **No mode token** → **Mode LOCAL**: review the current uncommitted working-tree changes.
+Parse `$ARGUMENTS` into a **mode token**:
+- **No mode token** → **Mode LOCAL**: review the current uncommitted changes (tracked changes vs `HEAD` plus new untracked source files).
 - **A number** (e.g. `15042`) → **Mode PR**: review that pull request.
 - **`list`** (also accept `pr` or `prs`) → **Mode LIST**: list open pull requests and let the user choose one, then continue as Mode PR.
+- **`range <A>..<B>`** → **Mode RANGE**: review committed changes (e.g. `range HEAD~1..HEAD`), as Mode LOCAL but on that diff. `/oc-be-calculate-ai-use` uses it for work committed without a review.
 
-Depth modifier (controls the **Requirements Conformance** phase only):
-- **absent → DEEP (default)**: multi-agent conformance fan-out (thorough).
-- **`light`** (also accept `quick`) → **LIGHT**: single-pass conformance folded into the guideline reviewer (cheaper).
-
-> Distinguishing "no PR number" cases: a bare `/oc-be-tools:oc-be-review` always means *local uncommitted review*. To browse pull requests instead, the user must pass the `list` keyword. The `light` modifier never selects a mode by itself — `/oc-be-tools:oc-be-review light` is a *local, light-conformance* review.
+> A bare `/oc-be-tools:oc-be-review` always means *local uncommitted review*. To browse pull requests, pass `list`. The former `light` modifier is accepted and ignored: the isolated review always runs the same passes, which is what makes repeated runs comparable.
 
 ---
 
@@ -54,65 +57,58 @@ For example `/rename INTRD-45279 - review`; in PR mode with no resolvable ticket
 
 ---
 
-## Requirements Conformance review (ticket acceptance criteria)
+## The isolated review (shared by every mode)
 
-The guideline review checks *how* the code is written; this phase checks *whether it does what the ticket asked* — the difference between "conventions followed" and "feature delivered". It runs on **every** review. Depth is DEEP by default, LIGHT with the `light` modifier.
+### 1. Ticket fields
 
-### Fetch the ticket's criteria
+The review script needs the ticket's requirement fields: `summary`, `description`, `comment`, and the story custom fields `customfield_10134` Requirement, `customfield_10135` Functional design, `customfield_10136` Acceptance (test-case table or Gherkin), `customfield_10137` Technical design (valid for `opencellsoft.atlassian.net`). **Opencell stories keep their requirements in these custom fields; the `description` is usually empty.**
+- **Preferred:** pass `--fetch-jira` to `prepare` — the script reads them over Jira REST with `JIRA_EMAIL` + `JIRA_API_TOKEN` (the same credentials the report plugins use).
+- **Fallback** (those variables are not set): `getJiraIssue` (Atlassian MCP, cloudId `648ef912-b483-4da2-91af-73ea1e3fdad8`) with `fields` = the list above and `responseContentFormat: "adf"`, save the JSON response to a file, and pass it with `--ticket-json <file>`.
 
-With `[TICKET]` from **Resolve the ticket**, fetch it via Atlassian MCP: `getJiraIssue` with `fields: ["summary","description"]`. From the description, extract the structured requirement sections when present — headings such as *Acceptance Criteria*, *Test Scenarios*, *Behaviour & Flow*, *Deliverables*, *Messages & Errors*, *Data & Model Impact*, *API Surface*. Collect them verbatim into `[CRITERIA]` (what to build) and `[SCENARIOS]` (documented test cases).
+The script splits the fields into numbered items **deterministically**: test scenarios from the Acceptance field's test-case table rows (else Gherkin `Scenario` blocks, else bullets; a "Dataset" list is test data, never an item); criteria from the Functional design (else the Requirement); the "Expected" section of a bug's description; and the agreed scope. **Agreed scope:** bugs and enablers are specified in conversation; the `_planning.json` checkpoints in `.claude/cache/ai-stats/[TICKET]-*/` (written by `/oc-be-implement` after plan approval, or by the edit hook before the first ad-hoc code change) contribute their `acceptance[]` as criteria and their *required* `deliverables` as scenarios — read automatically from the repository. When nothing structured exists, the ticket summary is the single item, and the report says so. **Never add, merge or reword items yourself.**
 
-- If the ticket resolves but has **no structured criteria** (a terse ticket), note *"ticket has no structured acceptance criteria — conformance limited to the summary"* and do a best-effort pass against the summary. **Never fabricate criteria.**
-- The conformance agents have **no Atlassian access** — you (the orchestrator, which holds the MCP connection) fetch the ticket and **inject** `[CRITERIA]`/`[SCENARIOS]` into their prompts.
+### 2. Prepare, run, verdict
 
-### DEEP mode (default)
+```bash
+R="${CLAUDE_PLUGIN_ROOT}/scripts/isolated_review.py"
+python "$R" prepare --repo . --ticket [TICKET] --fetch-jira            # Mode LOCAL
+#   Mode RANGE: add --range <A>..<B>     Mode PR: add --diff-file <file holding [PR-DIFF]>
+#   no Jira credentials: replace --fetch-jira with --ticket-json <file>
+python "$R" run --bundle "<bundle printed by prepare>"                   # 3 isolated runs in parallel, minutes
+python "$R" verdict --bundle "<bundle>" --record                          # report.md on stdout; --record only in LOCAL/RANGE
+```
 
-Dispatch `oc-be-tools:oc-be-conformance-reviewer` agents **in parallel** (Task tool, `subagent_type: oc-be-tools:oc-be-conformance-reviewer`), splitting the work so each stays focused. Default split:
+- `prepare` prints the bundle directory (under `~/.claude/oc-be-tools/reviews/`), the number of files, criteria, scenarios and mechanical findings, and the input hash. If it reports an empty diff, tell the user there is nothing to review and stop.
+- `run` takes several minutes on a real change (three opus/high runs). Run it **in the background** (`run_in_background`) and wait for its completion notice; do not poll. Tell the user it is running and roughly how long.
+- `verdict` prints `report.md`: score, APPROVE / CHANGES_REQUESTED, the failed rules with `file:line` and fix, the acceptance-criteria and test-scenario tables, and suggestions. A run that did not complete (e.g. not logged in, timeout) makes the verdict CHANGES_REQUESTED and is listed at the top — report it; never fill the gap yourself.
 
-1. **Implementation conformance** — does the code implement each item in `[CRITERIA]` (rules, modes, data model, API surface, messages)? Each mapped to `file:line`, status PRESENT / PARTIAL / ABSENT.
-2. **Test-scenario coverage** — is each item in `[SCENARIOS]` covered by a test (unit `method @ file:line` and/or Postman request)? Status COVERED / PARTIAL / NOT COVERED.
+### 3. Final verdict
 
-If `[CRITERIA]` is large (roughly > 10 discrete items), split axis 1 across two agents by criterion cluster. Pass each agent: its scope hint, the relevant `[CRITERIA]`/`[SCENARIOS]` subset (injected verbatim), and the diff source — the full `[PR-DIFF]` in Mode PR, or "review the working tree via `git diff HEAD`" in Mode LOCAL. Merge the agents' tables into one **Requirements Conformance** section and read each agent's `**Conformance**:` line.
-
-### LIGHT mode (`light` modifier)
-
-Skip the fan-out. Inject `[CRITERIA]` and `[SCENARIOS]` into the single `oc-be-pr-reviewer` run (see each mode's review step) as an extra instruction: *"In addition to the guideline review, add a Requirements Conformance subsection mapping each acceptance criterion and documented test scenario to code / tests with `file:line`, status PRESENT/ABSENT and COVERED/NOT COVERED, and note any gaps."* One agent, one pass.
-
-### Verdict integration
-
-Fold conformance into the final decision at the same weight as a blocking Sonar issue:
-- Any acceptance criterion **ABSENT**, or any documented test scenario **NOT COVERED**, → the review is **failed** (`CHANGES_REQUESTED`) even if the guideline reviewer said APPROVE.
-- **PARTIAL** items are surfaced as required follow-ups; use judgement on whether they block, and say why.
-- Criteria that are purely frontend/GUI and unverifiable in the backend repo are marked **N/A (frontend)** and never block.
-
----
-
-## Final verdict
-
-The review's overall Status is the **most severe** of the three axes — any one can fail it:
+The overall Status is the **most severe** of the three axes:
 
 | Axis | Fails the review when |
 |------|-----------------------|
-| Guideline review (`oc-be-pr-reviewer`) | its `**Status**:` line is `CHANGES_REQUESTED` |
-| Requirements conformance | any acceptance criterion **ABSENT** or any documented test scenario **NOT COVERED** (any conformance agent `NONCONFORMANT`) |
+| Guidelines (script) | any **critical** or **major** rule FAIL (mechanical findings always FAIL their rule), or a rule not evaluated |
+| Requirements (script) | any criterion **ABSENT** or any scenario **NOT COVERED**, or an item not evaluated |
 | SonarQube | failing quality gate, or any BLOCKER/CRITICAL issue on the changed files |
 
-Overall = **APPROVE** only if all three pass; otherwise **CHANGES_REQUESTED**. When a non-guideline axis overrides a guideline APPROVE, state the one-line reason (e.g. *"guideline APPROVE overridden: 2 acceptance criteria unmet"*). Sonar and conformance skips (unavailable MCP, no ticket) do not fail the review — note them as skipped.
+The first two are already folded into the script's verdict; you add only Sonar: a Sonar failure turns an APPROVE into CHANGES_REQUESTED, with the one-line reason. A Sonar skip (MCP unavailable, branch not analysed) does not fail the review — note it as skipped. PARTIAL items are listed as follow-ups; frontend/GUI items are N/A and never block.
 
 ---
 
 ## Mode LOCAL — review uncommitted changes (no arguments)
 
-1. If there are no uncommitted changes, tell the user and stop.
-2. **Resolve the ticket** per the shared section (branch name; ask the user if unresolved), and fetch `[CRITERIA]`/`[SCENARIOS]` per **Requirements Conformance review**.
-3. **Guideline review** — dispatch the `oc-be-tools:oc-be-pr-reviewer` agent (Task tool, `subagent_type: oc-be-tools:oc-be-pr-reviewer`):
-   - "Review the current uncommitted working-tree changes against the Opencell guidelines. Use `git status --short`, `git diff --stat HEAD`, and `git diff HEAD` to obtain the changes. Provide the full review with a score and a final Status."
-   - **LIGHT mode only**: append the LIGHT-mode conformance instruction (inject `[CRITERIA]`/`[SCENARIOS]`) so this single agent also produces the conformance subsection.
-4. **Requirements conformance** — **DEEP mode**: run the DEEP fan-out (conformance agents told to "review the working tree via `git diff HEAD`"), merge their tables, read each `**Conformance**:` line. **LIGHT mode**: already produced in step 3.
-5. **SonarQube analysis** — run the **SonarQube analysis (opencell-core)** section against the current branch and append `[SONAR-SUMMARY]` to the report (skip gracefully if `oc-sonar-mcp` is unavailable or the branch has not been analysed).
-6. **Combine the verdict** per the **Final verdict** section (guideline Status + conformance + Sonar) and display the full combined report (guideline review + Requirements Conformance section + `[SONAR-SUMMARY]`).
-7. **Do not** write anything to Bitbucket in this mode — there is no PR.
-8. **Tag the JIRA ticket** (a review was run) — apply `ai_code_review_back` to the already-resolved `[TICKET]` per **Tag the JIRA ticket** below.
+1. If there are no uncommitted changes (`git status --short`, ignoring untracked non-source files), tell the user and stop.
+2. **Resolve the ticket** per the shared section (branch name; ask the user if unresolved).
+3. **Isolated review** — `prepare` (default diff), `run` in the background, `verdict --record`.
+4. **SonarQube analysis** — run the **SonarQube analysis (opencell-core)** section against the current branch and append `[SONAR-SUMMARY]` (skip gracefully if `oc-sonar-mcp` is unavailable or the branch has not been analysed).
+5. **Show the report** (`report.md` + `[SONAR-SUMMARY]` + the overall Status per the **Final verdict**). `--record` has stored the reviewed code state: the commit hold lets Claude's commit of exactly this change set through, and `/oc-be-calculate-ai-use` sees it as reviewed. Any further code change needs a new review.
+6. **Do not** write anything to Bitbucket in this mode — there is no PR.
+7. **Tag the JIRA ticket** (a review was run) — apply `ai_code_review_back` to the already-resolved `[TICKET]` per **Tag the JIRA ticket** below.
+
+## Mode RANGE — review committed changes (`range <A>..<B>`)
+
+As Mode LOCAL, with `prepare --range <A>..<B>`. `--record` stores "reviewed at commit `<B>`", which `/oc-be-calculate-ai-use` accepts for that commit. The conformance runs judge the code as it stands in the working tree, so run it with `<B>` (or a descendant) checked out.
 
 ---
 
@@ -150,23 +146,17 @@ Files:   [N] files changed
 Running review...
 ```
 
-### 4. Resolve the ticket and its criteria
+### 4. Resolve the ticket
 
-**Resolve the ticket** per the shared section (title → branch → commits; ask the user if unresolved), and fetch `[CRITERIA]`/`[SCENARIOS]` per **Requirements Conformance review**. Do this before the review so the criteria can be injected.
+**Resolve the ticket** per the shared section (title → branch → commits; ask the user if unresolved).
 
-### 5. Run the guideline review
+### 5. Isolated review
 
-Dispatch the `oc-be-tools:oc-be-pr-reviewer` agent (`subagent_type: oc-be-tools:oc-be-pr-reviewer`), passing:
-- The full `[PR-DIFF]` content.
-- The `[CHANGED-FILES]` list.
-- Context: "This is a review of PR #[PR-ID]: [PR-TITLE]. Review the provided diff against the Opencell guidelines. For each issue give the file path and line context, and a concrete fix. End with the final Status line."
-- **LIGHT mode only**: append the LIGHT-mode conformance instruction (inject `[CRITERIA]`/`[SCENARIOS]`) so this agent also produces the conformance subsection.
+Write `[PR-DIFF]` to a file and run the isolated review with `prepare --diff-file <file>` (plus `--fetch-jira` or `--ticket-json`), `run` in the background, then `verdict` **without** `--record` (a PR is not the local working tree). The conformance runs then judge from the diff only, because the local checkout is not necessarily the PR branch. When the PR's source branch is checked out locally, Mode RANGE on `<destination>..<source>` gives the conformance runs the full code to read.
 
-Extract the guideline decision from its `**Status**:` line (`APPROVE` / `CHANGES_REQUESTED`).
+### 6. Verdict
 
-### 6. Requirements conformance
-
-**DEEP mode**: run the DEEP fan-out per **Requirements Conformance review**, passing each conformance agent the `[PR-DIFF]` as the diff source; merge their tables and read each `**Conformance**:` line. **LIGHT mode**: already produced in step 5.
+Take the script's verdict and report; Sonar is added in step 7 per the **Final verdict**.
 
 ### 7. SonarQube analysis
 
@@ -175,13 +165,13 @@ Run the **SonarQube analysis (opencell-core)** section against `[PR-SOURCE-BRANC
 ### 8. Update the PR and tag the ticket (confirm first)
 
 Compute the combined verdict per the **Final verdict** section (guideline Status + conformance + Sonar). Posting to a pull request and tagging JIRA are outward-facing actions. **Show the user what will be posted and set, and ask for confirmation before writing.** Present:
-- The review comment body (the guideline report **plus the Requirements Conformance section** plus `[SONAR-SUMMARY]`, or a concise summary of each).
+- The review comment body: the script's `report.md` plus `[SONAR-SUMMARY]` (shorten only the tables if the comment would be too long — never the findings or the verdict).
 - The action: APPROVE (acceptable) or REQUEST CHANGES (failed), and the one-line reason if conformance or Sonar overrode a guideline APPROVE.
 - The JIRA tag: `ai_code_review_back` on `customfield_10613` of `[TICKET]`.
 
 On confirmation:
 
-1. Post the review as a comment (include the Requirements Conformance section and `[SONAR-SUMMARY]` in `[REVIEW-MARKDOWN]`):
+1. Post the review as a comment (`report.md` and `[SONAR-SUMMARY]` in `[REVIEW-MARKDOWN]`):
    - `POST /repositories/[REPO-OWNER]/[REPO-NAME]/pullrequests/[PR-ID]/comments`
    - body: `{ "content": { "raw": "[REVIEW-MARKDOWN]" } }`
 2. Set the verdict:
@@ -292,20 +282,17 @@ Create the token at **repo → Settings → Security → Access tokens** (or wor
 ## Examples
 
 ```bash
-# Review current uncommitted changes — DEEP conformance by default
+# Review the current uncommitted changes (isolated runs; records the reviewed state for the commit hold)
 /oc-be-tools:oc-be-review
 
-# Same, but LIGHT conformance (single-pass, cheaper)
-/oc-be-tools:oc-be-review light
+# Review committed changes, e.g. the last commit
+/oc-be-tools:oc-be-review range HEAD~1..HEAD
 
-# Review pull request #15042 (DEEP) and (after confirmation) approve or request changes
+# Review pull request #15042 and (after confirmation) approve or request changes
 /oc-be-tools:oc-be-review 15042
-
-# Review pull request #15042 with LIGHT conformance
-/oc-be-tools:oc-be-review 15042 light
 
 # List open PRs, pick one, then review it
 /oc-be-tools:oc-be-review list
 ```
 
-> Every review runs both axes — coding-guideline conformance **and** requirements conformance against the ticket's acceptance criteria / test scenarios. Conformance is DEEP (multi-agent) by default; add `light` for a single-pass conformance check. If the ticket cannot be resolved from the PR/branch, the command asks you for the ticket number.
+> Every review runs both axes — coding-guideline conformance **and** requirements conformance against the ticket's acceptance items, test scenarios and agreed scope — in isolated headless runs, so the developer, a re-run and the dev lead review with the same model, the same inputs and the same verdict rules. Expect a few minutes and a few dollars per review of a real change. If the ticket cannot be resolved from the PR/branch, the command asks you for the ticket number.

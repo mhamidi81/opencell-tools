@@ -40,6 +40,9 @@ Scrum master. The product side records the *need*: the version goes into the Sto
 
 On the original Story or Enabler, read `fixVersions` and `customfield_10260` as well.
 
+Add `customfield_10094` (*Paid by*) to the read when the question is whether the backport was sold. A
+backport carries its own *Paid by*: see `SKILL.md` § *Who asked, who paid*.
+
 ## How to build one
 
 | Field | Value |

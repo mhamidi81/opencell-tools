@@ -37,13 +37,18 @@ HTTP Basic via `~/.netrc` so `curl -n` never exposes the token in argv/history.
    ```
 3. Verify: `jira raw GET /myself | jq .displayName` (or `curl -ns https://opencellsoft.atlassian.net/rest/api/3/myself`).
 
-The `jira` helper prints this hint to stderr if no `~/.netrc` entry for the site is found.
+Without that line the `jira` helper prints this hint to stderr and **exits 1 before any request**.
+It used to warn and carry on, and an unauthenticated request is not refused by Jira: it is answered
+as an anonymous user who sees nothing, so `jira count` printed `0` and `jira jql` printed no issues,
+both with exit 0. Raw `curl -n` without the line has the same trap: check the HTTP status, never
+read an empty result as "no issues".
 
 ## The `jira` helper
 
-An optional `jira` helper installed at `~/.local/bin/jira` (a thin curl/jq wrapper; its full source is
-reproducible from the recipe in this file). It is a convenience, not a dependency — raw `curl -n` (below)
-covers the same operations, and the Rovo MCP covers them with no setup at all. Defaults to project
+The `jira` helper ships with this skill, at `bin/jira` under the skill's base directory (a thin
+curl/jq wrapper); call it by that path unless `command -v jira` finds it on `PATH`. It is a
+convenience, not a dependency — raw `curl -n` (below) covers the same operations, and the Rovo MCP
+covers them with no setup at all. Defaults to project
 `INTRD` and site `opencellsoft.atlassian.net`; override with `JIRA_PROJECT` /
 `JIRA_SITE`. All subcommands emit token-thin output by default.
 
@@ -148,7 +153,7 @@ enter context. So `--all` with a two-field allowlist is cheap even over hundreds
 
 **One exception: when a field's value must be relied on, read it with `--json` and `jq` rather than
 trusting the default projection.** The default projection filters through `map(select(.value != null))`
-(`bin/jira:150`), so it **drops any field whose value is `null`** — `jira get INTRD-45541 resolution`
+(`cmd_get` in `bin/jira`), so it **drops any field whose value is `null`** — `jira get INTRD-45541 resolution`
 prints the key and nothing else, while `jira raw GET '/issue/INTRD-45541?fields=resolution'` returns
 `{"resolution":null}`. Read a near-empty result as `null`, not as an error or a mistyped field name:
 
@@ -227,7 +232,7 @@ Rich payloads are not excluded from this path — see the next section.
 ## Writing ADF through `jira raw` — the cheap path
 
 A full ADF body posts perfectly well through the direct path. `jira raw` hands its third argument
-straight to `curl --data` (`bin/jira:232`), so `@file.json` sends the file's contents with newlines
+straight to `curl --data` (`cmd_raw` in `bin/jira`), so `@file.json` sends the file's contents with newlines
 stripped — harmless for JSON, where they are only inter-token whitespace (`--data-binary` is the
 byte-verbatim form, for payloads where they are not):
 
@@ -383,7 +388,7 @@ Two smaller edges:
 | `jira jql --all` exits `2` | The `JIRA_MAX_PAGES` guard truncated the drain — the result is **incomplete**. Raise `JIRA_MAX_PAGES`, narrow the query, or resume from the `--token=` printed on stderr. |
 | `410 Gone` on search | You hit the removed `/search` endpoint — use `POST /search/jql`. |
 | `404` whose body reads `No endpoint <METHOD> /rest/api/3/rest/api/3/…` | You passed a full path to `jira raw`, which prepends `/rest/api/3` itself. Drop the prefix: `jira raw GET "/project/INTRD"`. |
-| `jira get KEY <fields>` prints the key and nothing else, or omits a field you asked for | The default projection drops `null`-valued fields (`bin/jira:150`). The value is `null`, not an error — re-read with `--json` + `jq` (or `jira raw GET '/issue/KEY?fields=<field>'`) whenever the value must be relied on. |
+| `jira get KEY <fields>` prints the key and nothing else, or omits a field you asked for | The default projection drops `null`-valued fields (`cmd_get` in `bin/jira`). The value is `null`, not an error — re-read with `--json` + `jq` (or `jira raw GET '/issue/KEY?fields=<field>'`) whenever the value must be relied on. |
 | `createmeta` lists no `description` for `Bug` / `Sub-bug` | Expected — `description` is not on their create screen. `POST /issue` accepts an ADF `description` at creation anyway; send it. |
 | `400` on a write with `"…must be an Atlassian Document…"` | The field needs ADF, not a string — build a `{"type":"doc",…}` object (or route the write to the MCP). |
 | A `twg` create returned `{"success": true}` but a field came back empty | `twg` drops fields absent from `createmeta` without saying so — see [The trap](#the-trap--a-twg-write-can-report-success-and-land-nothing). Re-send through `jira raw POST /issue`, which reports Jira's own error. |

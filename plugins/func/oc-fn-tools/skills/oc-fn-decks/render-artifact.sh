@@ -54,6 +54,15 @@ command -v python3 >/dev/null 2>&1 || die "python3 is not installed — it assem
 
 SRC_ABS="$(readlink -f "$SRC")"
 SRC_DIR="$(dirname "$SRC_ABS")"
+LINKER="$SKILL_DIR/jira_links.py"
+
+# ── Jira keys are links: an internal deck never ships a bare key (SKILL.md § Authoring conventions) ──
+[[ -f "$LINKER" ]] || die "jira_links.py not found at $LINKER"
+if ! BARE="$(python3 "$LINKER" --check "$SRC_ABS")"; then
+  die "bare Jira keys — in an internal document every key is a link:
+$BARE
+fix: python3 $LINKER --fix $SRC_ABS, then commit and push"
+fi
 SKILL_VERSION="$(sed -n 's/^version:[[:space:]]*//p' "$SKILL_DIR/SKILL.md" | head -1)"
 TOP="$(git -C "$SRC_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
 

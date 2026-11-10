@@ -96,8 +96,9 @@ structure — light format*). Fetch it with `responseContentFormat: "adf"` to pr
 **Fix versions: at most one** — one once the Story is scheduled, never two. Older versions it must
 also reach go into *Backport versions* (`customfield_10260`), each with its own Backport issue,
 created by the architect lane
-(`SKILL.md` § *Cost per version — the Fix version field*, `backports.md`). *Business value (MoSCoW)* `Must have` means the version
-cannot ship without it (`SKILL.md` § *Version scope — MoSCoW on Epics, Stories and change requests*).
+(`SKILL.md` § *Cost per version — the Fix version field*, `backports.md`). *Business value (MoSCoW)* `Must have` means its Epic
+cannot be released without it; `Should have` and `Could have` Stories may be dropped, and a dropped
+Story moves to the next step Epic (CPO, 2026-10-27, from 20.0.0). Set it when authoring the Story, and when a CSM writes it, ask the CSM for the value rather than choosing it (`SKILL.md` § *Version scope — MoSCoW on Epics, Stories and change requests*).
 
 The `components` field carries the Story's **module**, which is mandatory (`SKILL.md` § *Product area — the module Component is mandatory*), plus its
 layer (`Backend`, `Frontend` or both). It is set in the create call, independently of the template.
@@ -528,7 +529,8 @@ status with the key. Set by Stéphane on 2026-10-07.
 
 User Stories on INTRD follow a 9-phase workflow. Each phase groups one or several
 Jira statuses and has a single accountable role. Roles in use: **PO**, **Tech Lead**,
-**Dev**, **QA**, **Release Manager**.
+**Dev**, **QA**, **Release Manager**. Release Manager is a role with no official position: Vincent
+Naudion fills it in practice (CPO, 2026-10-27).
 
 ### Phases
 

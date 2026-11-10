@@ -1,0 +1,326 @@
+{
+"5e62049035753d0cdaaaceee": {
+"name": "Abdelhadi Nasseh",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"63160f1d3778a7aadf197540": {
+"name": "Abdellah Slimani",
+"area": "overhead",
+"role": "CONSULTANT",
+"active": true
+},
+"5cb069776f37be21fe5cd9d6": {
+"name": "Abdellatif Bari",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"5e620492cf54800ce3a05791": {
+"name": "Abdelmounaim Akadid",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"63369fa788ed2ebef97cddfb": {
+"name": "Adil El Jaouhari",
+"area": "overhead",
+"role": "ARCHI",
+"active": true
+},
+"63369fa8140ba0bf651c59b2": {
+"name": "Aissam BAHARI",
+"area": "frontend",
+"role": "FRONT",
+"active": true
+},
+"5c35d1059760f569b627c08d": {
+"name": "Amine Tazi",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"62b044340c77011bdfdb349e": {
+"name": "Anas Rouaguebe",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"5dbb097eb6788b0c37755176": {
+"name": "Andrius Karpavičius",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"557058:1c9100d3-2928-4e82-b007-03d9e6b8711e": {
+"name": "Antoine Michéa",
+"area": "overhead",
+"role": "DEVOPS",
+"active": true
+},
+"5f156ae707efc40028457d87": {
+"name": "Brahim Aachiq",
+"area": "qa",
+"role": "QA",
+"active": true
+},
+"61adcdd53618cd006f2e513f": {
+"name": "Chamseddine Chrifa",
+"area": "overhead",
+"role": "DEVOPS",
+"active": true
+},
+"5cb463decef84c118d766129": {
+"name": "Elhoussine Znibar",
+"area": "overhead",
+"role": "ARCHI",
+"active": true
+},
+"6294da839bc7150068ccdbcd": {
+"name": "Emmanuel Pierre",
+"area": "overhead",
+"role": "PO",
+"active": false
+},
+"5e1dc7362538f60cab4be626": {
+"name": "Florence Delille",
+"area": "overhead",
+"role": "CONSULTANT",
+"active": true
+},
+"5c375ec136647b5b9101bcac": {
+"name": "Hatim Oudad",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"5f841dd256eec00076581403": {
+"name": "Jérôme Ngo",
+"area": "overhead",
+"role": "CONSULTANT",
+"active": true
+},
+"5f203a95ef11df00258c0743": {
+"name": "Mbarek Ait-Yaazza",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"631075e8b433b060db55baba": {
+"name": "Mehdi Bourras",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"60d01ea55c64b10071543c4f": {
+"name": "Mohamed Amine Houssa",
+"area": "frontend",
+"role": "FRONT",
+"active": true
+},
+"5c35cef68ee3ae5b8b0746ec": {
+"name": "Mohamed Amtiou",
+"area": "qa",
+"role": "QA",
+"active": true
+},
+"5f1eff30b7a35e002a5063b1": {
+"name": "Mohamed El Azouzzi",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"5ef5c13914f60e0ac1c9b049": {
+"name": "Mohamed Hamidi",
+"area": "frontend",
+"role": "FRONT",
+"active": true
+},
+"5fd0b645fee79300751a7487": {
+"name": "Mohamed Stitane",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"5f15a83c70b8a90025e140a6": {
+"name": "Mounir Boukayoua",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"630f66116856bdd60a9ea766": {
+"name": "Olivier MARTIN",
+"area": "overhead",
+"role": "CONSULTANT",
+"active": false
+},
+"60d01ec9b215610069ee0e6c": {
+"name": "Oussama El Idrissi",
+"area": "frontend",
+"role": "FRONT",
+"active": false
+},
+"5f2032a7f78bea0016478dab": {
+"name": "Rachid Aityaazza",
+"area": "overhead",
+"role": "ARCHI",
+"active": true
+},
+"6360d863fe5ff375235b6511": {
+"name": "Raja Halabi",
+"area": "qa",
+"role": "QA",
+"active": true
+},
+"609bccb59b362f006977d7de": {
+"name": "Raynald Bardin",
+"area": "overhead",
+"role": "CONSULTANT",
+"active": true
+},
+"5bed52e5f9c8c708ecdb4d6f": {
+"name": "Stéphane Chambrin",
+"area": "overhead",
+"role": "PO",
+"active": true
+},
+"5fea087091bb2e0108889a79": {
+"name": "Tarik Fakhouri",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"5da44c09f094440c44b9596f": {
+"name": "Vladimir Morev",
+"area": "frontend",
+"role": "FRONT",
+"active": true
+},
+"61d5834ba54af9006978ba16": {
+"name": "Yassine Chetoui",
+"area": "overhead",
+"role": "PO",
+"active": true
+},
+"62f0e931a41ecbd0ba192725": {
+"name": "Zakaria El Meliani",
+"area": "backend",
+"role": "BACK",
+"active": false
+},
+"712020:b5101fc8-7b37-4103-a46a-03aa28677bcc": {
+"name": "Coumba Diallo",
+"area": "overhead",
+"role": "PO",
+"active": false
+},
+"712020:fae05cb2-52a0-48da-af7e-b6b22117e60a": {
+"name": "Souhayla Msellek",
+"area": "qa",
+"role": "QA",
+"active": true
+},
+"712020:1f278e2e-d260-4991-86d3-a5b960db5241": {
+"name": "Ghassen Trabelsi",
+"area": "overhead",
+"role": "CONSULTANT",
+"active": true
+},
+"712020:47d76bfb-8afa-4a2c-9559-f53589466845": {
+"name": "thanh.nguyen",
+"area": "frontend",
+"role": "FRONT",
+"active": false
+},
+"712020:1861da56-f0cd-456b-b39e-e743ce3847ac": {
+"name": "trung-anh.tran",
+"area": "frontend",
+"role": "FRONT",
+"active": false
+},
+"712020:1a5b97a4-782c-4ecc-bb95-785913e1777c": {
+"name": "Yasmine Mehidi",
+"area": "overhead",
+"role": "PO",
+"active": false
+},
+"5d3592e9825be60c3a4e7c6d": {
+"name": "Abdelkader Bouazza",
+"area": "backend",
+"role": "BACK",
+"active": false
+},
+"712020:5503a1fc-031c-4a8a-9847-f26355178b62": {
+"name": "cong.phan-huy",
+"area": "frontend",
+"role": "FRONT",
+"active": false
+},
+"712020:cd53d6f5-8104-430f-8242-b130c01349af": {
+"name": "Adem Chrifa",
+"area": "overhead",
+"role": "DEVOPS",
+"active": true
+},
+"5e26ca98c55f580c9fc945c3": {
+"name": "Maria Ait-Brahim",
+"area": "qa",
+"role": "QA",
+"active": false
+},
+"712020:5d3a425c-2362-4fdc-8fa2-3846904b21b3": {
+"name": "Ahmed Bahri",
+"area": "backend",
+"role": "BACK",
+"active": false
+},
+"712020:d07079fa-1364-43f6-8a71-236e9635e960": {
+"name": "Mohamed Moindjie",
+"area": "backend",
+"role": "BACK",
+"active": false
+},
+"712020:2659f143-12ce-44f7-9b18-310091b6aa6a": {
+"name": "Fatima-Ezzahra Toulali",
+"area": "qa",
+"role": "QA",
+"active": false
+},
+"5efd904574183a0bb3709bd4": {
+"name": "Jean-Bertrand Rouquette",
+"area": "overhead",
+"role": "NONE",
+"active": true
+},
+"5a38e6265a6ecc387ffb966c": {
+"name": "Vincent Naudion",
+"area": "overhead",
+"role": "NONE",
+"active": true
+},
+"712020:8bdf0412-9821-4712-be40-4255b8a9bc93": {
+"name": "Nolwenn Nizard",
+"area": "overhead",
+"role": "PO",
+"active": false
+},
+"712020:f9cbce79-0b38-4e13-8284-a80872729dd5": {
+"name": "Ronan Le Borgne",
+"area": "backend",
+"role": "BACK",
+"active": true
+},
+"712020:56839b2d-fd0e-48e3-92e5-009cb9d1629d": {
+"name": "charlotte.thomas",
+"area": "overhead",
+"role": "PO",
+"active": false
+},
+"5f4cfbecfcaf93003b30bcb8": {
+"name": "Zakaria Bariki",
+"area": "backend",
+"role": "BACK",
+"active": true
+}
+}

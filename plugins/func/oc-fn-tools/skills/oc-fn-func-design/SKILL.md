@@ -1,7 +1,7 @@
 ---
 name: oc-fn-func-design
-version: 1.42.1
-updated: 2026-10-08T14:15:40+02:00
+version: 1.57.0
+updated: 2026-11-08T16:19:00+01:00
 author: Stéphane Chambrin
 description: >
   Rules and data for Jira issues in the Opencell INTRD and CR (Change Requests) projects. Use
@@ -44,7 +44,11 @@ connector is not enabled. That is not blocking: the optional `jira`/curl helper 
 
 ## Transport — Rovo MCP (baseline) vs the optional `jira` helper
 
-The Atlassian **Rovo MCP** is the **baseline transport that always works** — it covers every operation below (reads, search, metadata, transitions, plain writes, and rich ADF writes). The optional `jira` helper (a thin curl/jq Jira REST wrapper on `~/.local/bin/jira`; install it per `rest-api.md`) — or raw `curl` — is a **token-saving accelerator**, not a dependency: the MCP injects every tool response into context in full, whereas direct calls filter with `jq` in the shell so only the projection costs tokens. Run `command -v jira` once: if absent, use the Rovo MCP equivalent for every row below.
+The Atlassian **Rovo MCP** is the **baseline transport that always works** — it covers every operation below (reads, search, metadata, transitions, plain writes, and rich ADF writes). The `jira` helper (a thin curl/jq Jira REST wrapper) — or raw `curl` — is a **token-saving accelerator**, not a dependency: the MCP injects every tool response into context in full, whereas direct calls filter with `jq` in the shell so only the projection costs tokens.
+
+- **It ships with this skill**, at `bin/jira` under this skill's base directory (shown when the skill loads). Call it by that path unless `command -v jira` finds it on `PATH`; every `jira …` in this skill means that command.
+- **It needs a Jira API token in `~/.netrc`**, one line per user (setup in `rest-api.md`). Without that line it refuses every command before sending a request.
+- **Probe once per session:** `jira raw GET /myself >/dev/null`. A non-zero exit means no usable token (no `~/.netrc` line, or a revoked one): use the Rovo MCP equivalent for every row below, and mention the one-line setup to the user once.
 
 | Operation | Use |
 |---|---|
@@ -107,6 +111,7 @@ Load only the file relevant to the current task — do not pre-read all of them.
 
 - All Jira issues must be written in **English**.
 - **Check the create screen before the first create of an issue type you have not created this session** — required fields differ per type and are not guessable. Run `jira meta <issuetypeId>` (or `getJiraIssueTypeMetaWithFields`). Notably a **`Bug`** requires *Issue location (URL)* (`customfield_10359`, a URL-typed string field — send a full URL) and *Affects versions* (`versions`) at creation, while a **`Sub-bug`** requires neither — see `bugs.md` § *Required fields at creation — Bug vs Sub-bug*.
+- **No `Bug` or `Sub-bug` is created unassigned.** The `assignee` goes in the create call: a `Frontend` defect to Mohamed Hamidi, the frontend lead developer; a `Backend` defect to Adil El Jaouhari, the backend lead developer. Account IDs, how to decide the layer, and the post-create check are in `bugs.md` § *Assignee — never created unassigned*.
 - Minimise token usage on every call. First pick the cheapest transport (see [Transport](#transport--rovo-mcp-baseline-vs-the-optional-jira-helper) — default to the `jira` helper when it is installed; otherwise use the Rovo MCP for every operation). Then, on whichever transport, pass an explicit `fields` allowlist (see [Reading efficiency](#reading-efficiency--field-selection)) and prefer `markdown` over ADF on MCP calls whenever possible (see [Content format policy](#content-format-policy--adf-vs-markdown)).
 
 ## Product area — the module Component is mandatory
@@ -126,6 +131,7 @@ INTRD carries the **product-area axis as a Jira Component** (the "module") — o
 - **`Backend` / `Frontend` are a *different* axis** (engineering layer, not product area) that coexists on the same field — an issue may carry `[Backend, Billing]`. Leave any existing `Backend`/`Frontend` in place; **add** the module Component, never replace the `components` field wholesale.
 - **Not a module:** irreducible cross-cutting tech/functional debt has **no** Component (a non-module bucket, not a label) — don't invent a "debt" Component.
 - The module is the *dimension* of work; **altitude** (Initiative/Epic/Story/Enabler) is the separate hierarchy (see `initiatives.md`). The old `Feature` type is **dissolved** — replaced by this Component axis plus the `Initiative` type.
+- **An Initiative's module is optional**, and an Initiative can span several modules through its Epics (`initiatives.md` § *Fields*). The enforcement below does not apply to it.
 
 ### Enforcement — no Epic, Story, Enabler, Bug or Backport leaves this skill without a module
 
@@ -210,6 +216,41 @@ Argos, the financial steering project, costs every logged hour by version from *
 - **A Story or an Enabler carries at most one: one once it is scheduled, never two.** Each older
   version it must also reach goes into its **Backport versions** field (`customfield_10260`) **and**
   gets its own Backport issue, which the architect lane creates — `backports.md`.
+- **An Epic carries at most one too, and every Story and Enabler under it carries that same one**
+  (CPO, 2026-10-26). Work planned for another version is **another Epic**, the next step under the same
+  Initiative (`initiatives.md`) — never a second Fix version on the Epic, and never a Story on a
+  different version under it. An Epic partly delivered in earlier versions does not take new work for
+  a later one: that work opens a new step Epic. This is what lets a version's scope be read as a list
+  of Epics, and what makes an Epic a roadmap item (`oc-roadmap`).
+  - **The Factory's technical Epics: one per subject per version** (agreed with Vincent Naudion on
+    2026-11-05; split by the CPO on 2026-11-06). A technical subject, such as performance, security,
+    test quality, the API or the UI migration, has one ordinary Epic per version, named
+    `<Subject> — <version>`. That Epic carries one Fix version, and its Enablers carry the same one.
+    - **When it is created:** when that version's work is planned. The CPO session creates it.
+    - **What it carries at creation:**
+      - its kind, the label `tech-debt` or `security`, on the Epic itself and never on a product
+        Initiative;
+      - `Generic`;
+      - the module of its children, or the stated cross-cutting exception.
+    - **Leftover work at release:** it goes to the next version's Epic. An unstarted Enabler moves
+      as it is. A started one is split, so the hours already logged stay on their version. Who
+      moves them is not decided yet.
+  - **The one remaining exception: the six former container Epics, now closed.** These are
+    INTRD-47281 → INTRD-47286, which Vincent Naudion created on 2026-09-19 to collect the tech
+    team's Enablers across versions with no Fix version.
+    - Since 2026-11-06 they take no new children.
+    - Their open work on 19.0.0 and 20.0.0 moved to the step Epics, INTRD-49542 → INTRD-49552.
+    - What they still hold stays until done: maintenance-line, unversioned and multi-version work,
+      and history.
+    - Nothing in Jira marks them, so the exception is that list. Don't extend it by inference.
+  - **Exception, Epic by Epic, on the CPO's call: a partly delivered Epic kept whole** (CPO,
+    2026-10-27). Instead of opening a step Epic, the Epic takes the new version with all its open
+    work, and its delivered Stories keep their old versions. A Story still open on the version
+    before keeps that version until it ships. Decided for the Epics whose Stories were sent to the
+    Factory ahead of the 2027 round, on condition that they go In for 20.0.0: INTRD-119,
+    INTRD-11495, INTRD-37640, INTRD-3228 and INTRD-4229. If one of them does not go In, its Stories
+    already sent move to a step Epic for 20.0.0 (INTRD-4229 takes 20.0.0 for INTRD-16582 alone).
+    The exception is that list.
 
 **When it is set.**
 
@@ -253,16 +294,150 @@ and `backports.md` carry them.
    - **Report only:** a Backport carrying several versions. Removing one would move cost already
      logged, and no decision covers that.
 
+## Who asked, who paid — Prime Customer and Paid by
+
+Two customer fields answer two different questions. The CPO Obeya's *gâchis produit* reads both: the R&D
+spent on what was not sold, weighted by how many times each development was sold. Set by Stéphane on
+2026-10-14.
+
+- **Prime Customer** (`customfield_10547`, single select) says **who asked**. It names the customer whose
+  request the work serves first, and it goes on the delivering Epic at scheduling
+  (`change-requests.md`). It does not mean that only that customer uses the work. Whether the work is
+  generic or specific is a separate decision, written in the CR's Product response.
+- **Paid by** (`customfield_10094`, labels) says **who paid**. It holds one label per customer that
+  bought the work. That covers a separate invoice, the work included in a project's price, or the work
+  sold within a support package. **Empty means not sold.**
+  - **Where:** on the Epic for a development, and **on the Backport issue itself** for a backport. A
+    backport is sold on its own: the SEPA backports to 9.8 were paid by Fnac-Darty, while the same Epic's
+    18.3 backports are regulatory.
+  - **When:** as soon as a sale is known. That is at scheduling when the CR is sold, or when the CCO
+    reports a sale. Add a label; never remove one, except `Opencell`.
+  - **Spelling:** the CR *Expected by* labels, which follow the 2027 roadmap grid's names and allow no
+    spaces: `LaPoste`, `Proxiserve`, `Fnac-Darty`, `Energied'ici`, `Mediaposte`, `Maileva`, `MET`,
+    `Siplec`, `Vialis`. La Poste's units (BGPN, BSCC, Colissimo) are `LaPoste`; Docaposte is
+    `Maileva`; Mediaposte is a customer of its own, not La Poste. Outside labels (the grid, *Prime
+    Customer*) La Poste keeps its space: `La Poste`. **Never create a variant:** the case and spelling
+    variants were renamed away across INTRD and CR on 2026-10-30 (CPO).
+  - **`Opencell` is a legacy default:** about 10,000 issues from 2024–2025 carry it. Read it as empty,
+    drop it when adding a customer, and never add it.
+  - **No amount, ever.** No price, invoice amount or rate goes into Jira, which is open to about 41 Tech
+    people, mostly subcontractors. Amounts stay in the CCO's workbook and with Finance, then in Argos.
+  - **Payload:**
+    - REST, which leaves the other labels in place:
+      `{"update": {"customfield_10094": [{"add": "Proxiserve"}, {"remove": "Opencell"}]}}`.
+    - Rovo MCP `editJiraIssue`: `fields.customfield_10094` *replaces* the list, so send the full list.
+  - **How it is read:** the number of distinct customers is the number of sales. The Obeya counts a
+    development in full when it was sold to no one, half when sold once, a third when sold twice, and
+    not at all from three sales.
+- **Generic or specific** (`customfield_10844`, single select on INTRD **Epics only**, created
+  2026-10-14) holds **the Product decision**:
+  - `Generic`: other customers use it, or will, so it is not single-customer cost.
+  - `Specific`: built for the requesting customer only.
+  - Empty: not decided.
+
+  The PO sets it when the CR is accepted and at the latest when the delivering Epic is scheduled. The
+  Product response still explains why. Payload: REST `{"fields": {"customfield_10844": {"value":
+  "Specific"}}}`.
+- **Regulatory work is read from the hierarchy, not from a field.** An Epic is regulatory when its
+  parent Initiative carries the label `REGULATORY` (capitals, the spelling already in use). That holds
+  for INTRD-44659 French e-invoicing reform compliance, INTRD-44701 E-reporting and INTRD-44696 SEPA
+  ISO 20022 migration, labelled 2026-10-14.
+  - **A regulatory Epic goes under one of these Initiatives.** Do not label the Epic itself.
+  - **A new regulatory Initiative gets the label when it is created.**
+- **A back-fill is a write:** show the list of issues and values, and get the user's go-ahead first.
+
 ## Version scope — MoSCoW on Epics, Stories and change requests
 
-**Business value (MoSCoW)** (`customfield_10103`) is set on Epics, Stories and change requests, not
-on Enablers. It reads differently depending on where it is set:
+**Business value (MoSCoW)** (`customfield_10103`) is set on Epics, Stories and change requests. It
+is not on the Enabler screens. On an Epic or a Story it is a **release rule** (CPO, 2026-10-27),
+applied **from 20.0.0**, the first version through the roadmap Gate. Values on 19.0.0 and earlier
+were not set with this meaning, so they are not read as one.
 
-- **On an Epic or a Story, `Must have` means the version cannot be delivered without it.** Set it
-  with that meaning when scheduling, and read it that way when judging a version's scope.
+**Two levels, each blocking the one above.**
+
+- **A `Must have` Story blocks its Epic:** the Epic cannot be released while one of its `Must have`
+  Stories is missing. `Should have` and `Could have` Stories may be dropped when planning shifts.
+- **A `Must have` Epic blocks its version:** the version cannot be released while one of its
+  `Must have` Epics is not done. Every Epic drawn **In** at the Gate is `Must have`, and so is every
+  Epic of the **mandatory lane** (regulatory obligation, commitment already sold) — `oc-roadmap`
+  `decision-record.md`.
+- **When a `Must have` Epic slips, it is either demoted or the version slips.** Who decides follows
+  `oc-roadmap` §3. A demotion is a scope change: recorded with its decision and who took it, and
+  counted in the drift (`oc-roadmap` `decision-record.md` § *The freeze, and the drift*).
+- **The rule binds at release, not at merge.** Each issue reaches `dev` through its own PR, neither
+  codebase has feature flags, and whatever is on `dev` ships when it is tagged. Dropping work whose
+  code is already merged means reverting it.
+  The Confluence page *Branch management* (2480898049, 2023) describes Epic branches that would make
+  "merged" meaningful, but the Factory does not use them. Reviving them is the VP Engineering's call.
+- **An unfinished `Should have` or `Could have` Epic ships its merged work by default** (CPO,
+  2026-10-27), once it has been checked that this work breaks nothing and does not damage the
+  user's experience. Who runs that check is not decided yet. If the check finds a problem, the work
+  does not ship, and with no feature flags that means reverting it. The Epic is not released while
+  a `Must have` Story is missing. Its remaining work follows § *Cost per version*.
+
+**What counts as present and done.** Test the status names, never `statusCategory`: Jira's Done
+category also holds `Rejected` (Epic) and `Invalid` (Story).
+
+| | Counts | Does not count |
+|---|---|---|
+| A Story is **present** | `Ready for Sprint Review` (PO-validated), `Need Documentation`, `Ready for Release`, `Released` | any earlier status, `On Hold`, `Invalid` |
+| An Epic is **done** | `Ready for Release`, `Released` | any other status, `Rejected` |
+
+**Setting the value.**
+
+- **It is set when the item is scheduled, and required from then on:** on the Epic at the Gate, from
+  the decision (`oc-roadmap`), and on each Story when it is authored at Handoff. **When a CSM writes
+  the Story, the CSM sets it**, and Product checks it at the Story review (`Review Design - Func`)
+  and amends it if necessary (CPO, 2026-10-27). Claude asks the CSM for each Story's value and does
+  not choose it.
+- **An empty value on a scheduled Epic or Story reads as `Must have`** until someone sets it. So
+  nothing is dropped because nobody filled the field.
+- **Enablers carry no value.** An Enabler counts as `Must have` when a `Must have` Story depends on
+  it. The six former container Epics, INTRD-47281 → INTRD-47286, carry no version and stay
+  outside the rule until they close.
+  - A technical step Epic is different: it carries one version and is inside the rule.
+  - With an empty value, it holds its version from 20.0.0 until it reaches *Ready for Release*.
+  - The leftover move at release is what lets it get there (§ *Cost per version*).
 - **On a change request, `Must have` is read as "the customer's go-live depends on it".** That is how
   the CPO Obeya's blocked-revenue register counts it, and Stéphane kept that use on 2026-10-07
-  (`change-requests.md`).
+  (`change-requests.md`). The delivering Epic's value comes from the Gate decision, not from the CR.
+
+**A dropped Story** — a `Should have` or `Could have` Story taken out of the version — cannot stay in
+its Epic on another version (§ *Cost per version*). It moves to the next
+step Epic under the same Initiative (`initiatives.md`), created if needed, and has no Fix version
+until that Epic passes its Gate. The old Epic closes on what it delivered. The drop is a scope change,
+recorded and counted like a demotion. A Story whose merged work ships by default is not dropped: it
+keeps its Epic and its version.
+
+**The release check** runs before a version is released. It is the Factory's release manager's to
+run: Vincent Naudion in practice, as there is no official Release Manager position (CPO,
+2026-10-27). It has three parts:
+
+1. **Epics blocking the version.** Every hit blocks it:
+   ```
+   project = INTRD AND issuetype = Epic AND fixVersion = "X"
+     AND (cf[10103] = "Must have" OR cf[10103] is EMPTY)
+     AND status not in ("Ready for Release", "Released")
+   ```
+2. **Stories blocking their Epic.** Select by parent, not by the Story's own Fix version: a Story
+   whose version disagrees with its Epic's is still that Epic's. `<keys>` are all the Epics on
+   version X (`project = INTRD AND issuetype = Epic AND fixVersion = "X"`). A hit holds its Epic.
+   It holds the version only through a `Must have` Epic.
+   ```
+   parent in (<keys>) AND issuetype = Story
+     AND (cf[10103] = "Must have" OR cf[10103] is EMPTY)
+     AND status not in ("Ready for Sprint Review", "Need Documentation", "Ready for Release", "Released")
+   ```
+3. **Enablers, by hand.** List the open Enablers under those Epics and check which `Must have`
+   Stories depend on them.
+
+The version is releasable when the first query returns nothing and no `Must have` Epic is held by
+the second or the third.
+
+**After the release, a separate Product step** (the CPO or the Senior PO, not the release check),
+also for an item whose code ships earlier in a backport: every CR still held in `Accepted` for the
+version takes `101` *Feature has been scheduled* then `91` *Feature has been released*, and the
+version's items get the label `roadmap-public` (`change-requests.md` § *The Product-team job on a CR*, step 5).
 
 ## Authoring boundary — User Stories are functional, never technical
 

@@ -1,6 +1,6 @@
 ---
 description: Estimate how much of the current work came from AI (Claude Code) and how much of the AI's suggestions survived, using this session's transcript, the oc-be-implement sub-agent manifests, and file-history vs. the last commit (or uncommitted changes). Breaks the numbers down by artifact category and by provenance (a reviewer-rework figure), and — for planning-heavy tickets with little code — reports the AI's planning/analysis effort as a separate band. Also counts unit tests added/modified, Postman assertion-vs-setup requests and the test cases inside them, and developer↔AI interactions per session. Lets the developer adjust, then posts a human comment, tags the ticket (customfield_10613) as ai_Dev_back / ai_test_back_dev, and records a machine-readable JSON record (keyed by domain/user, latest-only) in a dedicated AI-usage field for reporting.
-argument-hint: "[--working | --commit <ref>] [--run <RUN_ID>]"
+argument-hint: "[--working | --commit <ref>] [--ticket <KEY>] [--run <RUN_ID>]"
 ---
 
 # Calculate AI Use (`calculateAIUse`)
@@ -15,6 +15,8 @@ You estimate how much of the current piece of work came from AI (Claude Code) an
   4. **File-history** (`~/.claude/file-history/<session>/`) — full versioned snapshots of tracked files; a backstop that also captures sub-agent edits to *existing* files.
 - **Final code** → the **last commit** by default, or the **uncommitted working tree** if that is what is being measured.
 - **Planning / analysis effort** (non-code) → from the `/oc-be-implement` planning manifest (`.claude/cache/ai-stats/<RUN_ID>/_planning.json`) if present, otherwise reconstructed from the transcript. Reported as an effort band, never a percentage (see Metrics).
+
+> **Invocation.** Developers forget to run this, and they commit and open PRs outside Claude as often as inside it, so the plugin's **Stop hook** (`hooks/ai_use_watch.py`) offers it automatically. At the end of a Claude turn in a backend repository, it looks for commits made in this clone in the last 7 days (HEAD's reflog: from Claude, the IDE or a terminal; cherry-picks, merges and pulls excluded) whose files a Claude session edited, and whose ticket the ledger does not mark as recorded/declined. It then asks the developer *Record now / Later / Never for this ticket*. "Record now" runs `--ticket <KEY> --commit <sha>`. A **SessionStart hook** in the same script has Claude suggest, at every milestone where it would suggest committing (coding finished, tests green, review fixes done), **recording first and committing second**: `--working --ticket <KEY>` on the uncommitted changes, then the commit. Two checkpoints back that rule up, and none of them needs `/oc-be-implement`. **Milestone:** when tests pass (`mvn test`/`verify`/`install`, `newman run`) after Claude's latest code edit in the session and the changes are uncommitted and unrecorded, the Stop hook reminds Claude once per change set to suggest *record, then commit*. **Commit:** when Claude itself is about to `git commit` changes this session edited that are not recorded, a PreToolUse hook holds the commit back once and has Claude ask *Record first / Commit without recording / Never for this ticket*. A retry of the same change set goes through. The ledger stores the measured diff's `git patch-id`, so when the commit matches what was measured the Stop hook knows it is recorded and stays silent; a commit that differs is offered again and replaces that measurement. **Ad-hoc work** (a bug or an enabler worked out in conversation, no `/oc-be-implement`) is measured as completely as an implement run. Before the first code edit for a ticket in a session, the edit hook has Claude write an **analysis checkpoint** (`.claude/cache/ai-stats/<TICKET>-<ts>/_planning.json`, `agent: "ad-hoc"`, with the agreed approach, acceptance points and deliverables), which is the planning record read here. Edits made by **scripts** Claude runs are captured by the Bash/PowerShell hooks into the script-edits sidecar (Task 3). The command stays fully usable on its own, and every run (automatic or manual) posts its comment and upserts the record, so a repeated run is harmless.
 
 ## Metrics
 
@@ -112,12 +114,13 @@ ticket key does not identify the codebase — only the repository does.
 
 Parse `$ARGUMENTS` (all optional):
 
-- `--working` → measure the **uncommitted working tree** (`git diff HEAD`) instead of the last commit.
-- `--commit <ref>` → measure the given commit instead of `HEAD`.
-- `--run <RUN_ID>` → use the manifests in `.claude/cache/ai-stats/<RUN_ID>/`. If omitted, use the **most recently modified** `RUN_ID` directory (and warn if none is found).
+- `--working` → measure the **uncommitted working tree** (`git diff HEAD`) instead of the last commit — the recommended "record, then commit" order. Combine with `--ticket <KEY>` to name the ticket; the measurement is merged into the ticket's record (Task 2b).
+- `--commit <ref>` → measure the given commit instead of `HEAD` (with `--ticket`: the tip to walk back from).
+- `--ticket <KEY>` → names the ticket. Without `--working` it also selects **ticket mode**: measure the developer's commits of that ticket (subject starts with the key) reachable from `--commit` (default `HEAD`), **incrementally** — only those after the commit the ticket's existing record was measured on — and merge the result into that record (Task 2b, 6c). Used by the Stop hook; also the right choice for a manual run on a multi-commit ticket.
+- `--run <RUN_ID>` → use only the manifests in `.claude/cache/ai-stats/<RUN_ID>/`. If omitted, use **every** directory named **`[TICKET-NUMBER]-*`** (an `/oc-be-implement` run and/or the analysis checkpoints of several ad-hoc sessions; one `--manifests` flag each). Only if the ticket has none, fall back to the most recently modified directory of any ticket **and name that ticket in a warning** (another ticket's manifests would silently inflate this one). Warn if none is found at all.
 - No mode arguments → **auto**: if the working tree is dirty, ask whether to measure the *last commit* (default) or the *uncommitted changes*; if clean, measure the last commit.
 
-There is intentionally **no ticket argument** — see Task 2.
+The ticket is normally **derived, not asked** — see Task 2.
 
 ---
 
@@ -125,21 +128,71 @@ There is intentionally **no ticket argument** — see Task 2.
 
 1. `git status --short` — is the working tree dirty? (Untracked report/scratch files alone do **not** count as meaningful dirtiness — `git diff HEAD` ignores them.)
 2. Resolve the mode:
+   - `--working` → **working mode** (with or without `--ticket`).
+   - `--ticket <KEY>` → **ticket mode** against `--commit` (default `HEAD`). The working tree is irrelevant here — do not ask.
    - `--commit <ref>` → **commit mode** against `<ref>`.
-   - `--working` → **working mode**.
    - Otherwise, if there are tracked uncommitted changes → ask the developer: "Measure the last commit (HEAD) or the uncommitted changes?" (default: last commit). If clean → **commit mode** against `HEAD`.
-3. Record `[MODE]` (`commit`/`working`) and `[COMMIT-REF]` (for commit mode, default `HEAD`).
-4. Confirm there is something to measure (commit mode: `git show --stat [COMMIT-REF]`; working mode: `git diff --stat HEAD`). If nothing, tell the developer and stop.
+3. Record `[MODE]` (`ticket`/`commit`/`working`) and `[COMMIT-REF]` (commit/ticket mode, default `HEAD`; resolve it to a full sha with `git rev-parse`).
+4. Confirm there is something to measure (commit/ticket mode: `git show --stat [COMMIT-REF]`; working mode: `git diff --stat HEAD`). If nothing, tell the developer and stop.
 
 ---
 
-## Task 2 — Resolve the JIRA ticket (from the branch — do not ask)
+## Task 1b — Review gate (review before recording)
 
-1. `git branch --show-current` → `[CURRENT-BRANCH]`.
-2. Extract the **first** `[A-Z]+-\d+` match anywhere in the branch name as `[TICKET-NUMBER]`
-   (e.g. `andrius/INTRD-44654-api-restfulness` → `INTRD-44654`).
-3. Only if no match is found, ask the developer for the ticket number.
-4. Optionally read `.claude/cache/jira-tickets.json` for the ticket `summary` (display only; not required).
+The measured code must have an **isolated review** (`/oc-be-tools:oc-be-review`) before its AI usage is recorded: the milestone order is *review → record AI usage → commit*, and recording unreviewed code is how gaps reach the PR. Ask the review ledger:
+
+```bash
+python "${CLAUDE_PLUGIN_ROOT}/scripts/isolated_review.py" gate --repo . --mode working                       # working mode
+python "${CLAUDE_PLUGIN_ROOT}/scripts/isolated_review.py" gate --repo . --mode commit --ref [COMMIT-REF]      # commit / ticket mode
+```
+
+It prints `{"reviewed", "verdict", "score", "acknowledged", "skipped", "report"}` for exactly this code state (any edit after a review makes it unreviewed again).
+
+- **Reviewed, `APPROVE`** (or `acknowledged`, or `skipped` by the developer at the commit hold) → continue. Store `[REVIEW]` = `APPROVE (<score>/10)`, `CHANGES_REQUESTED (<score>/10, acknowledged)` or `skipped`.
+- **Reviewed, `CHANGES_REQUESTED`, not acknowledged** → show the report path and ask: *"Fix the findings first (Recommended)"* → stop here; *"Record anyway"* → continue with `[REVIEW]` = `CHANGES_REQUESTED (<score>/10)`.
+- **Not reviewed** → run the review first, without asking: invoke the Skill `oc-be-tools:oc-be-review` — no args in working mode; `range <base>..[COMMIT-REF]` in commit/ticket mode, where `<base>` is `[COMMIT-REF]^` (commit mode) or the parent of the oldest commit being measured (ticket mode, Task 2b). Then run the gate again and continue as above. If the review cannot run (e.g. headless `claude` not logged in), say so and ask *"Record without review"* / *"Stop"*; on the former, `[REVIEW]` = `not reviewed`.
+
+`[REVIEW]` goes into the Jira comment (Task 6a); it is not part of the JSON record.
+
+## Task 2 — Resolve the JIRA ticket (derive it; ask only when it is not clear)
+
+Collect the candidates, strongest first:
+
+1. **`--ticket <KEY>`** — given explicitly (the Stop hook always passes it).
+2. **The `/oc-be-implement` run** — that command is started with a ticket number, and its run directories are named `<TICKET>-<yyyymmdd-HHMMSS>` under `.claude/cache/ai-stats/`. The candidate is the ticket of the newest run whose manifest `files` (or `snapshots/*.diff`) include one of the measured files.
+3. **The commit message** — the `[A-Z][A-Z0-9]+-\d+` prefix of `[COMMIT-REF]`'s subject (`INTRD-45279: …`, the commit convention).
+4. **The branch** — the **first** `[A-Z][A-Z0-9]+-\d+` match in `git branch --show-current` (e.g. `andrius/INTRD-44654-api-restfulness` → `INTRD-44654`). A branch may name several tickets (`…/INTRD-45721-47533-…`), so it is the weakest source.
+
+Take the strongest candidate as `[TICKET-NUMBER]`, **but ask the developer to confirm** (`AskUserQuestion`, every distinct candidate as an option, the strongest first and marked *(Recommended)*) when two available candidates disagree, or when the only one is the branch and it names more than one ticket. Ask for the number only if there is no candidate at all.
+
+Optionally read `.claude/cache/jira-tickets.json` for the ticket `summary` (display only; not required).
+
+---
+
+## Task 2b — Previous record: measure only what is new
+
+Read the ticket's AI-usage document now (`getJiraIssue` with `fields: ["customfield_10745"]`, parsed exactly as in Task 6c step 3) and the developer's identity (`atlassianUserInfo`). `[PREV-RECORD]` = the record under the key starting with `backend/<accountId>/`, if any. Read the local ledger entry too (`[LEDGER]`, `{}` if the script is missing):
+
+```bash
+python "<PLUGIN-ROOT>/hooks/ai_use_watch.py" --show "<repo top-level>" [TICKET-NUMBER]
+```
+
+Why it matters: the record must keep covering the whole ticket, but Claude Code deletes transcripts after `cleanupPeriodDays` (30 by default). So **only work not yet in the record is measured**, then **merged** into it (Task 6c). Re-measuring older commits would wrongly read their AI lines as hand-written and overwrite a good record with a worse one. `[COVERED]` = the commit the record already covers: `[LEDGER].sha` when `[LEDGER].status` is `recorded` and there is no `[LEDGER].working`, else `[PREV-RECORD].scope` when it is a sha.
+
+**Working mode — the recommended order: record first, then commit** (`/oc-be-implement` and the SessionStart rule suggest it at every milestone):
+- `[LEDGER].working.base` = `HEAD` → a re-run on the same uncommitted work: merge onto `[LEDGER].working.prior` (`null` → this measurement *is* the record). The previous measurement of these changes is replaced, never added twice.
+- else `[PREV-RECORD]` and `[COVERED]` = `HEAD` or an ancestor of it → merge onto `[PREV-RECORD]`, which becomes the `--prior` of Task 6e. If ticket commits exist between `[COVERED]` and `HEAD` (committed without recording), say so and offer to record them first with `--ticket` — otherwise they are never measured.
+- else `[PREV-RECORD]` exists but its coverage is unknown (`scope` `working` with no ledger entry, like most pre-1.24 records) → ask the developer: *Add to the previous record (it covers earlier work on this ticket)* vs *Replace it*.
+- no `[PREV-RECORD]` → a new record.
+
+**Ticket mode** (committed work: the Stop hook, or a manual run) → choose where the measurement starts, `[AFTER]`:
+- `[LEDGER].working` is present and its `base` is an ancestor of `[COMMIT-REF]` → the ticket was recorded before its commit, but what was committed differs from what was measured (the hook only offers it then). `[AFTER]` = `working.base`, and merge onto `working.prior`: the commit **replaces** the working-tree measurement.
+- `[COVERED]` is an ancestor of `[COMMIT-REF]` → `[AFTER]` = `[COVERED]`, merge onto `[PREV-RECORD]`.
+- no `[PREV-RECORD]` → no `[AFTER]`: the whole ticket is measured.
+- coverage unknown (rebased, amended, cherry-picked, or a `working` scope with no ledger entry) → `[AFTER]` = `[PREV-RECORD].at` (a date). Show the developer the resulting commit list to confirm before measuring, because a same-day commit may already be in the previous record.
+- no newer commit → there is nothing new to add to the ticket record: tell the developer, mark the ledger `recorded`, and stop. (To re-measure a single commit and replace the record as before, run without `--ticket`.)
+
+**Commit mode** → unchanged: the run measures one commit and **replaces** the record, as before.
 
 ---
 
@@ -149,9 +202,11 @@ There is intentionally **no ticket argument** — see Task 2.
 
 Collect these paths for the analyzer (each is optional — pass what exists):
 
-1. **Manifests** — `.claude/cache/ai-stats/<RUN_ID>/` (resolve `<RUN_ID>` per Argument Parsing). This dir carries the sub-agent authorship (`*.json` with a `files` list), the planning effort (`_planning.json`, `type: "planning"`), **and** the sub-agent first-pass **snapshots** (`snapshots/<phase>.diff`) used for retention. Pass the dir with `--manifests`; the analyzer reads all three. If it is missing (work not done via `/oc-be-implement`, or an older run), warn and continue — planning is reconstructed from the transcript, and sub-agent files fall back to contribution-only.
+1. **Manifests** — `.claude/cache/ai-stats/<RUN_ID>/`, one `--manifests` flag per directory (resolve them per Argument Parsing). Ad-hoc work has one directory per session, holding the analysis checkpoint (`_planning.json`, `agent: "ad-hoc"`) that the edit hook had Claude write before the first code change; the planning records of all directories are combined. This dir carries the sub-agent authorship (`*.json` with a `files` list), the planning effort (`_planning.json`, `type: "planning"`), **and** the sub-agent first-pass **snapshots** (`snapshots/<phase>.diff`) used for retention. Pass the dir with `--manifests`; the analyzer reads all three. If it is missing (work not done via `/oc-be-implement`, or an older run), warn and continue — planning is reconstructed from the transcript, and sub-agent files fall back to contribution-only.
 2. **Transcripts** — pass the whole `~/.claude/projects/<PROJECT-SLUG>/` directory. The analyzer keeps only tool calls whose `file_path` is inside the repo, so unrelated sessions are naturally excluded, and post-review fixes from any of this ticket's sessions are captured.
 3. **File-history root** — `~/.claude/file-history/`. The analyzer maps each session's `file-history-snapshot` entries (found in the transcripts) to the backup blobs here.
+4. **Script edits** — `~/.claude/oc-be-tools/script-edits/<PROJECT-SLUG>/`. The oc-be-tools Bash/PowerShell hooks record, per session, the lines a command Claude ran added to tracked or new files: Python edit scripts on a Postman collection, `sed -i`, `Set-Content`, and so on. No `Edit`/`Write` shows these lines, so without the sidecar they would read as hand-written. They count as main-context AI lines, and a session that only edited through scripts still counts for planning and interactions.
+5. **Sub-agent transcripts** — read automatically from `<PROJECT-SLUG>/<session>/subagents/*.jsonl` (no flag).
 
 ---
 
@@ -166,7 +221,15 @@ python "<SCRATCHPAD>/ai_use_analyzer.py" \
   --manifests   "<.claude/cache/ai-stats/RUN_ID directory>" \
   --file-history-root "C:/Users/<you>/.claude/file-history" \
   --mode commit --commit HEAD          # or: --mode working
+  --script-edits "C:/Users/<you>/.claude/oc-be-tools/script-edits/<PROJECT-SLUG>" \
+  --ticket [TICKET-NUMBER]             # every mode: also anchors analysis-only sessions (see below)
+  # ticket mode: --mode ticket --ticket [TICKET-NUMBER] --commit [COMMIT-REF] \
+  #              --author "$(git config user.email)" [--after [AFTER]]
 ```
+
+`--ticket` is passed in **every** mode. Besides selecting commits in ticket mode, it anchors planning and interactions to sessions where the developer named the ticket in a prompt. A bug investigated in one session and fixed in another is then credited for its analysis, even though the analysis session edited nothing.
+
+In **ticket mode** the analyzer takes the developer's commits whose subject starts with the key, reachable from `--commit`, newer than `--after` (an ancestor sha → exclusive range; a date → `--since`; omitted → last 90 days). Added lines are collected **per ticket commit** and kept only if still present in the ticket's final version of the file, so another ticket's edits to a shared file (a Postman collection) in between are never counted; test/Postman *added* counts are summed per commit the same way. The output's `commits` lists what was measured. It warns about commits without a ticket key made since the ticket started, and about commits older than the oldest transcript (their AI share is unmeasurable). If the author filter finds nothing (IDE commits under another e-mail), rerun with that e-mail rather than without the filter.
 
 Every source flag except `--repo` is optional. Planning reconstruction and interactions are scoped to the sessions that edited **this commit's changed files** (derived from the diff — no `--branch` needed). It prints a JSON object with `work_type`, `planning`, `overall`, `by_category`, `provenance`, `artifacts`, `interactions`, `suggested_tags`, `sources`, and `warnings`. Percentages are rounded to the nearest 5% (`round(x/5)*5`, clamped 0–100). A percentage is `null` when its denominator is 0 — treat it as "unknown".
 
@@ -274,6 +337,40 @@ def collect_transcript_lines(transcripts, repo):
                             b.update(added_from_edit(e.get("old_string"), e.get("new_string") or e.get("new_source")))
     return {k: v for k, v in ai.items() if v}
 
+def collect_script_edits(script_dir, repo):
+    """Lines added by commands Claude ran (Python/sed/PowerShell edit scripts), recorded by the
+    oc-be-tools Bash/PowerShell hooks: <script_dir>/<session>.jsonl, one {"file", "lines"} per change.
+    Returns (main rel -> lines, sub-agent rel -> lines, session -> files): AI edits that no Edit/Write shows."""
+    lines, agent_lines, sessions = {}, {}, {}
+    if not script_dir or not os.path.isdir(script_dir): return lines, agent_lines, sessions
+    for jf in glob.glob(os.path.join(script_dir, "*.jsonl")):
+        sid = os.path.splitext(os.path.basename(jf))[0]
+        try: fh = open(jf, encoding="utf-8")
+        except OSError: continue
+        with fh:
+            for raw in fh:
+                try: d = json.loads(raw)
+                except (json.JSONDecodeError, ValueError): continue
+                rel = to_rel(d.get("file") or "", repo)
+                if not rel or rel.startswith(".."): continue
+                target = agent_lines if d.get("by") == "subagent" else lines
+                target.setdefault(rel, set()).update(norm(l) for l in d.get("lines", []) if norm(l) and not triv(norm(l)))
+                sessions.setdefault(sid, set()).add(rel)
+    return lines, agent_lines, sessions
+
+def collect_subagent_lines(transcripts, repo):
+    """Lines written by sub-agents, from <session>/subagents/*.jsonl. Covers sub-agents dispatched ad hoc
+    (no /oc-be-implement manifest or snapshot) — e.g. a builder agent called directly in a chat."""
+    if not transcripts: return {}
+    base = transcripts if os.path.isdir(transcripts) else os.path.splitext(transcripts)[0]
+    pattern = os.path.join(base, "*", "subagents", "*.jsonl") if os.path.isdir(transcripts) \
+        else os.path.join(base, "subagents", "*.jsonl")
+    lines = {}
+    for jf in glob.glob(pattern):
+        for rel, ls in collect_transcript_lines(jf, repo).items():
+            lines.setdefault(rel, set()).update(ls)
+    return lines
+
 # ---- source 3: file-history -> per-file union of lines across all versions ----
 def collect_file_history(transcripts, fh_root, repo):
     lines = {}
@@ -337,11 +434,56 @@ def git(repo, *a):
     return subprocess.run(["git", "-C", repo, *a], capture_output=True, text=True,
                           encoding="utf-8", errors="replace")
 
+# ---- ticket mode: all of one ticket's commits, measured as one change ----
+SPANS = {}           # ticket mode only: rel -> (base_ref, final_ref)
+TICKET_COMMITS = []  # ticket mode only: the measured commits, oldest first
+
+def ticket_commits(repo, ticket, tip, author, after=None):
+    """(ticket commits oldest-first, keyless commits) reachable from `tip`: no merges, by `author`,
+    newer than `after` (a commit -> exclusive range; a YYYY-MM-DD date -> --since; none -> 90 days).
+    A ticket commit's subject starts with the key (the 'TICKET: summary' convention)."""
+    rng, since = tip, "90.days"
+    if after and git(repo, "merge-base", "--is-ancestor", after, tip).returncode == 0:
+        rng = f"{after}..{tip}"
+    elif after:
+        since = after
+    args = ["log", rng, "--no-merges", f"--since={since}", "--format=%H%x09%s"]
+    if author: args.append(f"--author={author}")
+    key = re.compile(rf"^\s*{re.escape(ticket)}\b")
+    commits, keyless = [], []
+    for line in git(repo, *args).stdout.splitlines():
+        sha, _, subject = line.partition("\t")
+        if key.match(subject): commits.append(sha)
+        elif not re.match(r"^\s*[A-Z][A-Z0-9]+-\d+", subject): keyless.append(sha)
+    commits.reverse()
+    first = set(git(repo, "rev-list", f"{commits[0]}~1..{tip}").stdout.split()) if commits else set()
+    return commits, [k for k in keyless if k in first]   # keyless commits made after the ticket started
+
+def build_spans(repo, commits):
+    """Per file: from the parent of the ticket's first commit touching it to its last commit touching it."""
+    spans = {}
+    for c in commits:
+        for rel in git(repo, "diff-tree", "--no-commit-id", "--name-only", "-r", "--root", c).stdout.splitlines():
+            rel = rel.strip()
+            if rel: spans[rel] = (spans.get(rel, (f"{c}~1", None))[0], c)
+    return spans
+
 def added_lines_map(repo, mode, ref):
-    res = git(repo, "diff", "--unified=0", "HEAD") if mode == "working" \
-          else git(repo, "diff", "--unified=0", f"{ref}~1..{ref}")
+    if mode == "ticket":
+        # Per ticket commit, kept only if still in the ticket's final version of the file: other
+        # tickets' commits in between (a shared Postman collection) never enter, and lines a later
+        # ticket commit removed drop out.
+        added = {}
+        for c in TICKET_COMMITS:
+            for rel, lines in added_lines_map(repo, "commit", c).items():
+                added.setdefault(rel, set()).update(lines)
+        finals = {rel: final_content(repo, rel, "ticket", ref) or set() for rel in added}
+        return {rel: kept for rel, lines in added.items() if (kept := lines & finals[rel])}
+    else:
+        out = (git(repo, "diff", "--unified=0", "HEAD") if mode == "working"
+               else git(repo, "diff", "--unified=0", f"{ref}~1..{ref}")).stdout
     added, cur = {}, None
-    for line in res.stdout.splitlines():
+    for line in out.splitlines():
         if line.startswith("+++ b/"): cur = line[6:]; added.setdefault(cur, set())
         elif line.startswith(("+++", "---")): continue
         elif line.startswith("+") and cur is not None:
@@ -355,6 +497,7 @@ def final_content(repo, rel, mode, ref):
         if not os.path.isfile(p): return None
         with open(p, encoding="utf-8", errors="replace") as fh: src = fh.read()
     else:
+        if mode == "ticket": ref = SPANS[rel][1] if rel in SPANS else ref
         res = git(repo, "show", f"{ref}:{rel}")
         if res.returncode != 0: return None
         src = res.stdout
@@ -365,6 +508,7 @@ def pct(a, b): return round(100 * a / b, 1) if b else None
 
 # ---- artifact counts: unit tests & Postman assertions ----
 def changed_paths(repo, mode, ref):
+    if mode == "ticket": return sorted(SPANS)
     res = git(repo, "diff", "--name-only", "HEAD") if mode == "working" \
           else git(repo, "diff", "--name-only", f"{ref}~1..{ref}")
     return [p.strip().replace("\\", "/") for p in res.stdout.splitlines() if p.strip()]
@@ -377,8 +521,9 @@ def file_versions(repo, rel, mode, ref):
         p = os.path.join(repo, rel)
         final = open(p, encoding="utf-8", errors="replace").read() if os.path.isfile(p) else ""
     else:
-        b = git(repo, "show", f"{ref}~1:{rel}");  base  = b.stdout if b.returncode == 0 else ""
-        f = git(repo, "show", f"{ref}:{rel}");     final = f.stdout if f.returncode == 0 else ""
+        base_ref, final_ref = SPANS.get(rel, (f"{ref}~1", ref)) if mode == "ticket" else (f"{ref}~1", ref)
+        b = git(repo, "show", f"{base_ref}:{rel}");  base  = b.stdout if b.returncode == 0 else ""
+        f = git(repo, "show", f"{final_ref}:{rel}"); final = f.stdout if f.returncode == 0 else ""
     return base, final
 
 _TEST_NAME = re.compile(r'\b([A-Za-z_]\w*)\s*\(')
@@ -579,12 +724,21 @@ def prompt_kind(t):
 
 def is_substantive(t): return _words(t) >= MIN_SUBSTANTIVE_WORDS
 
-def session_relevant(events, repo, changed):
-    """True if the session worked on THIS commit — i.e. it edited one of the commit's
-    changed files with a main-context Write/Edit/MultiEdit. This ties planning/interactions
-    to the measured work via the same anchor the code metrics use (the commit's files),
-    not the branch. Empty `changed` => treat every session as relevant."""
+ANCHOR_TICKET = None      # set from --ticket: a session whose developer prompts name it is relevant
+SCRIPT_SESSIONS = {}      # session id -> files edited by Claude-run scripts (from the script-edits sidecar)
+
+def session_relevant(events, repo, changed, session_id=None):
+    """True if the session worked on THIS commit: it edited one of the commit's changed files
+    (main-context Write/Edit/MultiEdit, or a Claude-run script recorded in the sidecar), or the
+    developer named the ticket in a prompt. The ticket anchor credits analysis-only sessions
+    (a bug investigated yesterday, fixed today) that never touched a file; it only counts the
+    developer's own words, so a session that merely fetched the ticket in passing is not pulled
+    in. Empty `changed` => treat every session as relevant."""
     if not changed: return True
+    if session_id and SCRIPT_SESSIONS.get(session_id, set()) & set(changed): return True
+    if ANCHOR_TICKET:
+        key = re.compile(rf"\b{re.escape(ANCHOR_TICKET)}\b")
+        if any(is_human_prompt(o) and key.search(_user_text(o)) for o in events): return True
     for o in events:
         if o.get("type") != "assistant": continue
         for c in (o.get("message") or {}).get("content") or []:
@@ -613,7 +767,7 @@ def reconstruct_planning(transcripts, repo, changed):
                     except (json.JSONDecodeError, ValueError): continue
         except OSError:
             continue
-        if not session_relevant(events, repo, changed): continue
+        if not session_relevant(events, repo, changed, os.path.splitext(os.path.basename(jf))[0]): continue
         # locate the first code-producing action
         first_code = None
         for o in events:
@@ -668,6 +822,17 @@ def planning_band(p):
     s += 1 if p["assistant_turns"] >= 25 else 0
     return "High" if s >= 5 else "Medium" if s >= 2 else "Low"
 
+def combine_planning(manifests):
+    """Several planning records for one ticket (an /oc-be-implement run, ad-hoc checkpoints from several
+    sessions) -> one: rounds and plan words summed, durations summed per record (never one span across days)."""
+    ms = [m for m in manifests if m]
+    if len(ms) <= 1: return ms[0] if ms else None
+    return {"type": "planning",
+            "revision_rounds": sum(m.get("revision_rounds") or 0 for m in ms),
+            "plan_word_count": sum(m.get("plan_word_count") or 0 for m in ms),
+            "duration_minutes": sum(duration_minutes(m.get("planning_started"), m.get("plan_approved")) for m in ms),
+            "notes": " | ".join(m["notes"] for m in ms if m.get("notes"))}
+
 def build_planning(manifest, recon):
     """Merge the planning manifest (authoritative for rounds/plan/timestamps) with
     the transcript reconstruction (authoritative for tool/turn activity)."""
@@ -684,7 +849,8 @@ def build_planning(manifest, recon):
         "analysis_tool_calls": pick(r.get("analysis_tool_calls")),
         "assistant_turns": pick(r.get("assistant_turns")),
         "plan_word_count": pick(m.get("plan_word_count"), r.get("plan_word_count")),
-        "duration_minutes": (duration_minutes(m.get("planning_started"), m.get("plan_approved"))
+        "duration_minutes": (m["duration_minutes"] if "duration_minutes" in m
+                             else duration_minutes(m.get("planning_started"), m.get("plan_approved"))
                              if m.get("planning_started") and m.get("plan_approved")
                              else r.get("duration_minutes", 0)),
         "used_plan_mode": bool(r.get("used_plan_mode")) or bool(manifest),
@@ -713,7 +879,7 @@ def count_interactions(transcripts, repo, changed):
                     except (json.JSONDecodeError, ValueError): continue
         except OSError:
             continue
-        if not session_relevant(events, repo, changed): continue
+        if not session_relevant(events, repo, changed, os.path.splitext(os.path.basename(jf))[0]): continue
         ex = sub = 0
         for o in events:
             if not is_human_prompt(o): continue
@@ -735,32 +901,81 @@ def count_interactions(transcripts, repo, changed):
             "avg_per_session": round(total_ex / sessions, 1),
             "per_session": sorted(per, key=lambda p: -p["exchanges"])}
 
+def per_commit_stats(fn, repo, ref, changed):
+    """Ticket mode: totals from the ticket's final files; added/modified summed over the ticket's own
+    commits, so other tickets' changes to a shared file are not counted as this ticket's."""
+    out = fn(repo, "ticket", ref, changed)
+    delta = [k for k in out if k.startswith("added") or k == "modified"]
+    for k in delta: out[k] = 0
+    for c in TICKET_COMMITS:
+        part = fn(repo, "commit", c, changed_paths(repo, "commit", c))
+        for k in delta: out[k] += part.get(k, 0)
+    return out
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", required=True)
     ap.add_argument("--transcripts")
-    ap.add_argument("--manifests")
+    ap.add_argument("--manifests", action="append", default=[])  # repeat: every [TICKET]-* run dir
     ap.add_argument("--file-history-root", dest="fh_root")
-    ap.add_argument("--mode", choices=["commit", "working"], default="commit")
-    ap.add_argument("--commit", default="HEAD")
+    ap.add_argument("--mode", choices=["commit", "working", "ticket"], default="commit")
+    ap.add_argument("--commit", default="HEAD")          # ticket mode: the tip to walk back from
+    ap.add_argument("--ticket")                          # ticket mode: the key, e.g. INTRD-41234
+    ap.add_argument("--author")                          # ticket mode: only this developer's commits
+    ap.add_argument("--after")                           # ticket mode: previous record's scope sha (or a date)
+    ap.add_argument("--script-edits", dest="script_edits")  # sidecar dir of lines added by Claude-run scripts
     a = ap.parse_args()
     repo = os.path.abspath(a.repo)
     warnings = []
 
-    manifest_files = collect_manifest_files(a.manifests, repo)
+    commits = TICKET_COMMITS
+    if a.mode == "ticket":
+        found, keyless = ticket_commits(repo, a.ticket, a.commit, a.author, a.after)
+        if not found:
+            print(json.dumps({"error": f"No commit of {a.ticket} by '{a.author or 'anyone'}' is reachable "
+                                       f"from {a.commit} after {a.after or 'the last 90 days'}."}, indent=2))
+            return
+        commits.extend(found)
+        SPANS.update(build_spans(repo, commits))
+        if keyless:
+            warnings.append(f"{len(keyless)} commit(s) without a ticket key since {a.ticket} started were "
+                            f"not counted: {[k[:10] for k in keyless[:5]]}")
+        oldest = min((os.path.getmtime(p) for p in glob.glob(os.path.join(a.transcripts or "", "*.jsonl"))),
+                     default=None)
+        stale = [c[:10] for c in commits
+                 if oldest and int(git(repo, "log", "-1", "--format=%ct", c).stdout.strip() or 0) < oldest]
+        if stale:
+            warnings.append(f"{len(stale)} commit(s) predate the oldest transcript (Claude Code deletes them after "
+                            f"cleanupPeriodDays): their AI lines read as hand-written: {stale[:5]}")
+
+    manifest_files = {}
+    for d in a.manifests: manifest_files.update(collect_manifest_files(d, repo))
     main_lines     = collect_transcript_lines(a.transcripts, repo)
+    script_lines, script_agent_lines, script_sessions = collect_script_edits(a.script_edits, repo)
+    for rel, ls in script_lines.items():            # a script Claude ran is a main-context edit
+        main_lines.setdefault(rel, set()).update(ls)
+    SCRIPT_SESSIONS.update(script_sessions)
+    global ANCHOR_TICKET
+    ANCHOR_TICKET = a.ticket
     fh_lines       = collect_file_history(a.transcripts, a.fh_root, repo)
-    snap_lines     = collect_snapshot_lines(a.manifests, repo)
+    snap_lines     = {}
+    for d in a.manifests:
+        for rel, ls in collect_snapshot_lines(d, repo).items():
+            snap_lines.setdefault(rel, set()).update(ls)
+    sub_lines      = collect_subagent_lines(a.transcripts, repo)
+    for src in (sub_lines, script_agent_lines):     # sub-agent content counts like a first-pass snapshot
+        for rel, ls in src.items():
+            snap_lines.setdefault(rel, set()).update(ls)
     if not manifest_files:
-        warnings.append("No sub-agent manifests found — sub-agent-created files may be undercounted. "
-                        "Run future work via /oc-be-implement for complete attribution.")
+        warnings.append("No sub-agent manifests found — sub-agent work is attributed from the sub-agent "
+                        "transcripts and file-history only (complete while the transcripts are kept).")
 
     added = added_lines_map(repo, a.mode, a.commit)
     total_added = sum(len(v) for v in added.values())
     changed = changed_paths(repo, a.mode, a.commit)   # this commit's files: the scope anchor
     changed_set = set(changed)
 
-    planning = build_planning(load_planning_manifest(a.manifests),
+    planning = build_planning(combine_planning([load_planning_manifest(d) for d in a.manifests]),
                               reconstruct_planning(a.transcripts, repo, changed_set))
     if total_added >= MEANINGFUL_CODE_MIN:
         work_type = "code"
@@ -772,8 +987,8 @@ def main():
         warnings.append("Planning-dominant ticket: little code committed — the planning-effort band, "
                         "not the code contribution %, is the headline.")
     if planning.get("detected") and "manifest" not in planning.get("source", []):
-        warnings.append("Planning effort reconstructed from the transcript (no _planning.json manifest). "
-                        "Run planning via /oc-be-implement for a precise record.")
+        warnings.append("Planning effort reconstructed from the transcript (no _planning.json: neither an "
+                        "/oc-be-implement plan nor an ad-hoc analysis checkpoint was recorded).")
 
     cats = ["production", "migration", "tests", "postman", "docs", "other"]
     agg = {c: {"added": 0, "agent": 0, "fix": 0, "human": 0} for c in cats}
@@ -831,8 +1046,12 @@ def main():
                         f"retention (no captured line content): e.g. {no_retention_files[:3]}")
 
     # artifact counts (unit tests, Postman assertions) — from the commit, independent of AI attribution
-    tests = java_test_stats(repo, a.mode, a.commit, changed)
-    postman = postman_stats(repo, a.mode, a.commit, changed)
+    if a.mode == "ticket":
+        tests = per_commit_stats(java_test_stats, repo, a.commit, changed)
+        postman = per_commit_stats(postman_stats, repo, a.commit, changed)
+    else:
+        tests = java_test_stats(repo, a.mode, a.commit, changed)
+        postman = postman_stats(repo, a.mode, a.commit, changed)
 
     interactions = count_interactions(a.transcripts, repo, changed_set)
 
@@ -842,7 +1061,7 @@ def main():
     suggested_tags = (["ai_Dev_back"] if has_code else []) + (["ai_test_back_dev"] if has_new_tests else [])
 
     print(json.dumps({
-        "mode": a.mode, "commit": a.commit,
+        "mode": a.mode, "commit": a.commit, "commits": [c[:10] for c in commits],
         "work_type": work_type,
         "planning": planning,
         "headline": {"category": "production",
@@ -862,6 +1081,8 @@ def main():
         "interactions": interactions,
         "suggested_tags": suggested_tags,
         "sources": {"manifest_files": len(manifest_files), "snapshot_files": len(snap_lines),
+                    "subagent_transcript_files": len(sub_lines),
+                    "script_edit_files": len(script_lines),
                     "transcript_files": len(main_lines),
                     "file_history_files": len(fh_lines)},
         "warnings": warnings,
@@ -880,7 +1101,7 @@ Show a clear breakdown. The **headline is production code**; everything else is 
 ```
 AI Use Estimate — [TICKET-NUMBER]
 =================================
-Measured:  last commit (HEAD)        # or: uncommitted changes
+Measured:  last commit (HEAD)        # or: uncommitted changes / ticket: 2 commits since 560c208 (16ddb08, 2d8c948)
 Work type: code                      # or: planning-dominant / minimal-change
 Sources:   manifests <n> · transcript <n> files · file-history <n> files
 
@@ -919,6 +1140,8 @@ Explain briefly, in one line each: contribution counts sub-agent + main-context 
 
 If a metric is `null`, show it as `unknown` and say why (no added lines / no captured AI content).
 
+**Incremental run** (Task 2b chose a record to merge onto: ticket mode with `[AFTER]`, or working mode on top of a recorded ticket): the numbers above describe **only the new work** (new commits, or the uncommitted changes). Below them, show the previous record (`at`, `scope`, `lines`, `contrib`/`retain`) and the **ticket total after merging** (computed as in Task 6c), so the developer sees both what this run adds and what the ticket will show. The developer adjusts the *new-work* numbers; the merged total is derived from them, never adjusted directly.
+
 **Choose the headline by `work_type`:**
 - `code` → the headline is production contribution + retention (as before).
 - `planning-dominant` → the headline is the **planning effort band**; still show the code numbers but label them secondary ("<N> lines changed"). Say plainly that this ticket's AI value was in analysis/planning, not code volume.
@@ -941,7 +1164,8 @@ Include an artifact bullet only for categories that actually changed. Fill line 
 Comment body (**code** ticket):
 
 ```
-AI usage (Claude Code) — measured on <last commit HEAD | uncommitted changes>:
+AI usage (Claude Code) — measured on <last commit HEAD | uncommitted changes | N commit(s) <short shas>[ since the previous measurement at <prev scope>]>:
+<incremental run only:>Ticket total after merging with the previous measurement: <lines> lines, AI contribution <contrib>%, retention <retain>%. The figures below are for the new commits.
 - AI contribution: [CONTRIBUTION]% of the added production code originated from AI.
 - AI retention: [RETENTION]% of the AI-suggested code was preserved (the remainder was superseded by AI's own iterative fixes).
 - Reviewer rework: <rework>% (share of the AI-authored lines changed in the post-review phase).
@@ -959,6 +1183,7 @@ Planning/analysis effort: [PLANNING-BAND]
 - ~<min> min in the planning phase
 
 Developer↔AI interactions: <substantive> substantive requests / <exchanges> exchanges across <sessions> session(s) (avg <avg> exchanges/session).
+Isolated review of the measured code: [REVIEW]
 <if [USEFULNESS] given:>Developer-rated usefulness: [USEFULNESS]/5
 
 Method: estimated from the oc-be-implement sub-agent manifests, the Claude Code session transcript, and file-history vs. the final code, reviewed and confirmed by the developer. Values rounded to the nearest 5%. (oc-be-calculate-ai-use v<VER>)
@@ -1012,7 +1237,13 @@ Write the machine-readable record to the **"AI metrics"** custom field (**`custo
 > **Field type.** `customfield_10745` is a **Text Field (multi-line)** (`...:textarea`) — enough capacity for the JSON (a single-line field's 255-char cap would be too small; if the field is ever the wrong type the write is skipped with a warning). On this Jira instance a multi-line text field can be **rich-text (ADF)**, which **rejects a raw string**; the write step below tries a plain string first and, on rejection, retries with the JSON wrapped in a minimal ADF `codeBlock` (the reporting tool recovers the JSON from that text node). The read step accepts either form.
 
 1. **Identity** — call `atlassianUserInfo` for the developer's `accountId` **and display name**; the record is keyed `backend/<accountId>/<name>` (domain + user id + readable name all live in the key, not the record body).
-2. **Build the lean `[RECORD]`** per the **AI-usage record schema (v1)** below — the compact keys, from the analyzer output plus the developer-confirmed values: `at` (`date -u +%Y-%m-%d`), `ver` (tool version from `plugin.json`), `scope` (`[COMMIT-REF]` short, or `working`), `work`, `contrib`/`retain` (the confirmed production headline), `rework`, `lines`, `cat` (per-category `{l: added lines, c: contribution%, r: retention%}` — **always include `r`, including for Postman** (the developer-confirmed, possibly-adjusted value)), the test counts, the planning fields, `turns` (= `interactions.exchanges`), `subReq` (= `interactions.substantive`), `sessions`, `useful` (`[USEFULNESS]` or `null`), `adj` (`true` if the developer changed any number). Keep the **rich detail (per-category %, planning notes) in the comment, not the field**.
+2. **Build the lean `[RECORD]`** per the **AI-usage record schema (v1)** below — the compact keys, from the analyzer output plus the developer-confirmed values: `at` (`date -u +%Y-%m-%d`), `ver` (tool version from `plugin.json`), `scope` (`[COMMIT-REF]` short — in ticket mode the tip, which is where the next incremental run starts — or `working`), `work`, `contrib`/`retain` (the confirmed production headline), `rework`, `lines`, `cat` (per-category `{l: added lines, c: contribution%, r: retention%}` — **always include `r`, including for Postman** (the developer-confirmed, possibly-adjusted value)), the test counts, the planning fields, `turns` (= `interactions.exchanges`), `subReq` (= `interactions.substantive`), `sessions`, `useful` (`[USEFULNESS]` or `null`), `adj` (`true` if the developer changed any number). Keep the **rich detail (per-category %, planning notes) in the comment, not the field**.
+   **Incremental run — merge `[RECORD]` onto the record Task 2b chose** (`[PREV-RECORD]`, or the ledger's `working.prior` when a working-tree measurement is being replaced) so the record keeps covering the whole ticket. Compute it with a short script, not by hand (`l` = lines, weights are line counts):
+   - `lines`, `utAdd`, `utMod`, `pmAdd`, `pmAssert`, `pmTests`, `planRounds`, `planWords`, `planMin`, `turns`, `subReq`, `sessions` → **sum** (a `null` side counts as 0; both `null` stays `null`).
+   - `cat[k]` → `l` summed; `c` and `r` **line-weighted means** over the sides that have them (`(c₁·l₁ + c₂·l₂) / (l₁ + l₂)`), re-rounded to 5%.
+   - `contrib` / `retain` → the merged `cat.prod` `c` / `r` (falling back to the line-weighted means of the headline values when neither side has `prod`); `rework` → line-weighted mean.
+   - `plan` → the higher band; `work` → `code` if the merged `lines` ≥ 20, else the newer value; `useful` → the newer value if given, else the previous one; `adj` → `true` if either side is `true`.
+   - `at`, `ver`, `scope` → the new run's values.
 3. **Read-merge-upsert** (latest-only, keyed by `backend/<accountId>/<name>`):
    - `getJiraIssue` with `fields: ["customfield_10745"]`. The value may be a **plain string** (plain-renderer field) or an **ADF document** (rich-text field). If it is ADF, recover the JSON from the first `codeBlock`/`paragraph` text node. Parse it; if empty or unparseable, start from `{ "schema": "opencell.ai-usage/v1", "records": {} }`.
    - **First delete any existing key that starts with `backend/<accountId>/`** (same developer under an old display name), then set `records["backend/<accountId>/<name>"] = [RECORD]`. Matching the id-prefix — not the full key — keeps it latest-only even if the developer's display name changed between runs (no duplicate record). Every other key stays intact (other developers, and the `frontend/<accountId>/<name>` records the future `/oc-fe-calculate-ai-use` writes).
@@ -1038,6 +1269,26 @@ Posted to [TICKET-NUMBER]:
 ```
 
 If the developer declines, print the comment body, the intended tag change, and the record JSON so they can apply them manually, and stop without writing.
+
+### 6e. Update the reminder ledger
+
+The Stop hook keeps a local ledger (`~/.claude/oc-be-tools/ai-use-ledger/<repo-slug>.json`, outside the repository) so it never offers a settled ticket again. Mark the outcome with the hook script that ships in this plugin:
+
+```bash
+python "<PLUGIN-ROOT>/hooks/ai_use_watch.py" --mark "<repo top-level>" [TICKET-NUMBER] [COMMIT-REF] recorded
+# working mode: [COMMIT-REF] = HEAD, plus the measured diff's fingerprint and the record merged onto
+python "<PLUGIN-ROOT>/hooks/ai_use_watch.py" --mark "<repo top-level>" [TICKET-NUMBER] HEAD recorded --working [--prior <prior.json>]
+```
+
+In working mode, run the mark **before** the developer commits (still on the measured changes, including the `git add -N` intent-to-add files), because it fingerprints `git diff HEAD`. `--prior` is a file holding the record the measurement was merged onto (`[PREV-RECORD]` from Task 2b). Omit it when there was none, or on a re-run over the same uncommitted work, where the script keeps the original prior.
+
+`<PLUGIN-ROOT>` is the oc-be-tools directory this command was loaded from: the newest `~/.claude/plugins/cache/*/oc-be-tools/<version>/`, or the path the hook's reminder printed.
+
+- `recorded` — after a successful write, or when there was nothing new to add (commit mode: mark it with the ticket from Task 2 too; working mode: with `--working`).
+- `declined` — when the developer says this ticket should never be recorded.
+- `snoozed` — when the developer declines at the confirmation step for now; the hook asks again in the next session.
+
+A missing script (plugin not installed from the marketplace) is not an error — skip this step silently.
 
 ---
 
@@ -1096,11 +1347,18 @@ Key legend (all per (domain,user), latest run only):
 
 # Use a specific run's manifests and a specific commit
 /oc-be-tools:oc-be-calculate-ai-use --commit 3434f5767b --run INTRD-41234-20260703-101500
+
+# Record first, then commit (what Claude suggests at every milestone)
+/oc-be-tools:oc-be-calculate-ai-use --working --ticket INTRD-41234
+
+# Committed work, incrementally merged into the ticket's record (what the Stop hook runs)
+/oc-be-tools:oc-be-calculate-ai-use --ticket INTRD-41234 --commit 3434f5767b
 ```
 
 ## Notes & limitations
 
-- **Sub-agent coverage.** A sub-agent's `Write`/`Edit` calls never appear in the session transcript, and sub-agent transcripts are not persisted separately. The **manifests** are what make sub-agent (including sub-agent-*created*) files countable. Work not done through `/oc-be-implement` has no manifest — the transcript and file-history still cover main-context edits and edits to existing files, but a sub-agent-created new file from such a run cannot be attributed.
+- **Sub-agent coverage.** A sub-agent's `Write`/`Edit` calls never appear in the *main* session transcript. Claude Code keeps them in `<session>/subagents/*.jsonl`, which the analyzer reads as an **agent** source (content included, so retention is measurable), so a builder agent dispatched ad hoc in a chat is attributed even without `/oc-be-implement`. The **manifests** and **snapshots** remain the authoritative record for `/oc-be-implement` runs: they survive the transcript cleanup (`cleanupPeriodDays`) and mark the first pass before review fixes.
+- **Without `/oc-be-implement`.** Nothing is missing that the metrics depend on: the ticket comes from `--ticket`, the commit message or the branch (asking when unclear); planning effort is reconstructed from the transcript (everything before the first code edit); main-context edits come from the transcript, sub-agent edits from the sub-agent transcripts. Only the planning *manifest* (exact revision rounds and plan size) is absent, so the band is a reconstruction.
 - **Contribution vs. retention.** Contribution is complete with manifests; retention is content-based and defined for files whose line content was captured — the sub-agent first-pass **snapshot** (`snapshots/*.diff`), the main-context transcript, or file-history. A sub-agent file with none of these (e.g. an old run created before snapshots existed) is counted for contribution and reported as retention-unknown.
 - **Attribution.** A final line is `fix` if it appears in a main-context edit, else `agent` if the file is in a manifest or the line is in file-history, else `human`. Whitespace-normalized, pure-punctuation lines ignored, distinct-line based per file (heavy rewrites de-duplicated).
 - **Squashed / cross-branch commits.** When many sessions/branches are squashed into one commit, file-history alone under-covers it; manifests restore coverage for the parts built via `/oc-be-implement`.
@@ -1108,5 +1366,7 @@ Key legend (all per (domain,user), latest run only):
 - **Tag semantics.** `ai_test_back_dev` triggers on newly *added* tests/Postman requests (not modifications). A commit that only edits existing tests gets `ai_Dev_back` (if it also touches code) but not `ai_test_back_dev` — adjust in review if that is not what you want.
 - **AI-usage field (reporting).** The canonical machine-readable store is the JSON document in the **"AI metrics"** field (`customfield_10745`; payload schema `opencell.ai-usage/v1`), keyed by `domain/accountId/name` (accountId is the stable identity, name is for readability) so backend, frontend and multiple developers coexist on one ticket; the comment is only for humans. It is latest-only (no history) and uses read-merge-upsert. **The field must be a multi-line Text Field** (a single-line field's 255-char cap is too small) and may be **rich-text (ADF)** on this instance — the write is renderer-agnostic (plain string, then an ADF `codeBlock` fallback) and the read accepts either. If two developers write the same ticket within the same moment, last-write-wins could drop one record; the per-run comment is the audit fallback.
 - **Planning effort is effort, not a percentage.** The requirements-gathering and architecture-plan work produces no committed artifact, so it can only be quantified as activity (rounds, lookups, plan size, time) rolled into a Low/Medium/High band. The band thresholds are seed values in `planning_band()` — tune them against your real runs. Reconstruction from the transcript is a fallback; the `/oc-be-implement` planning manifest is authoritative for revision rounds and plan size.
+- **Automatic offer (Stop hook).** It sees commits made in *this clone* (HEAD's reflog) in the last 7 days, and only after a Claude turn ends in that repository — a commit made outside Claude is offered the next time the developer works with Claude there (first turn of a new session included). Session exit itself cannot prompt anything (a `SessionEnd` hook cannot reach the model), which is why the trigger is anchored to the commit. A commit whose subject has no ticket key is attributed to the ticket in the branch it was made on. Tickets whose files no Claude session edited are never offered.
+- **Ticket mode approximations.** A ticket's added lines are the lines its own commits added that are still in the file as of the ticket's last commit touching it (distinct, whitespace-normalized, per file). Merged `c`/`r` are line-weighted means of 5%-rounded values, so the merged headline can differ by ±5% from a single measurement of the same code.
 - Always defer to the developer's adjusted numbers — the automatic figures are a starting point, not an audit.
 ```

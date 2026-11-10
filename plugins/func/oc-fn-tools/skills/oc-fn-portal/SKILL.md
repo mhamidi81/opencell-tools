@@ -1,7 +1,7 @@
 ---
 name: oc-fn-portal
-version: 1.7.1
-updated: 2026-09-30T11:54:26+02:00
+version: 1.9.0
+updated: 2026-11-08T01:21:04+01:00
 author: Stéphane Chambrin
 description: >
   Drive the Opencell Portal (React SPA) through the Playwright MCP server to navigate pages,
@@ -87,11 +87,11 @@ server you get:
 | A screenshot for docs / the record | `browser_take_screenshot` (absolute path under the output dir) | **~0** — link only; **never `Read`** it for doc captures |
 | To actually *see* a page yourself | `browser_take_screenshot`, then **`Read`** the saved image | vision tokens — only when you `Read` |
 | To *locate* a control / read page structure | the snapshot link from the last action (or `browser_snapshot`), then **`Read`** the `.yml` | proportional to page complexity — only when you `Read` |
-| To act on a known element | `browser_click` / `browser_type` with a `ref` from the **last snapshot you read** | low — link-only result |
+| To act on a known element | `browser_click` / `browser_type` / `browser_fill_form` with a `target` (the `[ref=…]` id) from the **last snapshot you read** | low — link-only result |
 
 Rules:
 1. **Everything is written to disk; you pay only on `Read`.** Actions hand back a link and the page URL/title. `Read` a produced file *only* when you actually need its content. For doc captures destined for Confluence/Jira, never `Read` them — just note the path.
-2. **`Read` a snapshot `.yml` deliberately, not reflexively.** Read *one* when you reach a new page state to get element `ref`s, then reuse those refs for the clicks/types that follow. Don't re-read a fresh snapshot after every micro-action.
+2. **`Read` a snapshot `.yml` deliberately, not reflexively.** Read *one* when you reach a new page state to get element `[ref=…]` ids, then reuse them as the `target` of the clicks/types that follow. **The parameter is `target`, not `ref`** (checked 2026-10-23): a call with `ref` fails with `expected string, received undefined … at target`. `browser_find` takes `text` or `regex`, not a free-form query. Don't re-read a fresh snapshot after every micro-action.
 3. **Match the tool to the question.** "What does it look like?" → screenshot (+ `Read` if needed). "What controls are on the page / what's the field called?" → snapshot `.yml`. Don't read a snapshot when an image answers the question, or vice-versa.
 4. **Reuse what the catalogues already record.** Check the shipped seed `pages.md` and your user catalog (`~/.local/state/oc-fn-portal/catalog/pages.md`); if a page's path and key selectors are catalogued, navigate straight there and act without reading an exploratory snapshot.
 5. **Heavy navigation session?** Consider the `--snapshot-mode none` lever (see `setup.md`) so actions stop emitting snapshots entirely — then call `browser_snapshot` only on demand.
@@ -102,11 +102,19 @@ Auth is handled by **Keycloak (OpenID Connect)**: navigating to `OC_PORTAL_URL` 
 a `…/auth/realms/opencell/protocol/openid-connect/auth?…` URL that serves a hosted login form.
 The persistent profile usually keeps the Keycloak session alive, so **most sessions need no login**.
 
+**A sandbox may be asleep.** SoberCloud sandboxes (`*.oc-nsb.eu`) suspend when idle and wake on the
+first request. While one wakes, every URL on its host (the Portal, Keycloak, the API) answers
+**HTTP 200 with a holding page** titled *Réveil en cours · SoberCloud*. Measured on `scn2`: about
+2 minutes (2026-08-07 and 2026-11-08), although the page itself warns it can take up to 8. If the
+first navigation lands on that page, wait 30 s and navigate again. Nothing seen before the Portal
+answers says anything about the product: not a blank page, not a failed login, not a `curl` that
+returns HTML where JSON was expected.
+
 1. **Check first.** `browser_navigate` to `OC_PORTAL_URL`. If the result URL is the portal (page title `Opencell | Portal`), you're already in — skip to the task. If it's an `…/auth/realms/opencell/…` URL, log in.
-2. **The Keycloak form** has a `Username or email` textbox, a `Password` textbox, and a `Sign In` button — plus an `Opencell Internal` broker link for SSO, which you **ignore** (use the username/password form). `Read` the snapshot `.yml` once to get the field refs, then `browser_fill_form` both fields and click `Sign In`.
+2. **The Keycloak form** has a `Username or email` textbox, a `Password` textbox, and a `Sign In` button — plus an `Opencell Internal` broker link for SSO, which you **ignore** (use the username/password form). `Read` the snapshot `.yml` once to get the field `target` ids, then `browser_fill_form` both fields and click `Sign In`.
 3. **Credentials — pass the password's *key name*, never its value.** Read `OC_PORTAL_USER` from the credentials file (Bash — not sensitive) and fill it literally. For the password, fill the **string `OC_PORTAL_PASS`**: the server is registered with `--secrets` pointing at that same credentials file, so Playwright substitutes the real value on the way in and redacts it on the way out. **Never try to read the password itself** — the permission classifier refuses it and refuses every workaround (see `setup.md` § 6, which also covers what to do when `--secrets` isn't in effect yet: hand the user a checklist, don't chase the secret).
 4. **Settle, then verify.** After the redirect the SPA renders — the page title goes `Opencell | Portal` → `- Opencell` and the home hub appears. Give it a moment (`browser_wait_for`) before screenshotting; a capture can take several seconds on slower hardware (hence `--timeout-action=30000`).
-5. **Probe that clicks land — once, before any interaction sequence that matters.** Click **one** control with an unmistakable observable effect (switch a tab, expand a menu) and confirm the effect actually happened. If it did not, **stop**: this session cannot drive this app. Fall back to read-only navigation + screenshots and tell the user. Skip the probe only for a pure navigate-and-capture errand where you never click anything.
+5. **Probe that clicks land — once, before any interaction sequence that matters.** Click **one** control with an unmistakable observable effect (switch a tab, expand a menu) and confirm the effect actually happened. If it did not, **stop**: this session cannot drive this app. Fall back to read-only navigation + screenshots and tell the user. **Read-only UI can still be opened with a DOM click** through `browser_evaluate` (`element.click()` on the element): a menu, a tab, the version panel. Observed on `scn2` on 2026-11-08, where Playwright's clicks were inert on the version panel and a menu item and the DOM click opened both. Never use it to save, submit or trigger anything, and say you used it. Skip the probe only for a pure navigate-and-capture errand where you never click anything.
 
 **The failure this probe catches is silent.** `browser_click` reports success and the generated
 Playwright line looks exactly right (`getByRole('button', { name: 'Edit' }).click()`) while nothing
@@ -124,6 +132,9 @@ to reaching it in-app, and the difference is not always visible.
 - **A route missing its trailing action segment may render nothing at all** — `…/sellers/1` came back blank where `…/sellers/1/modify` did not. When a bare record route renders empty, suspect the route before the record.
 - **Retry a `browser_wait_for` once before concluding anything.** A `browser_wait_for({ text })` timed out at 30 s and then succeeded on the **very next identical call** against the same page. One timeout is not evidence the text is absent.
 - **Expect slow first paint.** Some routes on this Portal take well over 10 s to paint. Budget for that before deciding a page is empty.
+- **The home hub (`…/portal/`) has no header bar.** After login the Portal lands on the hub of module icons, with only the "Welcome to Opencell" banner. Anything in the app bar (breadcrumb, *Switch to legacy design*, the notifications bell, a header marker) shows only inside a module, e.g. `…/portal/CPQ` (redirects to `CPQ/offers/list`). To check the header, go to a module first. Observed 2026-10-23: two `browser_wait_for` on header text timed out on the hub, because the text was never there.
+- **A click on a hub module link can be inert** (the probe in *Login & session* failing). Do not retry it: `browser_navigate` to the link's `/url` (read it from the snapshot, e.g. `…/portal/CPQ`) instead, then wait for the module to paint (about 8 s; a `browser_evaluate` with a `setTimeout` and a read of `document.body.innerText` is more reliable than `browser_wait_for`).
+- **The reported Page URL is redacted.** The portal URL prints as `<secret>OC_PORTAL_URL</secret>`, so after a click you cannot tell from the result whether the route changed. Check `location.pathname` with `browser_evaluate`.
 - **An empty `browser_snapshot` is not an empty page.** The `.yml` written to disk can come back empty while the page is still mid-render — re-take it rather than concluding the page has no content.
 
 ## When a Portal action fails server-side

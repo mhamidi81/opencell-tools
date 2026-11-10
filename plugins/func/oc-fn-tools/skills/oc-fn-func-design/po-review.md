@@ -8,6 +8,9 @@ Two entry points, sharing everything below except their transitions:
 - **A Bug in `In Test`** — a retest of a delivered fix. See § *Bug retest — the `In Test` lane*; the
   Story verdicts and the `Sub-bug` rule do **not** apply to it.
 
+A Story **QA has never passed** is not this lane's to judge: a defect Product finds there becomes a
+test case, never a `Sub-bug` — § *A Story QA has not passed yet — add test cases, never Sub-bugs*.
+
 Read together with the main `SKILL.md`.
 
 ## Before judging — confirm the build under test
@@ -85,6 +88,35 @@ Tech-Design conversation, not a comment.
 **The failure mode is kind, not length.** A twelve-row table is fine. A comment that *instructs* where
 it should *report* is not.
 
+## A Story QA has not passed yet — add test cases, never Sub-bugs
+
+**Agreed with Engineering on 2026-10-13.** Until QA has passed a Story, its verification is QA's. A
+defect Product finds before then — in a design review, a code reading, an early look at a sandbox —
+goes into the Story's tests, not into a `Sub-bug`.
+
+- **Check whether the Story has ever reached `To Review by PO`** — in its status history, not only its
+  current status. A Story the PO rejected sits in `Waiting for fixing`, yet QA did pass it, so the
+  `Sub-bug` rule below applies to it. A Story that never got there is this section's.
+- **Add the case as a row of the Story's *Acceptance* test cases**, marked as added late if QA has
+  already generated its Xray tests (`stories-acceptance.md` § *Rows added after QA has generated its
+  tests*). QA turns the row into an Xray Test; if that test fails, QA files the `Sub-bug`. Once QA's
+  Xray skill is on the marketplace, add the case to Xray with it as well (same section).
+- **A ruling the Story lacks is fixed in the Story.** Write it into the *Functional design* first, then
+  add the row. A `Sub-bug` filed against Product's own missing ruling hands Product's gap to a
+  developer.
+- **A row already covers it?** Then there is nothing to add: QA's run will reach it.
+- **A `Sub-bug` already filed on such a Story is converted the same way**, while no developer has picked
+  it up: add the row, or the ruling and the row, then close the `Sub-bug` as `Invalid` (transition 81
+  from `To Do`) with a comment naming where its case now lives.
+
+**Why:** on 2026-10-12 a one-off code review filed 13 e-reporting `Sub-bug`s, 8 of them on Stories QA
+had not tested yet or that were still in development. Engineering objected, and the CPO agreed: those
+cases belonged in QA's tests, because Xray tests get automated and a `Sub-bug` does not.
+
+**In `To Review by PO`, the PO's cases enrich the tests too.** Every case you run that the *Acceptance*
+table does not already hold is added to it the same way, pass or fail — including the case behind each
+`Sub-bug` you file. A failure still rejects the Story with its `Sub-bug`(s), below.
+
 ## Rejecting a Story — file the Sub-bug(s) first
 
 **File the defect(s) as `Sub-bug`s under the Story before rejecting it.** This is an **Opencell
@@ -95,6 +127,9 @@ assignable, trackable defect, not a comment.
 
 - **One `Sub-bug` per distinct defect.** Rejecting for three problems means three `Sub-bug`s, not one
   carrying a list.
+- **Each `Sub-bug` is created assigned to the lead developer of its layer** — not to the Story's
+  developer, and never empty (`bugs.md` § *Assignee — never created unassigned*). Reassigning the
+  Story itself is the separate step below.
 - `bugs.md` carries the `Sub-bug` authoring rules — issue type, parent, required fields at creation,
   which template applies — and the rule for **when a defect belongs under the Story as a `Sub-bug`
   versus as a standalone `Bug`** (a generic, out-of-scope problem the Story merely exposed).
@@ -131,7 +166,7 @@ workflow.
 |---|---|---|
 | **Validated by PO** | The delivered behaviour matches the Story's *Functional design* and *Acceptance*. A pass. | `Ready for Sprint Review` — Phase 7 |
 | **Rejected by PO** | Defects found. **File the `Sub-bug`(s) first** (above). | `Waiting for fixing` — back to Phase 5, Development |
-| **Invalid** | The **Story itself should not exist** — not reproducible, superseded, abandoned. A scope verdict, **not** a defect verdict: never use it for work that was delivered but broken. | `Invalid` — side state, `stories.md` § *Side states* |
+| **Invalid** | The **Story itself should not exist** — not reproducible, superseded, abandoned. A scope verdict, **not** a defect verdict: never use it for work that was delivered but broken. An `Invalid` Story counts as missing: on a `Must have` Story, or one with no value, it holds its Epic's release (`SKILL.md` § *Version scope*). | `Invalid` — side state, `stories.md` § *Side states* |
 | **PO can't test yet** | Blocked from testing — environment down, wrong build deployed, missing data or dependency. **No verdict is given.** | `Test Blocked` — back inside Phase 6, QA |
 | **On Hold** | The review is paused for reasons outside the Story's quality. The reason **must** be written in a comment (`stories.md` § *Side states*). | `On Hold` |
 
@@ -193,7 +228,11 @@ live.
    (**`oc-fn-portal`** skill, `api-replay.md`).
 4. **Search closed issues for the same symptom** before filing anything (`bugs.md` § *Before
    filing — regression archaeology*).
-5. **File one `Sub-bug` per defect** under the Story (`bugs.md`) — **Story only**; a Bug needs none.
+5. **File one `Sub-bug` per defect** under the Story (`bugs.md`), assigned to its layer's lead
+   developer — **Story only**; a Bug needs none.
+   **Only on a Story QA has passed**; before that, the defect is an *Acceptance* row (above). Either
+   way, **add every case you ran that *Acceptance* lacks** as a row marked as added after QA's
+   generation.
 6. **Write the comment as a test report** — *How I tested* line, *Case / Expected / Actual* table,
    verdict. On a pass, two lines instead (above).
 7. **Then transition** — resolve the id live, and pick it by transition *name*.

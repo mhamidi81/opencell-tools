@@ -53,6 +53,15 @@ command -v python3 >/dev/null 2>&1 || die "python3 is not installed"
 CHROME_PATH="${CHROME_PATH:-$(command -v chromium || command -v chromium-browser || command -v google-chrome || true)}"
 [[ -n "$CHROME_PATH" ]] || die "no Chromium or Chrome on PATH — set CHROME_PATH"
 export CHROME_PATH
+LINKER="$HERE/jira_links.py"
+
+# ── Jira keys are links: an internal deck never ships a bare key (SKILL.md § Authoring conventions) ──
+[[ -f "$LINKER" ]] || die "jira_links.py not found at $LINKER"
+if ! BARE="$(python3 "$LINKER" --check "$SRC")"; then
+  die "bare Jira keys — in an internal document every key is a link:
+$BARE
+fix: python3 $LINKER --fix $SRC, then commit and push"
+fi
 
 if [[ -z "$THEME" ]]; then
   d="$DECKDIR"

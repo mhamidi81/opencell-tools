@@ -8,11 +8,20 @@ Called by render-internal-pptx.sh; not meant to be run by hand.
    so a paragraph mixing bold and plain runs carries several. That is invalid OOXML, and
    LibreOffice applies the last one (no bullet). The first one, written for the paragraph's
    first run, is kept. A bullet gets a font (pptxgenjs sets none, and a symbol font draws it
-   small and raised) at 125 %, like a CSS marker: a disc takes the text's font; a circle or a
-   square takes Arial, because the brand fonts lack those glyphs and a renderer's fallback can be
-   an emoji font about twice as wide. measure.js measures the markers in the same fonts.
-   (A marker takes its size, weight and colour from the first run: build.js opens an item whose
-   first run is not in the item's font — an inline box, bold text — on a zero-width space that is.)
+   small and raised), at the text's size: a disc takes Playfair Display, whose bullet is close to
+   Chromium's disc — about a third of the text's ascent across, about as high above the baseline
+   — where Montserrat's is half as wide, and other faces' sit too high once scaled up to that
+   size; a circle or a square takes Arial, because the brand fonts lack those glyphs and a
+   renderer's fallback can be an emoji font about twice as wide. measure.js measures the markers
+   in the same fonts. (A marker takes its size, weight and colour from the first run: build.js
+   opens an item whose first run is not in the item's font — an inline box, bold text — on a
+   zero-width space that is.)
+   The size is written <a:buSzTx/> (the text's), never as <a:buSzPct>: the transitional schema of
+   ISO/IEC 29500-4:2016 types its value as a percentage string ("125%"), PowerPoint writes
+   thousandths ("125000"), and LibreOffice 26.2 draws only the latter at its size (it reads
+   "125%" and <a:buSzPts> as the text's size), so no scaled marker is both valid and drawn alike
+   everywhere. pptxgenjs's own <a:buSzPct val="100000"/> is the text's size: it becomes
+   <a:buSzTx/> too.
    A marker that is a no-break space is no marker: build.js writes one for text that continues an
    item after its nested list, to get the item's left margin; it becomes <a:buNone/> with no
    hanging indent, so the text starts at that margin.
@@ -21,9 +30,14 @@ Called by render-internal-pptx.sh; not meant to be run by hand.
    item's indent to put marL where Chromium starts its text; here every bulleted paragraph with
    a level gets back the hanging indent of the first top-level bulleted paragraph of its text
    body — the list's hang.
-3. **Hyperlink colour.** PowerPoint draws links in the theme's hlink colour, so the theme takes
-   the colour the deck gives its links.
-4. **Embed the fonts the deck uses** when fonts_dir holds them, as
+3. **No file path as alt text.** pptxgenjs writes an image's file path as its alt text (descr)
+   when it has none: the render's temporary raster-N.png (measure.js), which a screen reader
+   would read out and which changes at every run. Such a descr is removed; an image's own alt
+   text (build.js passes it) stays.
+4. **Hyperlink colour.** PowerPoint before Office 2019 draws links in the theme's hlink colour,
+   so the theme takes the colour the deck gives its links (later versions keep each run's own
+   colour, through the hlinkClr extension pptxgenjs writes; not checked here).
+5. **Embed the fonts the deck uses**, its markers' included, when fonts_dir holds them, as
    <Family without spaces>-{Regular,Bold,Italic,BoldItalic}.ttf. PowerPoint reads a raw TTF
    as .fntdata. The entry slots follow the schema order (regular, bold, italic, boldItalic):
    validate.py rejects any other order.
@@ -40,7 +54,9 @@ FONT_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/
 SLOTS = [("regular", "Regular"), ("bold", "Bold"), ("italic", "Italic"), ("boldItalic", "BoldItalic")]
 
 
+RASTER_DESCR = re.compile(r' descr="[^"]*/raster-\d+\.png"')
 NBSP_BULLET = re.compile(r'<a:buSzPct val="100000"/><a:buChar char="&#x00A0;"/>')
+DISC_FACE = "Playfair Display"
 
 
 def one_ppr(xml):
@@ -56,13 +72,14 @@ def one_ppr(xml):
         if NBSP_BULLET.search(p):
             p = NBSP_BULLET.sub("<a:buNone/>", p, count=1)
             p = re.sub(r'(<a:pPr\b[^>]*?) indent="-\d+"', r'\1 indent="0"', p, count=1)
-        face = re.search(r'<a:latin typeface="([^"]+)"', p)
         bu = re.search(r'<a:buChar char="([^"]*)"', p)
-        if face and bu and "<a:buFont" not in p:
+        if bu and "<a:buFont" not in p:
             disc = html.unescape(bu.group(1)) == "\u2022"
             p = re.sub(r'<a:buSzPct val="100000"/>(<a:buChar )',
-                       rf'<a:buSzPct val="125000"/><a:buFont typeface="{face.group(1) if disc else "Arial"}"/>\1', p, count=1)
-        return p
+                       rf'<a:buSzTx/><a:buFont typeface="{DISC_FACE if disc else "Arial"}"/>\1', p, count=1)
+        # A number takes the text's font too: pptxgenjs names the theme's major font (+mj-lt), the
+        # deck's main face, where measure.js measures the number in the item's.
+        return p.replace('<a:buSzPct val="100000"/>', "<a:buSzTx/>").replace('<a:buFont typeface="+mj-lt"/>', "<a:buFontTx/>")
     return re.sub(r"<a:p>.*?</a:p>", para, xml, flags=re.S)
 
 
@@ -93,7 +110,7 @@ def embed(root, fonts_dir):
              for dp, _, fs in os.walk(os.path.join(root, "ppt", d)) for f in fs if f.endswith(".xml")]
     used = set()
     for p in parts:
-        used |= set(re.findall(r'<a:latin typeface="([^"+][^"]*)"', open(p, encoding="utf-8").read()))
+        used |= set(re.findall(r'<a:(?:latin|buFont) typeface="([^"+][^"]*)"', open(p, encoding="utf-8").read()))
     entries, rels, done = [], [], []
     rid, fno = 9000, 0
     for face in sorted(used):
@@ -135,9 +152,14 @@ def embed(root, fonts_dir):
 def link_colour(root):
     """Set the theme's hyperlink colours to the colour the deck gives its links.
 
-    PowerPoint paints hyperlinks in the theme's hlink colour, whatever the run says.
+    PowerPoint before Office 2019 paints hyperlinks in the theme's hlink colour, whatever the run
+    says; later versions are meant to draw the run's own colour when asked to, which pptxgenjs
+    does on every coloured link (the hlinkClr extension, val="tx"; not checked in PowerPoint
+    here). The colour taken is the most frequent one of the
+    linked runs, leaving out highlighted ones: those are inline boxes in a link (a tag), in their
+    own colour, not the link's — unless they are the deck's only links, whose colour it then takes.
     """
-    seen = {}
+    seen, tags = {}, {}
     for dp, _, fs in os.walk(os.path.join(root, "ppt", "slides")):
         for f in fs:
             if f.endswith(".xml"):
@@ -145,7 +167,10 @@ def link_colour(root):
                 for rpr in re.findall(r"<a:rPr\b[^>]*>(?:(?!</a:rPr>).)*<a:hlinkClick\b(?:(?!</a:rPr>).)*</a:rPr>", xml, flags=re.S):
                     m = re.search(r'<a:solidFill><a:srgbClr val="([0-9A-F]{6})"', rpr)
                     if m:
-                        seen[m.group(1)] = seen.get(m.group(1), 0) + 1
+                        into = tags if "<a:highlight>" in rpr else seen
+                        into[m.group(1)] = into.get(m.group(1), 0) + 1
+    # A deck whose only links are tags takes their colour all the same, rather than the theme's.
+    seen = seen or tags
     if not seen:
         return None
     hexval = max(seen, key=seen.get)
@@ -171,7 +196,7 @@ def main():
                 if f.endswith(".xml"):
                     p = os.path.join(base, f)
                     xml = open(p, encoding="utf-8").read()
-                    open(p, "w", encoding="utf-8").write(nested_hang(one_ppr(xml)))
+                    open(p, "w", encoding="utf-8").write(RASTER_DESCR.sub("", nested_hang(one_ppr(xml))))
         done = embed(tmp, fonts_dir)
         link = link_colour(tmp)
         with zipfile.ZipFile(deck, "w", zipfile.ZIP_DEFLATED) as z:

@@ -59,6 +59,11 @@
       "description": "Diff-driven Playwright regression tests for changed OpenCell Portal screens, written on the current branch after the Vitest step so they are part of the PR"
     },
     {
+      "name": "oc-fe-fix-evidence",
+      "source": "./plugins/frontend/oc-fe-fix-evidence",
+      "description": "Record a fixed OpenCell Portal bug in a real browser against a real backend chosen by the developer, and post the screenshots and screencast as a Jira comment (/oc-fe-fix-evidence); runs as Step 6c of /oc-fe-fix-bug"
+    },
+    {
       "name": "oc-fe-calculate-ai-use",
       "source": "./plugins/frontend/oc-fe-calculate-ai-use",
       "description": "Estimate AI contribution and retention on the OpenCell Portal (/oc-fe-calculate-ai-use) from the frontend sub-agent manifests, first-pass snapshots, session transcript and file-history — per-category breakdown (components, i18n, unit tests, e2e, styles), Vitest/Playwright test counts, reviewer-rework provenance, planning-effort band, ai_Dev_Front / ai_test_front_dev Jira tagging, and the shared machine-readable JSON record for cross-team reporting; runs automatically at the end of /oc-pull-request on opencell-portal"
@@ -71,7 +76,7 @@
     {
       "name": "oc-be-tools",
       "source": "./plugins/backend/oc-be-tools",
-      "description": "Backend development toolkit for Opencell Core — agents for building entities, services, APIs, tests, and Postman collections, guideline-loading skills, an implementation orchestrator (/oc-be-implement), and a guideline-based code review command (/oc-be-review)"
+      "description": "Backend development toolkit for Opencell Core — agents for building entities, services, APIs, tests, and Postman collections, guideline-loading skills, an implementation orchestrator (/oc-be-implement), a guideline-based code review command (/oc-be-review), a script draft generator from a Jira ticket (/oc-be-generate-script, Opencell script library), a Postman SETUP generator from an Opencell environment (/oc-be-generate-setup, opencell-setup-export tool), and an AI-usage recorder (/oc-be-calculate-ai-use) that a Stop hook offers automatically once a ticket's work is committed"
     },
     {
       "name": "oc-ov-tools",
@@ -114,19 +119,9 @@
       "description": "Review a pull request linked to a JIRA ticket using the oc-fe-reviewer agent with a detailed report headed by the PR's Vitest test count, plus suggested fixes"
     },
     {
-      "name": "oc-ai-report",
-      "source": "./plugins/common/oc-ai-report",
-      "description": "Cross-ticket AI-usage report over a period — reads the AI-metrics JSON (backend/frontend/QA) from Jira, groups by area → date → user → ticket, with Architect & Dev-lead estimates, Tempo-logged time, sub-bug count/hours (cross-area sub-bugs annotated, not mixed in), Review-phase %, two time gains (with/without bugs), Jira status and a Final flag, AI-contrib-below-60% red; users ordered by area then name; five HTML tabs. Full-width HTML + CSV to ./docs/. Read-only; Jira via direct REST (mandatory JIRA_API_TOKEN, no MCP) + optional Tempo"
-    },
-    {
-      "name": "oc-time-report",
-      "source": "./plugins/common/oc-time-report",
-      "description": "Estimation-vs-logged-hours report over a period (independent of the AI-usage JSON) — Tempo-worklog driven, one row per ticket with a PER-AREA column group (Backend/Frontend/QA): area main developer, Architect & Dev-lead estimates, logged/sub-bug hours each split into AI and non-AI streams (a worklog is AI-assisted when its author holds an AI-metrics record covering that issue; a US's record also covers its non-bug sub-tasks, a sub-bug uses its own record — no per-area AI flag), two gains (with/without sub-bugs) and sub-bug count, plus an Arch/PR/management logged column and total. Date per ticket + month grouping, five HTML tabs, and a second finished-US per-developer summary. Date-stamped HTML + CSV to ./docs/. Jira via direct REST + Tempo per-user, both mandatory tokens; no MCP"
-    },
-    {
-      "name": "oc-noai-report",
-      "source": "./plugins/common/oc-noai-report",
-      "description": "Companion to oc-time-report that surfaces work reaching test/review/done WITHOUT AI. Same Tempo-worklog data, Project + grouped Fix-version filters and five tabs. Scope: tickets in status In Test / Need sync (after dev) / Ready for Test / Ready for Sprint Review / Done with ticket-date on/after a cutoff (default 2026-09-01). Unit = one ticket x dev area (backend/frontend/qa; overhead excluded) — sub-tasks roll into their parent US, sub-bugs are their own rows. A unit has AI when it has AI-classified logged time (US record propagates to non-bug sub-tasks; a sub-bug uses its own). Totals by area and by month (tickets, AI tickets, % AI tickets, logged d, AI logged d, % AI logged) plus a Details list of the no-AI units (Ticket, date, Type, Fix version, title, status, Logged d, area, main dev) grouped by area then month. All in days. Date-stamped HTML to ./docs/. Shares scripts + roster + Tempo cache with oc-time-report; Jira via direct REST + Tempo per-user, mandatory tokens; no MCP"
+      "name": "oc-reports",
+      "source": "./plugins/common/oc-reports",
+      "description": "Opencell team reports from Jira + Tempo, as three skills sharing one set of scripts (plugin scripts/ folder) and one 54-person developer roster: /oc-reports:oc-time-report - estimation-vs-logged report, one row per ticket with per-area (Backend/Frontend/QA) estimates, logged and sub-bug hours split AI / non-AI, gains, overhead; /oc-reports:oc-noai-report - which tickets reached test/review/done WITHOUT AI-logged time (per ticket x area, totals by area and month, no-AI details); /oc-reports:oc-ai-report - aggregates the AI-metrics JSON records (contribution, retention, tests, requests) per area/user/ticket with estimates, logged hours and gains. Ticket date = first sent to test (Jira status history). Date-stamped HTML (+CSV) to ./docs/. Read-only; Jira via direct REST (mandatory JIRA_API_TOKEN), Tempo per-user (TEMPO_API_TOKEN); no Atlassian MCP."
     },
     {
       "name": "oc-bug-clusters",
